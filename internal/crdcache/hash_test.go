@@ -1,0 +1,268 @@
+package crdcache
+
+import (
+	"encoding/hex"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func writeYAMLFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("write yaml file %s: %v", name, err)
+	}
+}
+
+func TestWalkYAMLFiles_FindsYAML(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "a.yaml", "kind: A")
+	writeYAMLFile(t, dir, "b.yml", "kind: B")
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+}
+
+func TestWalkYAMLFiles_IgnoresNonYAML(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "crd.yaml", "kind: CRD")
+	writeYAMLFile(t, dir, "readme.md", "# readme")
+	writeYAMLFile(t, dir, "config.json", "{}")
+	writeYAMLFile(t, dir, "script.sh", "#!/bin/bash")
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+	if len(files) != 1 {
+		t.Errorf("expected 1 yaml file, got %d", len(files))
+	}
+}
+
+func TestWalkYAMLFiles_ReturnsSorted(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "c.yaml", "kind: C")
+	writeYAMLFile(t, dir, "a.yaml", "kind: A")
+	writeYAMLFile(t, dir, "b.yaml", "kind: B")
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("expected 3 files, got %d", len(files))
+	}
+	for i := 1; i < len(files); i++ {
+		if files[i] < files[i-1] {
+			t.Errorf("files not sorted: %v", files)
+			break
+		}
+	}
+}
+
+func TestWalkYAMLFiles_NestedDirectories(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "subdir")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatalf("create subdir: %v", err)
+	}
+
+	writeYAMLFile(t, dir, "top.yaml", "kind: Top")
+	writeYAMLFile(t, subDir, "nested.yaml", "kind: Nested")
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Errorf("expected 2 files, got %d", len(files))
+	}
+}
+
+func TestWalkYAMLFiles_EmptyDirectory(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected 0 files, got %d", len(files))
+	}
+}
+
+func TestWalkYAMLFiles_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "a.YAML", "kind: A")
+	writeYAMLFile(t, dir, "b.YML", "kind: B")
+	writeYAMLFile(t, dir, "c.Yaml", "kind: C")
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+	if len(files) != 3 {
+		t.Errorf("expected 3 files, got %d", len(files))
+	}
+}
+
+func TestWalkYAMLFiles_NonexistentDir(t *testing.T) {
+	t.Parallel()
+	_, err := walkYAMLFiles("/nonexistent/path")
+	if err == nil {
+		t.Fatal("expected error for nonexistent directory")
+	}
+}
+
+func isHex(s string) bool {
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
+func TestComputeDirHash_ProducesHexHash(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "crd.yaml", "apiVersion: v1\nkind: ConfigMap")
+
+	hash, _, err := computeDirHash(dir)
+	if err != nil {
+		t.Fatalf("computeDirHash() error: %v", err)
+	}
+	if len(hash) != 16 {
+		t.Errorf("hash length = %d, want 16", len(hash))
+	}
+	if !isHex(hash) {
+		t.Errorf("hash %q contains non-hex characters", hash)
+	}
+}
+
+func TestComputeDirHash_Deterministic(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "a.yaml", "content-a")
+	writeYAMLFile(t, dir, "b.yaml", "content-b")
+
+	hash1, _, err := computeDirHash(dir)
+	if err != nil {
+		t.Fatalf("first computeDirHash() error: %v", err)
+	}
+
+	hash2, _, err := computeDirHash(dir)
+	if err != nil {
+		t.Fatalf("second computeDirHash() error: %v", err)
+	}
+
+	if hash1 != hash2 {
+		t.Errorf("hashes differ: %q vs %q", hash1, hash2)
+	}
+}
+
+func TestComputeDirHash_DifferentContent(t *testing.T) {
+	t.Parallel()
+	dir1 := t.TempDir()
+	writeYAMLFile(t, dir1, "crd.yaml", "content-version-1")
+
+	dir2 := t.TempDir()
+	writeYAMLFile(t, dir2, "crd.yaml", "content-version-2")
+
+	hash1, _, err := computeDirHash(dir1)
+	if err != nil {
+		t.Fatalf("computeDirHash(dir1) error: %v", err)
+	}
+
+	hash2, _, err := computeDirHash(dir2)
+	if err != nil {
+		t.Fatalf("computeDirHash(dir2) error: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Error("different content should produce different hashes")
+	}
+}
+
+func TestComputeDirHash_DifferentFilenames(t *testing.T) {
+	t.Parallel()
+	dir1 := t.TempDir()
+	writeYAMLFile(t, dir1, "first.yaml", "same-content")
+
+	dir2 := t.TempDir()
+	writeYAMLFile(t, dir2, "second.yaml", "same-content")
+
+	hash1, _, err := computeDirHash(dir1)
+	if err != nil {
+		t.Fatalf("computeDirHash(dir1) error: %v", err)
+	}
+
+	hash2, _, err := computeDirHash(dir2)
+	if err != nil {
+		t.Fatalf("computeDirHash(dir2) error: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Error("different filenames should produce different hashes")
+	}
+}
+
+func TestComputeDirHash_EmptyDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	_, _, err := computeDirHash(dir)
+	if err == nil {
+		t.Fatal("expected error for empty directory")
+	}
+	if !errors.Is(err, ErrNoYAMLFiles) {
+		t.Errorf("expected ErrNoYAMLFiles, got: %v", err)
+	}
+}
+
+func TestComputeDirHash_OnlyNonYAML(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "readme.md", "# readme")
+	writeYAMLFile(t, dir, "config.json", "{}")
+
+	_, _, err := computeDirHash(dir)
+	if err == nil {
+		t.Fatal("expected error for directory with no YAML files")
+	}
+	if !errors.Is(err, ErrNoYAMLFiles) {
+		t.Errorf("expected ErrNoYAMLFiles, got: %v", err)
+	}
+}
+
+func TestComputeDirHash_NonexistentDir(t *testing.T) {
+	t.Parallel()
+	_, _, err := computeDirHash("/nonexistent/path")
+	if err == nil {
+		t.Fatal("expected error for nonexistent directory")
+	}
+}
+
+func TestComputeDirHash_MultipleFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeYAMLFile(t, dir, "crd1.yaml", "apiVersion: v1\nkind: CRD1")
+	writeYAMLFile(t, dir, "crd2.yaml", "apiVersion: v1\nkind: CRD2")
+	writeYAMLFile(t, dir, "crd3.yml", "apiVersion: v1\nkind: CRD3")
+
+	hash, _, err := computeDirHash(dir)
+	if err != nil {
+		t.Fatalf("computeDirHash() error: %v", err)
+	}
+	if len(hash) != 16 {
+		t.Errorf("hash length = %d, want 16", len(hash))
+	}
+}
