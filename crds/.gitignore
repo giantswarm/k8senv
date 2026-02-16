@@ -1,0 +1,2 @@
+# Downloaded CRD files (regenerated via `make download-crds`)
+*.yaml
