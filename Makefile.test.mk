@@ -30,6 +30,16 @@ test-integration: ## Run integration tests (options: RACE=1, NOCACHE=1, TEST=pat
 	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test $(_TEST_FLAGS) ./tests/stress
 	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test $(_TEST_FLAGS) ./tests/stressclean
 
+.PHONY: test-stress-restart
+test-stress-restart: ## Run stress tests (options: RACE=1, NOCACHE=1, TEST=pattern, STRESS_SUBTESTS=N, LOG_LEVEL=DEBUG)
+	@echo "Note: Requires kine and kube-apiserver binaries"
+	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test $(_TEST_FLAGS) ./tests/stress
+
+.PHONY: test-stress-clean
+test-stress-clean: ## Run stress-clean tests (options: RACE=1, NOCACHE=1, TEST=pattern, STRESS_SUBTESTS=N, LOG_LEVEL=DEBUG)
+	@echo "Note: Requires kine and kube-apiserver binaries"
+	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test $(_TEST_FLAGS) ./tests/stressclean
+
 .PHONY: test
 test: test-unit test-integration ## Run all tests (unit + integration)
 
