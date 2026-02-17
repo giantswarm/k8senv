@@ -182,6 +182,23 @@ func WithReleaseStrategy(strategy ReleaseStrategy) ManagerOption {
 	}
 }
 
+// WithShutdownDrainTimeout sets the maximum time Shutdown() waits for
+// in-flight ReleaseToPool operations to complete before proceeding with
+// instance teardown. If InstanceStopTimeout is configured larger than
+// this value, an in-flight release performing ReleaseRestart could still
+// be running when the drain fires — increase this timeout to at least
+// match the longest expected release duration.
+//
+// Default: 30 seconds.
+//
+// Panics if d <= 0.
+func WithShutdownDrainTimeout(d time.Duration) ManagerOption {
+	requirePositive("shutdown drain timeout", d)
+	return func(c *managerConfig) {
+		c.ShutdownDrainTimeout = d
+	}
+}
+
 // WithBaseDataDir sets the base directory for instance data.
 // Useful in CI environments where multiple projects may use k8senv simultaneously
 // and need isolated data directories to prevent conflicts.

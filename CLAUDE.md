@@ -263,6 +263,7 @@ mgr := k8senv.NewManager(
     k8senv.WithCRDCacheTimeout(10*time.Minute),             // Default: 5 minutes
     k8senv.WithInstanceStartTimeout(3*time.Minute),         // Default: 5 minutes
     k8senv.WithInstanceStopTimeout(30*time.Second),         // Default: 10 seconds
+    k8senv.WithShutdownDrainTimeout(2*time.Minute),        // Default: 30 seconds
 )
 ```
 

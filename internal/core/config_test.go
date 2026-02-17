@@ -19,6 +19,7 @@ func TestManagerConfig_Validate(t *testing.T) {
 			InstanceStopTimeout:  10 * time.Second,
 			CleanupTimeout:       30 * time.Second,
 			CRDCacheTimeout:      5 * time.Minute,
+			ShutdownDrainTimeout: 30 * time.Second,
 		}
 	}
 
@@ -74,6 +75,10 @@ func TestManagerConfig_Validate(t *testing.T) {
 			modify:       func(c *ManagerConfig) { c.PoolSize = -1 },
 			wantContains: "pool size",
 		},
+		"zero shutdown drain timeout": {
+			modify:       func(c *ManagerConfig) { c.ShutdownDrainTimeout = 0 },
+			wantContains: "shutdown drain timeout",
+		},
 		"invalid release strategy": {
 			modify:       func(c *ManagerConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
 			wantContains: "release strategy",
@@ -116,6 +121,7 @@ func TestManagerConfig_Validate(t *testing.T) {
 			"instance stop timeout",
 			"cleanup timeout",
 			"CRD cache timeout",
+			"shutdown drain timeout",
 			"pool size",
 		}
 
@@ -256,7 +262,7 @@ func TestInstanceConfig_Validate(t *testing.T) {
 //  2. Update expectedFields below to match the new count
 func TestManagerConfigFieldCount(t *testing.T) {
 	t.Parallel()
-	const expectedFields = 12 // Update this when adding new fields to ManagerConfig.
+	const expectedFields = 13 // Update this when adding new fields to ManagerConfig.
 
 	actual := reflect.TypeFor[ManagerConfig]().NumField()
 	if actual != expectedFields {

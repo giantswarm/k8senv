@@ -111,6 +111,13 @@ type ManagerConfig struct {
 	// ReleaseClean, a positive value is always required by Validate
 	// because validation does not vary by strategy. Default: 30 seconds.
 	CleanupTimeout time.Duration
+
+	// ShutdownDrainTimeout is the maximum time Shutdown() waits for
+	// in-flight ReleaseToPool operations to complete before proceeding
+	// with instance teardown. If InstanceStopTimeout is configured larger
+	// than this value, an in-flight release performing ReleaseRestart
+	// could still be running when the drain fires. Default: 30 seconds.
+	ShutdownDrainTimeout time.Duration
 }
 
 // Validate checks all ManagerConfig invariants and returns an error describing
@@ -147,6 +154,9 @@ func (c ManagerConfig) Validate() error {
 	}
 	if c.CRDCacheTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("CRD cache timeout must be greater than 0, got %s", c.CRDCacheTimeout))
+	}
+	if c.ShutdownDrainTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("shutdown drain timeout must be greater than 0, got %s", c.ShutdownDrainTimeout))
 	}
 	if c.PoolSize < 0 {
 		errs = append(errs, fmt.Errorf("pool size must not be negative, got %d", c.PoolSize))

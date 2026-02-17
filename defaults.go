@@ -50,6 +50,14 @@ const (
 	// validation does not vary by strategy.
 	DefaultCleanupTimeout = 30 * time.Second
 
+	// DefaultShutdownDrainTimeout is the maximum time Shutdown() waits
+	// for in-flight ReleaseToPool operations to complete before proceeding.
+	// If InstanceStopTimeout is configured larger than this value (e.g. for
+	// slow CI), an in-flight release performing ReleaseRestart could exceed
+	// the drain window, causing Shutdown() to proceed prematurely. Increase
+	// this timeout to at least match the longest expected release duration.
+	DefaultShutdownDrainTimeout = 30 * time.Second
+
 	// DefaultReleaseStrategy is the strategy used by Instance.Release()
 	// when no explicit strategy is configured via WithReleaseStrategy.
 	// ReleaseRestart stops the instance on release; the next Acquire

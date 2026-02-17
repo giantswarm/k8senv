@@ -117,6 +117,7 @@ func NewManager(opts ...ManagerOption) Manager {
 			InstanceStartTimeout: DefaultInstanceStartTimeout,
 			InstanceStopTimeout:  DefaultInstanceStopTimeout,
 			CleanupTimeout:       DefaultCleanupTimeout,
+			ShutdownDrainTimeout: DefaultShutdownDrainTimeout,
 		}}
 		for _, opt := range opts {
 			opt(&cfg)

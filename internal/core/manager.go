@@ -483,7 +483,7 @@ func (m *Manager) Shutdown() error {
 	// check cannot see a stale "ready" value after this store completes.
 	m.storeState(managerShuttingDown)
 
-	const drainTimeout = 30 * time.Second
+	drainTimeout := m.cfg.ShutdownDrainTimeout
 	if m.inflight.Load() == 0 {
 		m.inflightDoneOnce.Do(func() { close(m.inflightDone) })
 	}

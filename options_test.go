@@ -136,6 +136,25 @@ func TestWithCleanupTimeoutPanicsOnInvalid(t *testing.T) {
 	})
 }
 
+func TestWithShutdownDrainTimeoutPanicsOnInvalid(t *testing.T) {
+	t.Parallel()
+	runPanicTests(t, []panicTestCase{
+		{
+			"zero",
+			true,
+			"k8senv: shutdown drain timeout must be greater than 0, got 0s",
+			func() { k8senv.WithShutdownDrainTimeout(0) },
+		},
+		{
+			"negative",
+			true,
+			"k8senv: shutdown drain timeout must be greater than 0, got -1s",
+			func() { k8senv.WithShutdownDrainTimeout(-1 * time.Second) },
+		},
+		{"valid", false, "", func() { k8senv.WithShutdownDrainTimeout(1 * time.Minute) }},
+	})
+}
+
 func TestWithEmptyStringOptionsPanic(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
