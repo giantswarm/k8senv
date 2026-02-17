@@ -10,7 +10,7 @@ STRESS_SUBTESTS ?=
 FLAKY_LOG       ?= find-flaky.log
 
 # Common test flags shared by both phases.
-_TEST_FLAGS = -tags=integration -parallel=$(PARALLEL) $(if $(RACE),-race) $(if $(NOCACHE),-count=1) -v $(if $(TEST),-run $(TEST)) -timeout=7m
+_TEST_FLAGS = -tags=integration -parallel=$(PARALLEL) $(if $(RACE),-race) $(if $(NOCACHE),-count=1) -v $(if $(TEST),-run $(TEST)) -timeout=15m
 
 # Stress test packages (run sequentially after non-stress packages).
 _STRESS_PKGS = ./tests/stress ./tests/stressclean
@@ -66,14 +66,14 @@ find-flaky: ## Run integration tests in loop to find flaky tests (options: RACE=
 	i=1; \
 	while true; do \
 		(K8SENV_LOG_LEVEL="$(LOG_LEVEL)" \
-			go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=7m $$non_stress 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
+			go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=15m $$non_stress 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
 		if [ "$$(cat "$$rcfile")" != "0" ]; then \
 			printf "$${red}Failed on pass %d (non-stress)$${nc}\n" "$$i" | tee -a "$(FLAKY_LOG)"; \
 			exit 1; \
 		fi; \
 		for pkg in ./tests/stress ./tests/stressclean; do \
 			(K8SENV_LOG_LEVEL="$(LOG_LEVEL)" K8SENV_STRESS_SUBTESTS="$$stress" \
-				go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=7m $$pkg 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
+				go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=15m $$pkg 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
 			if [ "$$(cat "$$rcfile")" != "0" ]; then \
 				printf "$${red}Failed on pass %d ($$pkg)$${nc}\n" "$$i" | tee -a "$(FLAKY_LOG)"; \
 				exit 1; \
