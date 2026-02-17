@@ -55,6 +55,18 @@ func StressSubtestCount() int {
 	return stressSubtestsCount
 }
 
+// isRetryable returns true for transient API server errors that may resolve on
+// retry (timeouts, throttling, internal errors). Used as the predicate for
+// retry.OnError in stress helpers.
+func isRetryable(err error) bool {
+	return errors.IsNotFound(err) ||
+		errors.IsTimeout(err) ||
+		errors.IsServerTimeout(err) ||
+		errors.IsTooManyRequests(err) ||
+		errors.IsInternalError(err) ||
+		errors.IsServiceUnavailable(err)
+}
+
 // StressCreateNamespace creates a namespace and fails the test on error.
 func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
 	t.Helper()
@@ -63,13 +75,18 @@ func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
 
-	created, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
+		created, createErr := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+		if createErr != nil {
+			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for predicate check
+		}
+		if created.Name != name {
+			t.Fatalf("Namespace name mismatch: want %s, got %s", name, created.Name)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("Failed to create namespace %s: %v", name, err)
-	}
-
-	if created.Name != name {
-		t.Fatalf("Namespace name mismatch: want %s, got %s", name, created.Name)
 	}
 }
 
@@ -107,7 +124,7 @@ func StressCreateRandomResource(
 	}
 }
 
-// StressCreateConfigMap creates a ConfigMap with retry on NotFound.
+// StressCreateConfigMap creates a ConfigMap with retry on transient errors.
 //
 //nolint:dupl // Each resource-creation helper builds a distinct Kubernetes object; structural similarity is inherent.
 func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
@@ -119,7 +136,7 @@ func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.
 		Data:       map[string]string{"key": fmt.Sprintf("value-%d", idx)},
 	}
 
-	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().ConfigMaps(ns).Create(ctx, cm, metav1.CreateOptions{})
 		if createErr != nil {
 			return createErr
@@ -134,7 +151,7 @@ func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.
 	}
 }
 
-// StressCreateSecret creates a Secret with retry on NotFound.
+// StressCreateSecret creates a Secret with retry on transient errors.
 //
 //nolint:dupl // Each resource-creation helper builds a distinct Kubernetes object; structural similarity is inherent.
 func StressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
@@ -146,7 +163,7 @@ func StressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Int
 		StringData: map[string]string{"secret": fmt.Sprintf("val-%d", idx)},
 	}
 
-	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().Secrets(ns).Create(ctx, secret, metav1.CreateOptions{})
 		if createErr != nil {
 			return createErr
@@ -161,7 +178,7 @@ func StressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Int
 	}
 }
 
-// StressCreateService creates a headless Service with retry on NotFound.
+// StressCreateService creates a headless Service with retry on transient errors.
 func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
@@ -179,7 +196,7 @@ func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 		},
 	}
 
-	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
 		if createErr != nil {
 			return createErr
@@ -194,7 +211,7 @@ func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 	}
 }
 
-// StressCreatePod creates a Pod with retry on NotFound.
+// StressCreatePod creates a Pod with retry on transient errors.
 func StressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
@@ -211,7 +228,7 @@ func StressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interf
 		},
 	}
 
-	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
 		if createErr != nil {
 			return createErr
@@ -226,7 +243,7 @@ func StressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interf
 	}
 }
 
-// StressCreateServiceAccount creates a ServiceAccount with retry on NotFound.
+// StressCreateServiceAccount creates a ServiceAccount with retry on transient errors.
 func StressCreateServiceAccount(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
@@ -235,7 +252,7 @@ func StressCreateServiceAccount(ctx context.Context, t *testing.T, client kubern
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 	}
 
-	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().ServiceAccounts(ns).Create(ctx, sa, metav1.CreateOptions{})
 		if createErr != nil {
 			return createErr
