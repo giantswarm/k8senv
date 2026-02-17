@@ -4,13 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -221,6 +227,206 @@ func (i *Instance) cleanNamespaces(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+// cleanNamespacedResources discovers all namespaced resource types on the API
+// server and deletes all instances in non-system namespaces. This must run
+// before cleanNamespaces to avoid orphaned resources persisting in kine/SQLite
+// storage after namespace objects are deleted.
+//
+// Returns an error only if discovery itself fails. Individual resource
+// list/delete failures are logged at Debug level and skipped — some built-in
+// types (e.g., events, endpoints) may have API quirks but are harmless since
+// they live inside namespaces that will be deleted next.
+func (i *Instance) cleanNamespacedResources(ctx context.Context) error {
+	gvrs, err := i.discoverDeletableGVRs()
+	if err != nil {
+		return err
+	}
+
+	dynClient, err := i.getOrBuildDynamicClient()
+	if err != nil {
+		return fmt.Errorf("build dynamic client for resource cleanup: %w", err)
+	}
+
+	i.log.Debug("discovered namespaced resource types", "count", len(gvrs))
+
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(10)
+
+	for _, gvr := range gvrs {
+		g.Go(func() error {
+			i.deleteResourcesForGVR(gCtx, dynClient, gvr)
+			return nil
+		})
+	}
+
+	// errgroup always returns nil here since goroutines always return nil.
+	_ = g.Wait()
+	return nil
+}
+
+// discoverDeletableGVRs returns the set of namespaced resource types that
+// support both list and delete verbs. Results are cached across Release calls
+// since the set of API resources doesn't change (CRDs are pre-applied once
+// during initialization and never modified). The cache is invalidated on Stop.
+func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error) {
+	if cached := i.cachedGVRs.Load(); cached != nil {
+		return *cached, nil
+	}
+
+	disc, err := i.getOrBuildDiscoveryClient()
+	if err != nil {
+		return nil, fmt.Errorf("build discovery client for resource cleanup: %w", err)
+	}
+
+	// ServerPreferredNamespacedResources returns one entry per resource at the
+	// preferred version, avoiding double-deleting resources under multiple API
+	// versions. It may return partial results alongside an error for groups
+	// that fail to load — use whatever we got.
+	resourceLists, discErr := disc.ServerPreferredNamespacedResources()
+	if discErr != nil && len(resourceLists) == 0 {
+		return nil, fmt.Errorf("discover namespaced resources: %w", discErr)
+	}
+
+	var gvrs []schema.GroupVersionResource
+	for _, list := range resourceLists {
+		gv, parseErr := schema.ParseGroupVersion(list.GroupVersion)
+		if parseErr != nil {
+			i.log.Debug("resource cleanup skipped group", "group_version", list.GroupVersion, "error", parseErr)
+			continue
+		}
+		for idx := range list.APIResources {
+			res := &list.APIResources[idx]
+			// Skip subresources (e.g., pods/status, pods/log).
+			if strings.Contains(res.Name, "/") {
+				continue
+			}
+			// Skip resources that don't support both list and delete.
+			if !slices.Contains(res.Verbs, "list") || !slices.Contains(res.Verbs, "delete") {
+				continue
+			}
+			gvrs = append(gvrs, schema.GroupVersionResource{
+				Group:    gv.Group,
+				Version:  gv.Version,
+				Resource: res.Name,
+			})
+		}
+	}
+
+	i.cachedGVRs.Store(&gvrs)
+	return gvrs, nil
+}
+
+// deleteResourcesForGVR lists all instances of the given resource type and
+// deletes those in non-system namespaces, clearing finalizers first if present.
+func (i *Instance) deleteResourcesForGVR(
+	ctx context.Context,
+	dynClient *dynamic.DynamicClient,
+	gvr schema.GroupVersionResource,
+) {
+	list, err := dynClient.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		i.log.Debug("resource cleanup skipped", "gvr", gvr.String(), "error", err)
+		return
+	}
+
+	// Filter to items in non-system namespaces.
+	var items []unstructured.Unstructured
+	for idx := range list.Items {
+		ns := list.Items[idx].GetNamespace()
+		if _, ok := systemNamespaces[ns]; !ok {
+			items = append(items, list.Items[idx])
+		}
+	}
+
+	if len(items) == 0 {
+		return
+	}
+
+	i.log.Debug("cleaning namespaced resources", "gvr", gvr.String(), "count", len(items))
+
+	for idx := range items {
+		item := &items[idx]
+		ns := item.GetNamespace()
+		name := item.GetName()
+
+		// Clear finalizers if present so the resource can be deleted.
+		if len(item.GetFinalizers()) > 0 {
+			item.SetFinalizers(nil)
+			if _, updateErr := dynClient.Resource(gvr).
+				Namespace(ns).
+				Update(ctx, item, metav1.UpdateOptions{}); updateErr != nil {
+				i.log.Debug(
+					"resource cleanup skipped",
+					"gvr",
+					gvr.String(),
+					"namespace",
+					ns,
+					"name",
+					name,
+					"error",
+					updateErr,
+				)
+				continue
+			}
+			i.log.Debug("cleared finalizers", "gvr", gvr.String(), "namespace", ns, "name", name)
+		}
+
+		if delErr := dynClient.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{}); delErr != nil {
+			if !apierrors.IsNotFound(delErr) {
+				i.log.Debug(
+					"resource cleanup skipped",
+					"gvr",
+					gvr.String(),
+					"namespace",
+					ns,
+					"name",
+					name,
+					"error",
+					delErr,
+				)
+			}
+		}
+	}
+}
+
+// getOrBuildDiscoveryClient returns the cached discovery client or creates one.
+func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, error) {
+	if dc := i.discoveryClient.Load(); dc != nil {
+		return dc, nil
+	}
+	cfg, err := i.getOrBuildRestConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build config for discovery client: %w", err)
+	}
+	cfg.QPS = -1
+
+	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create discovery client: %w", err)
+	}
+	i.discoveryClient.Store(dc)
+	return dc, nil
+}
+
+// getOrBuildDynamicClient returns the cached dynamic client or creates one.
+func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
+	if dc := i.dynamicClient.Load(); dc != nil {
+		return dc, nil
+	}
+	cfg, err := i.getOrBuildRestConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build config for dynamic client: %w", err)
+	}
+	cfg.QPS = -1
+
+	dc, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create dynamic client: %w", err)
+	}
+	i.dynamicClient.Store(dc)
+	return dc, nil
 }
 
 // deleteAndFinalizeNamespace deletes a namespace and clears its finalizers via

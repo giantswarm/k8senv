@@ -192,6 +192,216 @@ func TestReleaseCleanupWithNoUserNamespaces(t *testing.T) {
 	}
 }
 
+// TestReleaseCleanupNamespacedResources verifies that Release(false) removes
+// all user-created resources inside non-system namespaces.
+func TestReleaseCleanupNamespacedResources(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	instID := inst.ID()
+	released := false
+	defer func() {
+		if !released {
+			inst.Release() //nolint:errcheck,gosec // safety net on test failure
+		}
+	}()
+
+	nsName := testutil.UniqueNS("res-cleanup")
+	createNamespace(ctx, t, client, nsName)
+
+	// Create resources in the namespace.
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: nsName},
+		Data:       map[string]string{"key": "value"},
+	}
+	if _, err := client.CoreV1().ConfigMaps(nsName).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create ConfigMap: %v", err)
+	}
+
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret", Namespace: nsName},
+		StringData: map[string]string{"password": "hunter2"},
+	}
+	if _, err := client.CoreV1().Secrets(nsName).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create Secret: %v", err)
+	}
+
+	// Release and re-acquire.
+	if err := inst.Release(); err != nil {
+		t.Fatalf("Release(false) failed: %v", err)
+	}
+	released = true
+
+	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
+	defer func() {
+		if err := inst2.Release(); err != nil {
+			t.Logf("release error: %v", err)
+		}
+	}()
+
+	if inst2.ID() == instID {
+		t.Log("got same instance back (LIFO)")
+	} else {
+		t.Log("got different instance (pool concurrency)")
+	}
+
+	// Verify namespace is gone.
+	nsList, err := client2.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list namespaces: %v", err)
+	}
+	for _, ns := range nsList.Items {
+		if ns.Name == nsName {
+			t.Errorf("namespace %q should have been cleaned up", nsName)
+		}
+	}
+
+	// Verify resources are gone (list across all namespaces).
+	cmList, err := client2.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list ConfigMaps: %v", err)
+	}
+	for _, item := range cmList.Items {
+		if item.Namespace == nsName {
+			t.Errorf("ConfigMap %s/%s should have been cleaned up", item.Namespace, item.Name)
+		}
+	}
+
+	secretList, err := client2.CoreV1().Secrets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list Secrets: %v", err)
+	}
+	for _, item := range secretList.Items {
+		if item.Namespace == nsName {
+			t.Errorf("Secret %s/%s should have been cleaned up", item.Namespace, item.Name)
+		}
+	}
+}
+
+// TestReleaseCleanupResourcesWithFinalizers verifies that Release(false) clears
+// finalizers and deletes resources that have finalizers set.
+func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	instID := inst.ID()
+	released := false
+	defer func() {
+		if !released {
+			inst.Release() //nolint:errcheck,gosec // safety net on test failure
+		}
+	}()
+
+	nsName := testutil.UniqueNS("finalizer-cleanup")
+	createNamespace(ctx, t, client, nsName)
+
+	// Create a ConfigMap and add a finalizer to it.
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "finalized-cm",
+			Namespace:  nsName,
+			Finalizers: []string{"test.example.com/block-deletion"},
+		},
+		Data: map[string]string{"key": "value"},
+	}
+	if _, err := client.CoreV1().ConfigMaps(nsName).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create ConfigMap with finalizer: %v", err)
+	}
+
+	// Release and re-acquire.
+	if err := inst.Release(); err != nil {
+		t.Fatalf("Release(false) failed: %v", err)
+	}
+	released = true
+
+	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
+	defer func() {
+		if err := inst2.Release(); err != nil {
+			t.Logf("release error: %v", err)
+		}
+	}()
+
+	if inst2.ID() == instID {
+		t.Log("got same instance back (LIFO)")
+	} else {
+		t.Log("got different instance (pool concurrency)")
+	}
+
+	// Verify the finalized resource is gone.
+	cmList, err := client2.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list ConfigMaps: %v", err)
+	}
+	for _, item := range cmList.Items {
+		if item.Namespace == nsName {
+			t.Errorf("ConfigMap %s/%s should have been cleaned up (had finalizer)", item.Namespace, item.Name)
+		}
+	}
+}
+
+// TestReleaseCleanupPreservesSystemNamespaceResources verifies that resources
+// in system namespaces are not deleted during cleanup.
+func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	instID := inst.ID()
+	released := false
+	defer func() {
+		if !released {
+			inst.Release() //nolint:errcheck,gosec // safety net on test failure
+		}
+	}()
+
+	// Create a ConfigMap in kube-system.
+	cmName := testutil.UniqueNS("sys-cm")
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: "kube-system"},
+		Data:       map[string]string{"key": "preserved"},
+	}
+	if _, err := client.CoreV1().ConfigMaps("kube-system").Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create ConfigMap in kube-system: %v", err)
+	}
+
+	// Also create a user namespace so cleanup actually runs.
+	userNS := testutil.UniqueNS("trigger-cleanup")
+	createNamespace(ctx, t, client, userNS)
+
+	if err := inst.Release(); err != nil {
+		t.Fatalf("Release(false) failed: %v", err)
+	}
+	released = true
+
+	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
+	defer func() {
+		// Clean up the system namespace ConfigMap we created.
+		_ = client2.CoreV1().ConfigMaps("kube-system").Delete(ctx, cmName, metav1.DeleteOptions{})
+		if err := inst2.Release(); err != nil {
+			t.Logf("release error: %v", err)
+		}
+	}()
+
+	// Each instance is a separate kube-apiserver. If concurrent tests grabbed
+	// our instance before we re-acquired, we get a different one where the
+	// ConfigMap was never created. Only verify when we got the same instance.
+	if inst2.ID() != instID {
+		t.Log("got different instance (pool concurrency); skipping system resource verification")
+		return
+	}
+
+	// Verify the kube-system ConfigMap still exists.
+	got, err := client2.CoreV1().ConfigMaps("kube-system").Get(ctx, cmName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("ConfigMap in kube-system should survive cleanup: %v", err)
+	}
+	if got.Data["key"] != "preserved" {
+		t.Errorf("ConfigMap data mismatch: got %v", got.Data)
+	}
+}
+
 // createNamespace is a test helper that creates a namespace and fails the test on error.
 func createNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
 	t.Helper()

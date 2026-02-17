@@ -13,6 +13,9 @@ import (
 	"github.com/giantswarm/k8senv/internal/kubestack"
 	"github.com/giantswarm/k8senv/internal/netutil"
 	"github.com/giantswarm/k8senv/internal/sentinel"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -94,6 +97,16 @@ type Instance struct {
 	// cachedConfig is a cached rest.Config.
 	// Set on first Config() call, cleared by Stop.
 	cachedConfig atomic.Pointer[rest.Config]
+	// discoveryClient is a cached discovery client for resource enumeration.
+	// Set on first cleanNamespacedResources call, cleared by Stop.
+	discoveryClient atomic.Pointer[discovery.DiscoveryClient]
+	// dynamicClient is a cached dynamic client for resource deletion.
+	// Set on first cleanNamespacedResources call, cleared by Stop.
+	dynamicClient atomic.Pointer[dynamic.DynamicClient]
+	// cachedGVRs is the discovered set of deletable namespaced resource types.
+	// Cached across Release calls since CRDs don't change after initialization.
+	// Cleared by Stop (API server may have different resources after restart).
+	cachedGVRs atomic.Pointer[[]schema.GroupVersionResource]
 
 	// startMu serializes Start/Stop to prevent duplicate process launches.
 	startMu sync.Mutex
@@ -277,6 +290,9 @@ func (i *Instance) doStart(ctx context.Context) error {
 			// ports are gone, so cached configs and clients are invalid.
 			i.cleanupClient.Store(nil)
 			i.cachedConfig.Store(nil)
+			i.discoveryClient.Store(nil)
+			i.dynamicClient.Store(nil)
+			i.cachedGVRs.Store(nil)
 
 			lastNSErr = err
 			if attempt < i.cfg.MaxStartRetries {
@@ -373,6 +389,9 @@ func (i *Instance) Stop(ctx context.Context) error {
 	i.cancel = nil
 	i.cleanupClient.Store(nil)
 	i.cachedConfig.Store(nil)
+	i.discoveryClient.Store(nil)
+	i.dynamicClient.Store(nil)
+	i.cachedGVRs.Store(nil)
 	i.started.Store(false)
 
 	if cancel != nil {
@@ -415,9 +434,12 @@ func (i *Instance) effectiveStopTimeout(ctx context.Context) time.Duration {
 //   - ReleaseRestart: stops the instance. The next Acquire starts a fresh
 //     instance with the database restored from the cached template. No
 //     API-level cleanup is needed.
-//   - ReleaseClean: deletes all non-system namespaces, then returns the
-//     running instance to the pool. Faster than ReleaseRestart but relies
-//     on cleanup correctness.
+//   - ReleaseClean: deletes all namespaced resources in non-system namespaces,
+//     then deletes the namespaces themselves before returning the running
+//     instance to the pool. Resource deletion precedes namespace deletion
+//     because k8senv runs in API-only mode (no kube-controller-manager),
+//     so namespace deletion does not cascade-delete contained resources.
+//     Faster than ReleaseRestart but relies on cleanup correctness.
 //   - ReleaseNone: returns the instance to the pool immediately with no
 //     cleanup. Use only when tests use unique namespaces.
 //
@@ -461,12 +483,25 @@ func (i *Instance) Release(token uint64) error {
 		// Skip all cleanup — return to pool immediately.
 
 	case ReleaseClean:
-		// Clean user namespaces before returning to pool, so the next
-		// consumer gets a clean instance. Only run if the instance has
-		// started processes (kubeconfig exists and apiserver is reachable).
+		// Clean user resources and namespaces before returning to pool, so
+		// the next consumer gets a clean instance. Only run if the instance
+		// has started processes (kubeconfig exists and apiserver is reachable).
+		// Resources must be deleted before namespaces because k8senv runs in
+		// API-only mode (no kube-controller-manager), so namespace deletion
+		// does not cascade-delete contained resources.
 		if i.started.Load() {
 			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
-			err := i.cleanNamespaces(cleanCtx)
+			err := i.cleanNamespacedResources(cleanCtx)
+			cleanCancel()
+			if err != nil {
+				cleanupErr := fmt.Errorf("resource cleanup during release: %w", err)
+				i.setErr(cleanupErr)
+				i.releaser.ReleaseFailed(i, token)
+				return cleanupErr
+			}
+
+			cleanCtx, cleanCancel = context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
+			err = i.cleanNamespaces(cleanCtx)
 			cleanCancel()
 			if err != nil {
 				cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
