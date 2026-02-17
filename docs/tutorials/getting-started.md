@@ -83,7 +83,7 @@ func TestKubernetesAPI(t *testing.T) {
     if err != nil {
         t.Fatalf("Failed to acquire instance: %v", err)
     }
-    defer inst.Release(false) // Keep running for potential reuse
+    defer inst.Release()
 
     // Get the REST config
     cfg, err := inst.Config()
@@ -123,7 +123,7 @@ If binaries are not installed, tests will fail with an informative error message
 2. **Initialization**: `Initialize()` prepares directories and optional CRD caching
 3. **Acquire**: `Acquire()` gets an instance, starting it lazily if needed
 4. **Use**: Your test uses the `*rest.Config` to create clients and interact with the API
-5. **Release**: `Release(false)` returns the instance to the pool without stopping it
+5. **Release**: `Release()` returns the instance to the pool (behavior depends on `ReleaseStrategy`)
 6. **Shutdown**: `Shutdown()` stops all instances and cleans up
 
 ## API-Only Mode

@@ -1,3 +1,5 @@
+//go:build integration
+
 // Package testutil provides shared helpers for integration test packages.
 package testutil
 
@@ -6,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,6 +21,28 @@ import (
 	"github.com/giantswarm/k8senv"
 	"k8s.io/client-go/kubernetes"
 )
+
+// systemNamespaces is the set of namespaces created by kube-apiserver that
+// must survive cleanup. The authoritative source is internal/core/cleanup.go.
+//
+// KEEP IN SYNC with internal/core/cleanup.go:systemNamespaces.
+// TestSystemNamespacesMatchAPIServer (in tests/cleanup/) verifies this set at
+// runtime against the namespaces that kube-apiserver actually creates on startup.
+var systemNamespaces = map[string]struct{}{
+	"default":         {},
+	"kube-system":     {},
+	"kube-public":     {},
+	"kube-node-lease": {},
+}
+
+// SystemNamespaces returns a copy of the system namespace set so callers
+// cannot accidentally mutate the canonical map.
+func SystemNamespaces() map[string]struct{} {
+	cp := make(map[string]struct{}, len(systemNamespaces))
+	maps.Copy(cp, systemNamespaces)
+
+	return cp
+}
 
 // nsCounter is an atomic counter used by UniqueNS to generate namespace names
 // that are unique across parallel test goroutines.
@@ -69,7 +94,7 @@ func AcquireWithClient(ctx context.Context, t *testing.T, mgr k8senv.Manager) (k
 
 	cfg, err := inst.Config()
 	if err != nil {
-		if relErr := inst.Release(false); relErr != nil {
+		if relErr := inst.Release(); relErr != nil {
 			t.Logf("release error: %v", relErr)
 		}
 		t.Fatalf("Failed to get config: %v", err)
@@ -77,7 +102,7 @@ func AcquireWithClient(ctx context.Context, t *testing.T, mgr k8senv.Manager) (k
 
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		if relErr := inst.Release(false); relErr != nil {
+		if relErr := inst.Release(); relErr != nil {
 			t.Logf("release error: %v", relErr)
 		}
 		t.Fatalf("Failed to create client: %v", err)

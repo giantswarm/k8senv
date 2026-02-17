@@ -123,7 +123,7 @@ func TestWithCRDs(t *testing.T) {
     if err != nil {
         t.Fatalf("Acquire failed: %v", err)
     }
-    defer inst.Release(false)
+    defer inst.Release()
 
     cfg, err := inst.Config()
     if err != nil {

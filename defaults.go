@@ -41,4 +41,18 @@ const (
 	// DefaultInstanceStopTimeout is the maximum time allowed for an
 	// instance's processes to stop gracefully.
 	DefaultInstanceStopTimeout = 10 * time.Second
+
+	// DefaultCleanupTimeout is the maximum time allowed for namespace
+	// cleanup during release. This timeout covers API calls to list and
+	// delete non-system namespaces, which may need more time than process
+	// shutdown (StopTimeout). Although only exercised when ReleaseStrategy
+	// is ReleaseClean, a positive value is always required because config
+	// validation does not vary by strategy.
+	DefaultCleanupTimeout = 30 * time.Second
+
+	// DefaultReleaseStrategy is the strategy used by Instance.Release()
+	// when no explicit strategy is configured via WithReleaseStrategy.
+	// ReleaseRestart stops the instance on release; the next Acquire
+	// starts fresh with the database restored from the cached template.
+	DefaultReleaseStrategy = ReleaseRestart
 )

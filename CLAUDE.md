@@ -181,13 +181,14 @@ Benefits:
 
 ### Tests
 
-Tests are organized across the root package (unit tests) and three integration test packages under `tests/`. Integration tests share a singleton manager created in `TestMain` and require kine and kube-apiserver binaries.
+Tests are organized across the root package (unit tests) and seven integration test packages under `tests/`. Integration tests share a singleton manager created in `TestMain` and require kine and kube-apiserver binaries. Different test packages use different `ReleaseStrategy` configurations to test specific behaviors.
 
 **Root package (`options_test.go`)** — Unit tests (no binaries required):
 - `TestWithAcquireTimeoutPanicsOnInvalid` - Panics on invalid timeout
 - `TestWithKineBinaryPanicsOnEmpty` - Panics on empty kine binary path
 - `TestWithPoolSizePanicsOnInvalid` - Panics on negative pool size
 - `TestWithKubeAPIServerBinaryPanicsOnEmpty` - Panics on empty kube-apiserver binary path
+- `TestWithReleaseStrategyPanicsOnInvalid` - Panics on invalid release strategy
 - `TestWithEmptyStringOptionsPanic` - Empty string options panic
 
 **`tests/` (package `k8senv_test`)** — Core integration tests:
@@ -206,26 +207,33 @@ Tests are organized across the root package (unit tests) and three integration t
 - `TestInstanceReuse` - Explicit reuse demonstration
 - `TestIDUniqueness` - Instance IDs are unique
 - `TestDoubleReleasePanics` - Double release is detected
-- `TestReleaseTrueTriggersRestart` - Release(true) stops instance, next Acquire starts fresh
 
 **API server mode:**
 - `TestAPIServerOnlyMode` - API server testing (namespaces, ConfigMaps)
 - `TestMultipleInstancesWithAPIOnly` - Multiple kube-apiserver instances simultaneously
 
-**Namespace cleanup:**
-- `TestSystemNamespacesMatchAPIServer` - Verifies local system namespace set matches API server
-- `TestReleaseCleanupNamespaces` - Release(false) removes user namespaces before pool return
-- `TestReleasePreservesSystemNamespaces` - System namespaces survive cleanup
-- `TestReleaseCleanupWithNoUserNamespaces` - Fast path when no user namespaces exist
-
 **Other:**
 - `TestContextCancelDuringAcquire` - Context cancellation during acquire
-- `TestStress` - Spawns parallel subtests that create random resources (configurable via `K8SENV_STRESS_SUBTESTS`)
 
 **`tests/poolsize/` (package `k8senv_poolsize_test`)** — Bounded pool tests (separate package with pool size 2):
 - `TestPoolTimeout` - Acquire blocks and times out when bounded pool is exhausted
 - `TestPoolReleaseUnblocks` - Releasing an instance unblocks a waiting Acquire
 - `TestPoolBoundedInstanceReuse` - Bounded pool reuses instances, never exceeds max
+
+**`tests/cleanup/` (package `k8senv_cleanup_test`)** — Namespace cleanup tests (separate package with `ReleaseClean` strategy):
+- `TestSystemNamespacesMatchAPIServer` - Verifies local system namespace set matches API server
+- `TestReleaseCleanupNamespaces` - Release() with ReleaseClean removes user namespaces before pool return
+- `TestReleasePreservesSystemNamespaces` - System namespaces survive cleanup
+- `TestReleaseCleanupWithNoUserNamespaces` - Fast path when no user namespaces exist
+
+**`tests/stress/` (package `k8senv_stress_test`)** — Stress tests (separate package, run sequentially after other tests):
+- `TestStress` - Spawns parallel subtests that create random resources (configurable via `K8SENV_STRESS_SUBTESTS`)
+
+**`tests/stressclean/` (package `k8senv_stressclean_test`)** — Stress tests with `ReleaseClean` strategy (separate package, run sequentially after other tests):
+- `TestStressClean` - Stress test verifying ReleaseClean under high concurrency (configurable via `K8SENV_STRESS_SUBTESTS`)
+
+**`tests/restart/` (package `k8senv_restart_test`)** — Restart strategy tests (separate package with default `ReleaseRestart` strategy):
+- `TestReleaseRestart` - Release() stops instance, next Acquire starts fresh
 
 **`tests/crd/` (package `k8senv_crd_test`)** — CRD tests (separate package for CRD-enabled singleton):
 - `TestCRDDirCaching` - CRD directory caching behavior
@@ -245,6 +253,7 @@ Applied when creating a manager:
 ```go
 mgr := k8senv.NewManager(
     k8senv.WithPoolSize(2),                                  // Default: 4 (0 = unlimited)
+    k8senv.WithReleaseStrategy(k8senv.ReleaseClean),        // Default: ReleaseRestart
     k8senv.WithKineBinary("/usr/local/bin/kine"),           // Default: "kine"
     k8senv.WithKubeAPIServerBinary("/usr/local/bin/kube-apiserver"), // Default: "kube-apiserver"
     k8senv.WithAcquireTimeout(2*time.Minute),               // Default: 30 seconds
@@ -296,7 +305,7 @@ func TestExample(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    defer inst.Release(false) // Returns nil on success; safe to ignore in defer
+    defer inst.Release() // safe to ignore in defer
 
     cfg, err := inst.Config()
     client, err := kubernetes.NewForConfig(cfg)
@@ -331,7 +340,7 @@ func TestParallel(t *testing.T) {
         t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
             t.Parallel()
             inst, _ := sharedManager.Acquire(context.Background())
-            defer inst.Release(false)
+            defer inst.Release()
             // Use unique namespaces for isolation
         })
     }
@@ -342,9 +351,9 @@ Run with: `go test -parallel=10 -tags=integration`
 
 ## Important Notes
 
-- **Always** use `defer inst.Release(false)` in tests to return instances for reuse. `Release(false)` cleans non-system namespaces before returning the instance to the pool; it returns nil on success. If cleanup fails, the instance is removed from the pool and the error is returned (safe to ignore in defer). `Release(true)` may return an error if cleanup or stopping fails, but the instance is already removed on error, so no corrective action is needed.
+- **Always** use `defer inst.Release()` in tests to return instances to the pool. The behavior is determined by the Manager's `ReleaseStrategy` (default: `ReleaseRestart`). On error the instance is removed from the pool; safe to ignore in defer.
 - **Never** share resources between parallel tests without namespace isolation
-- **Prefer** `Release(false)` over `Release(true)` for speed
+- **Configure** the release strategy once in `TestMain` via `WithReleaseStrategy`. Available strategies: `ReleaseRestart` (default, stops instance), `ReleaseClean` (cleans namespaces, keeps running), `ReleaseNone` (no cleanup)
 - **Check** that kine and kube-apiserver are installed before running integration tests:
   - `which kine` (install: `go install github.com/k3s-io/kine/cmd/kine@latest`)
   - `which kube-apiserver` (download from https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver or use `make install-tools`)

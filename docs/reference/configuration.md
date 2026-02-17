@@ -18,6 +18,8 @@ mgr := k8senv.NewManager(
 | Option | Default | Description |
 |--------|---------|-------------|
 | `WithPoolSize(size)` | 4 | Max instances in pool; 0 = unlimited. Acquire blocks when all in use |
+| `WithReleaseStrategy(s)` | `ReleaseRestart` | Strategy for `Release()`: `ReleaseRestart`, `ReleaseClean`, or `ReleaseNone` |
+| `WithCleanupTimeout(d)` | 30s | Timeout for namespace cleanup during release (used with `ReleaseClean`) |
 | `WithAcquireTimeout(d)` | 30s | Timeout for instance startup during Acquire |
 | `WithKineBinary(path)` | `"kine"` | Path to kine binary |
 | `WithKubeAPIServerBinary(path)` | `"kube-apiserver"` | Path to kube-apiserver binary |
@@ -29,6 +31,31 @@ mgr := k8senv.NewManager(
 | `WithInstanceStopTimeout(d)` | 10s | Max time per-process for graceful shutdown |
 
 ### Option Details
+
+#### WithReleaseStrategy
+
+Configures the behavior of `Instance.Release()` for all instances managed by this manager:
+
+- **`ReleaseRestart`** (default) — Stops the instance on release. Next `Acquire()` starts a fresh instance with the DB restored from template. Provides full isolation between tests.
+- **`ReleaseClean`** — Deletes non-system namespaces but keeps the instance running. Faster reuse at the cost of shared state in system namespaces.
+- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Fastest, but tests must manage their own isolation.
+
+```go
+k8senv.WithReleaseStrategy(k8senv.ReleaseClean)  // Keep running, clean namespaces
+k8senv.WithReleaseStrategy(k8senv.ReleaseNone)    // No cleanup
+```
+
+Panics if strategy is invalid.
+
+#### WithCleanupTimeout
+
+Sets the timeout for namespace cleanup during release. Only used when the release strategy is `ReleaseClean`.
+
+```go
+k8senv.WithCleanupTimeout(60*time.Second)
+```
+
+Panics if duration <= 0.
 
 #### WithPoolSize
 
@@ -124,7 +151,7 @@ Instances use internal defaults that are not configurable through the public API
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Start retries | 3 | Retry attempts on port conflicts |
+| Start retries | 5 | Retry attempts on port conflicts |
 
 Start and stop timeouts are configurable via `WithInstanceStartTimeout` and `WithInstanceStopTimeout` manager options (see above).
 
@@ -191,10 +218,12 @@ func TestWithFullConfig(t *testing.T) {
 
     mgr := k8senv.NewManager(
         // Pool configuration
-        k8senv.WithPoolSize(4), // Default: 4 (0 = unlimited)
+        k8senv.WithPoolSize(4),                                    // Default: 4 (0 = unlimited)
+        k8senv.WithReleaseStrategy(k8senv.ReleaseClean),          // Default: ReleaseRestart
 
         // Timeout configuration
         k8senv.WithAcquireTimeout(90*time.Second),
+        k8senv.WithCleanupTimeout(60*time.Second),                // Default: 30s (ReleaseClean only)
         k8senv.WithInstanceStartTimeout(3*time.Minute),
         k8senv.WithInstanceStopTimeout(30*time.Second),
 
@@ -219,7 +248,7 @@ func TestWithFullConfig(t *testing.T) {
     if err != nil {
         t.Fatalf("Failed to acquire: %v", err)
     }
-    defer inst.Release(false)
+    defer inst.Release()
 
     // Use instance...
 }

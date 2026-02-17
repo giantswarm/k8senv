@@ -183,7 +183,7 @@ func NewInstance(params NewInstanceParams) *Instance {
 		panic("k8senv: instance id must not be empty")
 	}
 	if params.DataDir == "" {
-		panic("k8senv: instance dataDir must not be empty")
+		panic("k8senv: instance data dir must not be empty")
 	}
 	if params.Releaser == nil {
 		panic("k8senv: instance releaser must not be nil")
@@ -408,27 +408,32 @@ func (i *Instance) effectiveStopTimeout(ctx context.Context) time.Duration {
 	return timeout
 }
 
-// Release marks the Instance as free (calls Stop if clean=true).
+// Release marks the Instance as free and returns it to the pool.
 //
-// Before returning the instance to the pool, Release deletes all non-system
-// namespaces from the kube-apiserver to prevent test state leakage. This is
-// necessary because k8senv runs in API-only mode (no kube-controller-manager),
-// so the kubernetes finalizer is never cleared automatically.
+// The behavior depends on the ReleaseStrategy configured on the Manager:
 //
-// Error semantics by mode:
-//   - Release(false) returns nil on success. Namespace cleanup runs before
-//     the instance is returned to the pool. If cleanup fails, the instance
-//     is marked as permanently failed via ReleaseFailed and the error is
-//     returned. Using defer inst.Release(false) is safe.
-//   - Release(true) calls Stop first. If Stop fails, the instance is marked as
-//     permanently failed via ReleaseFailed and removed from the pool to prevent
-//     re-acquiring a broken instance. The stop error is returned so callers can
-//     observe cleanup failures, but no corrective action is required.
+//   - ReleaseRestart: stops the instance. The next Acquire starts a fresh
+//     instance with the database restored from the cached template. No
+//     API-level cleanup is needed.
+//   - ReleaseClean: deletes all non-system namespaces, then returns the
+//     running instance to the pool. Faster than ReleaseRestart but relies
+//     on cleanup correctness.
+//   - ReleaseNone: returns the instance to the pool immediately with no
+//     cleanup. Use only when tests use unique namespaces.
+//
+// Error semantics:
+//   - ReleaseNone always returns nil (no cleanup to fail).
+//   - ReleaseClean returns nil on success. If namespace cleanup fails, the
+//     instance is marked as permanently failed via ReleaseFailed and the
+//     error is returned. Using defer inst.Release() is safe.
+//   - ReleaseRestart returns nil on success. If Stop fails, the instance
+//     is marked as permanently failed via ReleaseFailed. The error is
+//     informational: no corrective action is required.
 //
 // The shutdown check and pool release are performed atomically via
 // the InstanceReleaser to prevent a TOCTOU race. If the manager is shutting
 // down, the instance is stopped instead of being returned to the pool.
-func (i *Instance) Release(clean bool, token uint64) error {
+func (i *Instance) Release(token uint64) error {
 	if i.releaser == nil {
 		panic("k8senv: Release called on instance with nil releaser")
 	}
@@ -451,25 +456,30 @@ func (i *Instance) Release(clean bool, token uint64) error {
 		panic("k8senv: double-release of instance " + i.id)
 	}
 
-	// Clean user namespaces before returning to pool or stopping, so the
-	// next consumer gets a clean instance. Only run if the instance has
-	// started processes (kubeconfig exists and apiserver is reachable).
-	if i.started.Load() {
-		cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
-		err := i.cleanNamespaces(cleanCtx)
-		cleanCancel()
-		if err != nil {
-			cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
-			i.setErr(cleanupErr)
-			i.releaser.ReleaseFailed(i, token)
-			return cleanupErr
-		}
-	}
+	switch i.cfg.ReleaseStrategy {
+	case ReleaseNone:
+		// Skip all cleanup — return to pool immediately.
 
-	if clean {
-		// Use a background context with the configured stop timeout so that
-		// Release is not blocked indefinitely but also does not require the
-		// caller to supply a context (preserving the public API contract).
+	case ReleaseClean:
+		// Clean user namespaces before returning to pool, so the next
+		// consumer gets a clean instance. Only run if the instance has
+		// started processes (kubeconfig exists and apiserver is reachable).
+		if i.started.Load() {
+			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
+			err := i.cleanNamespaces(cleanCtx)
+			cleanCancel()
+			if err != nil {
+				cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
+				i.setErr(cleanupErr)
+				i.releaser.ReleaseFailed(i, token)
+				return cleanupErr
+			}
+		}
+
+	case ReleaseRestart:
+		// Stop the instance. The next Acquire will start fresh with the
+		// database restored from the cached template. No API-level cleanup
+		// is needed since the DB is replaced on restart.
 		ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
 		defer cancel()
 		if err := i.Stop(ctx); err != nil {
@@ -478,6 +488,13 @@ func (i *Instance) Release(clean bool, token uint64) error {
 			i.releaser.ReleaseFailed(i, token)
 			return stopErr
 		}
+
+	default:
+		// All valid strategies are handled above. An unknown value here
+		// indicates a programmer error — the strategy is validated at
+		// construction time by InstanceConfig.Validate, so this branch
+		// should be unreachable.
+		panic(fmt.Sprintf("k8senv: unknown release strategy: %v", i.cfg.ReleaseStrategy))
 	}
 
 	// Atomically check shutdown state and release to pool. This eliminates

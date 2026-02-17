@@ -1,6 +1,6 @@
 //go:build integration
 
-package k8senv_crd_test
+package k8senv_stressclean_test
 
 import (
 	"context"
@@ -14,12 +14,14 @@ import (
 	"github.com/giantswarm/k8senv/tests/internal/testutil"
 )
 
-// sharedManager is the process-level singleton manager for CRD tests, created
-// once in TestMain with all CRD files needed by this package's tests.
+// sharedManager is the process-level singleton manager for stress-clean tests,
+// created once in TestMain with WithReleaseStrategy(ReleaseClean) to exercise
+// namespace-cleanup behavior under high concurrency.
 var sharedManager k8senv.Manager
 
-// TestMain configures logging, sets up a CRD directory with all CRDs needed by
-// this package, creates the singleton manager with WithCRDDir, and runs tests.
+// TestMain configures logging, creates a singleton manager with ReleaseClean
+// strategy and pool size matching test parallelism, and runs all tests in this
+// package.
 func TestMain(m *testing.M) {
 	// Parse flags early so testutil.TestParallel() reads the actual -test.parallel value
 	// from the command line instead of the default (GOMAXPROCS). m.Run() skips
@@ -29,24 +31,17 @@ func TestMain(m *testing.M) {
 	testutil.SetupTestLogging()
 	testutil.RequireBinariesOrExit()
 
-	tmpDir, err := os.MkdirTemp("", "k8senv-crd-test-*")
+	tmpDir, err := os.MkdirTemp("", "k8senv-stressclean-test-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Create the shared CRD directory containing all CRDs needed by tests.
-	crdDir, err := setupSharedCRDDir(tmpDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to set up CRD dir: %v\n", err)
 		os.Exit(1)
 	}
 
 	mgr := k8senv.NewManager(
 		k8senv.WithBaseDataDir(tmpDir),
 		k8senv.WithAcquireTimeout(5*time.Minute),
-		k8senv.WithCRDDir(crdDir),
 		k8senv.WithPoolSize(testutil.TestParallel()),
+		k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

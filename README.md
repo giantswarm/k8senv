@@ -63,7 +63,7 @@ func TestMyApp(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    defer inst.Release(false)
+    defer inst.Release()
 
     cfg, err := inst.Config()
     if err != nil {

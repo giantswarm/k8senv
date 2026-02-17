@@ -74,18 +74,13 @@ func (w *instanceWrapper) Config() (*rest.Config, error) {
 	return w.inst.Config()
 }
 
-// Release returns the instance to the pool. If clean is true, the instance
-// is stopped first; otherwise it remains running for reuse.
+// Release returns the instance to the pool. The behavior depends on the
+// ReleaseStrategy configured on the Manager (see WithReleaseStrategy).
 //
-// Before returning to the pool, all non-system namespaces are cleaned up
-// to prevent test state leakage.
-//
-// Release(false) returns nil on success; using defer inst.Release(false) is safe.
-// Release(true) returns an error only if cleanup or stopping fails, but the
-// instance is already removed from the pool on error, so no corrective action
-// is needed.
-func (w *instanceWrapper) Release(clean bool) error {
-	return w.inst.Release(clean, w.token)
+// Returns nil on success; using defer inst.Release() is safe. On error the
+// instance is already removed from the pool, so no corrective action is needed.
+func (w *instanceWrapper) Release() error {
+	return w.inst.Release(w.token)
 }
 
 // ID returns a unique identifier for this instance.
@@ -113,6 +108,7 @@ func NewManager(opts ...ManagerOption) Manager {
 	singletonOnce.Do(func() {
 		cfg := managerConfig{core.ManagerConfig{
 			PoolSize:             DefaultPoolSize,
+			ReleaseStrategy:      DefaultReleaseStrategy,
 			KineBinary:           DefaultKineBinary,
 			KubeAPIServerBinary:  DefaultKubeAPIServerBinary,
 			AcquireTimeout:       DefaultAcquireTimeout,
@@ -120,6 +116,7 @@ func NewManager(opts ...ManagerOption) Manager {
 			CRDCacheTimeout:      DefaultCRDCacheTimeout,
 			InstanceStartTimeout: DefaultInstanceStartTimeout,
 			InstanceStopTimeout:  DefaultInstanceStopTimeout,
+			CleanupTimeout:       DefaultCleanupTimeout,
 		}}
 		for _, opt := range opts {
 			opt(&cfg)

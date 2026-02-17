@@ -20,7 +20,7 @@
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	defer inst.Release(false) // Returns nil on success; safe to ignore in defer
+//	defer inst.Release() // safe to ignore in defer
 //
 //	cfg, err := inst.Config()
 //	if err != nil {
@@ -48,7 +48,7 @@
 //	        if err != nil {
 //	            t.Fatal(err)
 //	        }
-//	        defer inst.Release(false) // Returns nil on success; safe to ignore
+//	        defer inst.Release() // safe to ignore in defer
 //	        // Use unique namespaces for isolation
 //	    })
 //	}

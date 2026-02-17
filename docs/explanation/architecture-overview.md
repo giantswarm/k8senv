@@ -77,11 +77,11 @@ Orchestrates the pool lifecycle. Handles two-phase initialization (construction 
 
 ### Pool
 
-Instance management safe for concurrent use by multiple goroutines, with on-demand creation. `Acquire()` creates a new instance or reuses a previously released one. `Release()` returns the instance for future reuse.
+Instance management safe for concurrent use by multiple goroutines, with on-demand creation. `Acquire()` creates a new instance or reuses a previously released one, returning a token for double-release detection. `Release()` applies the configured `ReleaseStrategy` and returns the instance to the pool.
 
 ### Instance
 
-Manages the lifecycle of a kine + kube-apiserver pair. Supports lazy start (first `Acquire()` triggers startup), port conflict retry, and two release modes (keep running for reuse vs. stop for clean state).
+Manages the lifecycle of a kine + kube-apiserver pair. Supports lazy start (first `Acquire()` triggers startup), port conflict retry, and strategy-based release (restart, namespace cleanup, or no-op).
 
 ### KubeStack
 
@@ -108,10 +108,13 @@ Hash-based caching system that pre-applies CRDs to a SQLite database during `Ini
 
 Scheduler and controller-manager are not run. Pods remain Pending and controllers don't reconcile, but this is ideal for testing CRDs, RBAC, namespaces, ConfigMaps, Secrets, and admission webhooks.
 
-### Release Modes
+### Release Strategies
 
-- `Release(false)` — Fast path. Keeps both processes running for reuse by the next test. Recommended for most tests.
-- `Release(true)` — Stops both processes for a guaranteed clean state. Slower (~1-2s), use only when test isolation requires it.
+Release behavior is configured once at the manager level via `WithReleaseStrategy()`, not per-call:
+
+- **`ReleaseRestart`** (default) — Stops the instance on release. Next `Acquire()` starts a fresh instance with the DB restored from template. Provides full isolation between tests.
+- **`ReleaseClean`** — Deletes non-system namespaces but keeps the instance running. Faster reuse (~100ms vs ~5-15s restart), but shared state in system namespaces persists.
+- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Fastest, but tests must manage their own isolation.
 
 ### Lazy Initialization
 

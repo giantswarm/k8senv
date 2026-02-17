@@ -96,6 +96,46 @@ func TestWithKubeAPIServerBinaryPanicsOnEmpty(t *testing.T) {
 	})
 }
 
+func TestWithReleaseStrategyPanicsOnInvalid(t *testing.T) {
+	t.Parallel()
+	runPanicTests(t, []panicTestCase{
+		{
+			"negative",
+			true,
+			"k8senv: invalid release strategy: ReleaseStrategy(-1)",
+			func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(-1)) },
+		},
+		{
+			"out_of_range",
+			true,
+			"k8senv: invalid release strategy: ReleaseStrategy(99)",
+			func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(99)) },
+		},
+		{"restart", false, "", func() { k8senv.WithReleaseStrategy(k8senv.ReleaseRestart) }},
+		{"clean", false, "", func() { k8senv.WithReleaseStrategy(k8senv.ReleaseClean) }},
+		{"none", false, "", func() { k8senv.WithReleaseStrategy(k8senv.ReleaseNone) }},
+	})
+}
+
+func TestWithCleanupTimeoutPanicsOnInvalid(t *testing.T) {
+	t.Parallel()
+	runPanicTests(t, []panicTestCase{
+		{
+			"zero",
+			true,
+			"k8senv: cleanup timeout must be greater than 0, got 0s",
+			func() { k8senv.WithCleanupTimeout(0) },
+		},
+		{
+			"negative",
+			true,
+			"k8senv: cleanup timeout must be greater than 0, got -1s",
+			func() { k8senv.WithCleanupTimeout(-1 * time.Second) },
+		},
+		{"valid", false, "", func() { k8senv.WithCleanupTimeout(30 * time.Second) }},
+	})
+}
+
 func TestWithEmptyStringOptionsPanic(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{

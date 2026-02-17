@@ -57,25 +57,19 @@ type Instance interface {
 	// Config may return a valid config, ErrInstanceReleased, or a stale config.
 	Config() (*rest.Config, error)
 
-	// Release returns the instance to the pool. If clean is true, the instance
-	// is stopped first; otherwise it remains running for reuse by the next Acquire.
+	// Release returns the instance to the pool. The behavior depends on the
+	// ReleaseStrategy configured on the Manager:
 	//
-	// Before returning the instance to the pool, Release deletes all non-system
-	// namespaces to prevent test state leakage between consumers. This cleanup
-	// is necessary because k8senv runs in API-only mode without a
-	// kube-controller-manager to process namespace finalizers.
+	//   - ReleaseRestart (default): stops the instance. The next Acquire
+	//     starts fresh with the database restored from the cached template.
+	//   - ReleaseClean: deletes all non-system namespaces, keeps running.
+	//   - ReleaseNone: returns immediately with no cleanup.
 	//
-	// Error semantics by mode:
-	//   - Release(false) returns nil on success. Namespace cleanup runs before
-	//     the instance is returned to the pool. If cleanup fails, the instance
-	//     is marked as permanently failed and removed from the pool.
-	//     Using defer inst.Release(false) is safe.
-	//   - Release(true) returns an error if namespace cleanup or stopping fails.
-	//     On error the instance is marked as permanently failed and removed from
-	//     the pool, so the caller does not need to retry or release again. The
-	//     error is informational: no corrective action is required because the
-	//     instance is already removed from circulation.
-	Release(clean bool) error
+	// On success, returns nil. Using defer inst.Release() is safe.
+	// On error (cleanup or stop failure), the instance is marked as
+	// permanently failed and removed from the pool. The error is
+	// informational: no corrective action is required.
+	Release() error
 
 	// ID returns a unique identifier for this instance.
 	ID() string

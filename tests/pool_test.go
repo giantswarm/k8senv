@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -44,7 +45,7 @@ func TestPoolAcquireRelease(t *testing.T) {
 	}
 
 	// Release it back
-	if err = inst.Release(false); err != nil {
+	if err = inst.Release(); err != nil {
 		t.Logf("release error: %v", err)
 	}
 
@@ -53,7 +54,7 @@ func TestPoolAcquireRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to re-acquire after release: %v", err)
 	}
-	if err = inst2.Release(false); err != nil {
+	if err = inst2.Release(); err != nil {
 		t.Logf("release error: %v", err)
 	}
 }
@@ -73,7 +74,7 @@ func TestPoolConcurrentAccess(t *testing.T) {
 				errCh <- fmt.Errorf("failed to acquire: %w", err)
 				return
 			}
-			if relErr := inst.Release(false); relErr != nil {
+			if relErr := inst.Release(); relErr != nil {
 				errCh <- fmt.Errorf("release failed: %w", relErr)
 				return
 			}
@@ -136,7 +137,7 @@ func TestParallelAcquisition(t *testing.T) {
 				t.Fatalf("Failed to acquire instance: %v", err)
 			}
 			defer func() {
-				if err := inst.Release(false); err != nil {
+				if err := inst.Release(); err != nil {
 					t.Logf("release error: %v", err)
 				}
 			}() // Keep instance running for reuse
@@ -168,7 +169,7 @@ func TestParallelAcquisition(t *testing.T) {
 			t.Logf("Test %d: Successfully listed %d namespaces", i, len(namespaces.Items))
 
 			// Create a unique namespace for this test
-			nsName := uniqueNS(fmt.Sprintf("test-%d", i))
+			nsName := testutil.UniqueNS(fmt.Sprintf("test-%d", i))
 			ns := &v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: nsName,

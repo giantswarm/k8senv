@@ -19,7 +19,7 @@ func TestContextCancelDuringAcquire(t *testing.T) {
 		t.Fatalf("First Acquire failed: %v", err)
 	}
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()

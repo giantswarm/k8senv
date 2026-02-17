@@ -8,6 +8,7 @@ import (
 )
 
 func TestManagerConfig_Validate(t *testing.T) {
+	t.Parallel()
 	validConfig := func() ManagerConfig {
 		return ManagerConfig{
 			KineBinary:           "kine",
@@ -16,11 +17,13 @@ func TestManagerConfig_Validate(t *testing.T) {
 			BaseDataDir:          "/tmp/k8senv",
 			InstanceStartTimeout: 5 * time.Minute,
 			InstanceStopTimeout:  10 * time.Second,
+			CleanupTimeout:       30 * time.Second,
 			CRDCacheTimeout:      5 * time.Minute,
 		}
 	}
 
 	t.Run("valid config returns nil", func(t *testing.T) {
+		t.Parallel()
 		cfg := validConfig()
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -59,6 +62,10 @@ func TestManagerConfig_Validate(t *testing.T) {
 			modify:       func(c *ManagerConfig) { c.InstanceStopTimeout = 0 },
 			wantContains: "instance stop timeout",
 		},
+		"zero cleanup timeout": {
+			modify:       func(c *ManagerConfig) { c.CleanupTimeout = 0 },
+			wantContains: "cleanup timeout",
+		},
 		"zero CRD cache timeout": {
 			modify:       func(c *ManagerConfig) { c.CRDCacheTimeout = 0 },
 			wantContains: "CRD cache timeout",
@@ -67,10 +74,15 @@ func TestManagerConfig_Validate(t *testing.T) {
 			modify:       func(c *ManagerConfig) { c.PoolSize = -1 },
 			wantContains: "pool size",
 		},
+		"invalid release strategy": {
+			modify:       func(c *ManagerConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
+			wantContains: "release strategy",
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			cfg := validConfig()
 			tc.modify(&cfg)
 
@@ -85,6 +97,7 @@ func TestManagerConfig_Validate(t *testing.T) {
 	}
 
 	t.Run("multiple errors joined", func(t *testing.T) {
+		t.Parallel()
 		cfg := ManagerConfig{PoolSize: -1} // zero values + negative pool size
 
 		err := cfg.Validate()
@@ -101,6 +114,7 @@ func TestManagerConfig_Validate(t *testing.T) {
 			"base data directory",
 			"instance start timeout",
 			"instance stop timeout",
+			"cleanup timeout",
 			"CRD cache timeout",
 			"pool size",
 		}
@@ -114,10 +128,12 @@ func TestManagerConfig_Validate(t *testing.T) {
 }
 
 func TestInstanceConfig_Validate(t *testing.T) {
+	t.Parallel()
 	validConfig := func() InstanceConfig {
 		return InstanceConfig{
 			StartTimeout:        5 * time.Minute,
 			StopTimeout:         10 * time.Second,
+			CleanupTimeout:      30 * time.Second,
 			MaxStartRetries:     3,
 			KineBinary:          "kine",
 			KubeAPIServerBinary: "kube-apiserver",
@@ -125,6 +141,7 @@ func TestInstanceConfig_Validate(t *testing.T) {
 	}
 
 	t.Run("valid config returns nil", func(t *testing.T) {
+		t.Parallel()
 		cfg := validConfig()
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -147,6 +164,10 @@ func TestInstanceConfig_Validate(t *testing.T) {
 			modify:       func(c *InstanceConfig) { c.StopTimeout = 0 },
 			wantContains: "stop timeout",
 		},
+		"zero cleanup timeout": {
+			modify:       func(c *InstanceConfig) { c.CleanupTimeout = 0 },
+			wantContains: "cleanup timeout",
+		},
 		"zero max start retries": {
 			modify:       func(c *InstanceConfig) { c.MaxStartRetries = 0 },
 			wantContains: "max start retries",
@@ -163,10 +184,15 @@ func TestInstanceConfig_Validate(t *testing.T) {
 			modify:       func(c *InstanceConfig) { c.KubeAPIServerBinary = "" },
 			wantContains: "kube-apiserver binary",
 		},
+		"invalid release strategy": {
+			modify:       func(c *InstanceConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
+			wantContains: "release strategy",
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			cfg := validConfig()
 			tc.modify(&cfg)
 
@@ -181,6 +207,7 @@ func TestInstanceConfig_Validate(t *testing.T) {
 	}
 
 	t.Run("multiple errors joined", func(t *testing.T) {
+		t.Parallel()
 		cfg := InstanceConfig{} // all zero values
 
 		err := cfg.Validate()
@@ -192,6 +219,7 @@ func TestInstanceConfig_Validate(t *testing.T) {
 		expectedParts := []string{
 			"start timeout",
 			"stop timeout",
+			"cleanup timeout",
 			"max start retries",
 			"kine binary",
 			"kube-apiserver binary",
@@ -205,6 +233,7 @@ func TestInstanceConfig_Validate(t *testing.T) {
 	})
 
 	t.Run("optional CachedDBPath", func(t *testing.T) {
+		t.Parallel()
 		// CachedDBPath is optional - empty is valid
 		cfg := validConfig()
 		cfg.CachedDBPath = ""
@@ -226,7 +255,8 @@ func TestInstanceConfig_Validate(t *testing.T) {
 //  1. Add a public WithXxx option function in options.go
 //  2. Update expectedFields below to match the new count
 func TestManagerConfigFieldCount(t *testing.T) {
-	const expectedFields = 10 // Update this when adding new fields to ManagerConfig.
+	t.Parallel()
+	const expectedFields = 12 // Update this when adding new fields to ManagerConfig.
 
 	actual := reflect.TypeFor[ManagerConfig]().NumField()
 	if actual != expectedFields {

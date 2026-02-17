@@ -40,8 +40,18 @@ sequenceDiagram
 
     Note over Test: Create client,<br/>run test logic
 
-    Test->>Instance: Release(false)
-    Instance->>Pool: Return to available set
+    Test->>Instance: Release()
+    Note over Instance: Strategy from config
+
+    alt ReleaseRestart (default)
+        Instance->>Instance: Stop()
+        Instance->>Pool: Return (stopped)
+    else ReleaseClean
+        Instance->>Instance: cleanNamespaces()
+        Instance->>Pool: Return (running)
+    else ReleaseNone
+        Instance->>Pool: Return (as-is)
+    end
 ```
 
 ## Instance Startup Sequence
@@ -53,7 +63,7 @@ Each instance starts two coordinated processes:
 3. **kube-apiserver** starts second — connects to kine as its etcd backend
 4. **HTTP health check** — polls `/livez` endpoint until the API server is alive
 
-If either process fails to start (e.g., port conflict), the instance retries with new ports (3 attempts by default).
+If either process fails to start (e.g., port conflict), the instance retries with new ports (up to 5 attempts by default).
 
 ## CRD Cache Creation
 
@@ -98,21 +108,29 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> Created: NewInstance()
     Created --> Started: First Acquire() triggers Start()
-    Started --> Busy: Acquire()
-    Busy --> Free: Release(false)
+    Started --> Busy: Acquire() — token issued
+    Busy --> Free: Release() — ReleaseToPool (strategy applied)
     Free --> Busy: Acquire()
-    Busy --> Stopped: Release(true)
-    Stopped --> Started: Next Acquire() triggers Start()
+    Busy --> Failed: ReleaseFailed() — error during release
     Started --> Failed: Start error
     Failed --> [*]: Removed from pool
+
+    note right of Busy
+        Strategy determines cleanup:
+        Restart → Stop()
+        Clean → cleanNamespaces()
+        None → no-op
+    end note
 ```
 
 The pool manages instances with a bounded capacity (default: 4):
 
-- **Acquire**: Returns a previously released instance if available, or creates a new one (up to the pool size limit). Blocks if all instances are in use.
-- **Release(false)**: Returns instance to the pool for reuse. Instance stays running.
-- **Release(true)**: Stops instance, then returns it. Next acquire triggers restart.
-- **Failed**: Instance startup failed and is not returned to the pool.
+- **Acquire**: Returns a previously released instance if available, or creates a new one (up to the pool size limit). Blocks if all instances are in use. Returns a token for double-release detection.
+- **Release()**: Behavior depends on the manager's `ReleaseStrategy`:
+  - `ReleaseRestart` (default) — Stops instance. Next acquire starts fresh.
+  - `ReleaseClean` — Deletes non-system namespaces, keeps running.
+  - `ReleaseNone` — No cleanup, returns as-is.
+- **Failed**: Instance release or startup failed; instance is removed from the pool.
 
 ## Related
 

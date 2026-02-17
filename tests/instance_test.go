@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/giantswarm/k8senv"
+	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -25,12 +26,12 @@ func TestBasicUsage(t *testing.T) {
 
 	startTime := time.Now()
 
-	inst, client := acquireWithClient(ctx, t, sharedManager)
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst.Release(true); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
-	}() // Clean shutdown
+	}()
 
 	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -53,22 +54,22 @@ func TestInstanceReuse(t *testing.T) {
 	ctx := context.Background()
 
 	// First acquisition
-	inst1, client := acquireWithClient(ctx, t, sharedManager)
+	inst1, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 
 	_, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list namespaces: %v", err)
 	}
 
-	// Release without cleaning — instance stays running for reuse
-	if err = inst1.Release(false); err != nil {
+	// Release instance — behavior determined by manager's release strategy
+	if err = inst1.Release(); err != nil {
 		t.Logf("release error: %v", err)
 	}
 
 	// Second acquisition — may get same or different instance from pool
-	inst2, client2 := acquireWithClient(ctx, t, sharedManager)
+	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst2.Release(false); err != nil {
+		if err := inst2.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -110,7 +111,7 @@ func TestIDUniqueness(t *testing.T) {
 
 	// Release all
 	for _, inst := range instances {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}
@@ -126,7 +127,7 @@ func TestDoubleReleasePanics(t *testing.T) {
 	}
 
 	// First release should succeed
-	if err = inst.Release(false); err != nil {
+	if err = inst.Release(); err != nil {
 		t.Fatalf("First release should not error: %v", err)
 	}
 
@@ -146,7 +147,7 @@ func TestDoubleReleasePanics(t *testing.T) {
 		}
 	}()
 
-	_ = inst.Release(false) // error return unreachable due to panic
+	_ = inst.Release() // error return unreachable due to panic
 }
 
 // TestAPIServerOnlyMode verifies that instances can run with scheduler and
@@ -155,14 +156,14 @@ func TestAPIServerOnlyMode(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := acquireWithClient(ctx, t, sharedManager)
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst.Release(true); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
 
-	nsName := uniqueNS("test-api-only")
+	nsName := testutil.UniqueNS("test-api-only")
 
 	t.Run("NamespaceOperations", func(t *testing.T) {
 		ns := &v1.Namespace{
@@ -245,7 +246,7 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 		t.Fatalf("Failed to acquire first instance: %v", err)
 	}
 	defer func() {
-		if err := inst1.Release(false); err != nil {
+		if err := inst1.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -257,7 +258,7 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 		t.Fatalf("Failed to acquire second instance (port conflict?): %v", err)
 	}
 	defer func() {
-		if err := inst2.Release(false); err != nil {
+		if err := inst2.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -286,51 +287,5 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 			t.Fatalf("Failed to list namespaces from instance %d: %v", i+1, err)
 		}
 		t.Logf("Instance %d: Listed %d namespaces successfully", i+1, len(nsList.Items))
-	}
-}
-
-// TestReleaseTrueTriggersRestart verifies that Release(true) stops the instance
-// and a subsequent Acquire starts a fresh one. Each cycle acquires an instance,
-// exercises the API, then releases with stop=true, forcing a clean restart.
-func TestReleaseTrueTriggersRestart(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	// Multiple acquire/release(true) cycles to test fresh startups
-	// Each Release(true) stops the instance, so the next Acquire triggers a fresh start
-	for i := range 2 {
-		t.Logf("Cycle %d: Acquiring instance...", i+1)
-		startTime := time.Now()
-
-		inst, err := sharedManager.Acquire(ctx)
-		if err != nil {
-			t.Fatalf("Cycle %d: Acquire failed: %v", i+1, err)
-		}
-
-		t.Logf("Cycle %d: Acquired instance %s in %v", i+1, inst.ID(), time.Since(startTime))
-
-		// Verify the instance works
-		cfg, err := inst.Config()
-		if err != nil {
-			t.Fatalf("Cycle %d: Config failed: %v", i+1, err)
-		}
-
-		client, err := kubernetes.NewForConfig(cfg)
-		if err != nil {
-			t.Fatalf("Cycle %d: Client creation failed: %v", i+1, err)
-		}
-
-		_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-		if err != nil {
-			t.Fatalf("Cycle %d: API call failed: %v", i+1, err)
-		}
-
-		t.Logf("Cycle %d: API operations successful", i+1)
-
-		// Release with clean shutdown - triggers fresh start on next acquire
-		if err := inst.Release(true); err != nil {
-			t.Logf("Cycle %d: release error: %v", i+1, err)
-		}
-		t.Logf("Cycle %d: Released instance with clean shutdown", i+1)
 	}
 }

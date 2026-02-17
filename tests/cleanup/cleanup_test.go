@@ -1,32 +1,20 @@
 //go:build integration
 
-package k8senv_test
+package k8senv_cleanup_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-// systemNamespaces is the set of namespaces created by kube-apiserver that
-// must survive cleanup.
-//
-// KEEP IN SYNC with internal/core/cleanup.go:systemNamespaces.
-// TestSystemNamespacesMatchAPIServer verifies this set at runtime against the
-// namespaces that kube-apiserver actually creates on startup.
-var systemNamespaces = map[string]struct{}{
-	"default":         {},
-	"kube-system":     {},
-	"kube-public":     {},
-	"kube-node-lease": {},
-}
-
-// TestSystemNamespacesMatchAPIServer verifies that the local systemNamespaces
-// set matches exactly the namespaces that kube-apiserver creates on startup.
-// This catches drift between the test-local copy and the authoritative set in
+// TestSystemNamespacesMatchAPIServer verifies that testutil.SystemNamespaces()
+// matches exactly the namespaces that kube-apiserver creates on startup.
+// This catches drift between the shared test set and the authoritative set in
 // internal/core/cleanup.go (which the test package cannot import by design).
 func TestSystemNamespacesMatchAPIServer(t *testing.T) {
 	t.Parallel()
@@ -35,9 +23,9 @@ func TestSystemNamespacesMatchAPIServer(t *testing.T) {
 	// Acquire a fresh instance and list namespaces before creating any user
 	// resources. The only namespaces present should be the ones kube-apiserver
 	// creates automatically on startup.
-	inst, client := acquireWithClient(ctx, t, sharedManager)
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -54,7 +42,8 @@ func TestSystemNamespacesMatchAPIServer(t *testing.T) {
 	}
 
 	// Verify every expected system namespace exists on the API server.
-	for name := range systemNamespaces {
+	sysNS := testutil.SystemNamespaces()
+	for name := range sysNS {
 		if _, ok := actual[name]; !ok {
 			t.Errorf("expected system namespace %q not found on API server", name)
 		}
@@ -64,35 +53,36 @@ func TestSystemNamespacesMatchAPIServer(t *testing.T) {
 	// (If kube-apiserver adds a new default namespace in a future version,
 	// this catches the drift so the local set can be updated.)
 	for name := range actual {
-		if _, ok := systemNamespaces[name]; !ok {
+		if _, ok := sysNS[name]; !ok {
 			t.Errorf(
-				"API server has namespace %q not in local systemNamespaces set — update the set in cleanup_test.go and internal/core/cleanup.go",
+				"API server has namespace %q not in SystemNamespaces set — update testutil.systemNamespaces and internal/core/cleanup.go",
 				name,
 			)
 		}
 	}
 }
 
-// TestReleaseCleanupNamespaces verifies that Release(false) removes all
-// user-created namespaces so the next consumer gets a clean instance.
+// TestReleaseCleanupNamespaces verifies that Release() with ReleaseClean
+// strategy removes all user-created namespaces so the next consumer gets
+// a clean instance.
 func TestReleaseCleanupNamespaces(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	// Acquire an instance and create user namespaces.
-	inst, client := acquireWithClient(ctx, t, sharedManager)
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	instID := inst.ID()
 	released := false
 	defer func() {
 		if !released {
-			inst.Release(false) //nolint:errcheck,gosec // safety net on test failure
+			inst.Release() //nolint:errcheck,gosec // safety net on test failure
 		}
 	}()
 
 	userNS := []string{
-		uniqueNS("cleanup-a"),
-		uniqueNS("cleanup-b"),
-		uniqueNS("cleanup-c"),
+		testutil.UniqueNS("cleanup-a"),
+		testutil.UniqueNS("cleanup-b"),
+		testutil.UniqueNS("cleanup-c"),
 	}
 	for _, name := range userNS {
 		createNamespace(ctx, t, client, name)
@@ -103,23 +93,23 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list namespaces: %v", err)
 	}
-	if len(nsList.Items) < len(userNS)+len(systemNamespaces) {
+	if len(nsList.Items) < len(userNS)+len(testutil.SystemNamespaces()) {
 		t.Fatalf("expected at least %d namespaces before release, got %d",
-			len(userNS)+len(systemNamespaces), len(nsList.Items))
+			len(userNS)+len(testutil.SystemNamespaces()), len(nsList.Items))
 	}
 
-	// Release without stopping — cleanup runs, instance returns to pool.
-	if err := inst.Release(false); err != nil {
-		t.Fatalf("Release(false) should succeed: %v", err)
+	// Release — cleanup runs (ReleaseClean strategy), instance returns to pool.
+	if err := inst.Release(); err != nil {
+		t.Fatalf("Release() should succeed: %v", err)
 	}
 	released = true
 
 	// Re-acquire. The pool is LIFO, so we expect the same instance back
 	// (no other test should be using this specific instance since we just
 	// released it and immediately re-acquire).
-	inst2, client2 := acquireWithClient(ctx, t, sharedManager)
+	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst2.Release(false); err != nil {
+		if err := inst2.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -138,8 +128,9 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 		t.Fatalf("list namespaces after re-acquire: %v", err)
 	}
 
+	sysNS2 := testutil.SystemNamespaces()
 	for _, ns := range nsList2.Items {
-		if _, ok := systemNamespaces[ns.Name]; !ok {
+		if _, ok := sysNS2[ns.Name]; !ok {
 			t.Errorf("unexpected user namespace %q found after cleanup", ns.Name)
 		}
 	}
@@ -152,17 +143,17 @@ func TestReleasePreservesSystemNamespaces(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a user namespace so cleanup actually runs (not just the fast path).
-	inst, client := acquireWithClient(ctx, t, sharedManager)
-	createNamespace(ctx, t, client, uniqueNS("preserve-test"))
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	createNamespace(ctx, t, client, testutil.UniqueNS("preserve-test"))
 
-	if err := inst.Release(false); err != nil {
-		t.Fatalf("Release(false) failed: %v", err)
+	if err := inst.Release(); err != nil {
+		t.Fatalf("Release() failed: %v", err)
 	}
 
 	// Re-acquire and verify system namespaces exist.
-	inst2, client2 := acquireWithClient(ctx, t, sharedManager)
+	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst2.Release(false); err != nil {
+		if err := inst2.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -177,15 +168,15 @@ func TestReleasePreservesSystemNamespaces(t *testing.T) {
 		found[ns.Name] = true
 	}
 
-	for name := range systemNamespaces {
+	for name := range testutil.SystemNamespaces() {
 		if !found[name] {
 			t.Errorf("system namespace %q missing after cleanup", name)
 		}
 	}
 }
 
-// TestReleaseCleanupWithNoUserNamespaces verifies that Release(false) succeeds
-// quickly when no user namespaces exist (fast path).
+// TestReleaseCleanupWithNoUserNamespaces verifies that Release() with
+// ReleaseClean succeeds quickly when no user namespaces exist (fast path).
 func TestReleaseCleanupWithNoUserNamespaces(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -196,8 +187,8 @@ func TestReleaseCleanupWithNoUserNamespaces(t *testing.T) {
 	}
 
 	// Release immediately without creating any namespaces.
-	if err := inst.Release(false); err != nil {
-		t.Fatalf("Release(false) with no user namespaces should succeed: %v", err)
+	if err := inst.Release(); err != nil {
+		t.Fatalf("Release() with no user namespaces should succeed: %v", err)
 	}
 }
 

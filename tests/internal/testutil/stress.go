@@ -1,6 +1,6 @@
 //go:build integration
 
-package k8senv_test
+package testutil
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -17,67 +18,45 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-var stressSubtests = 100 // override with K8SENV_STRESS_SUBTESTS env var
-
-func init() {
-	if v := os.Getenv("K8SENV_STRESS_SUBTESTS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			panic(fmt.Sprintf("invalid K8SENV_STRESS_SUBTESTS=%q: must be a positive integer", v))
-		}
-
-		stressSubtests = n
-	}
-}
-
 const (
-	stressMaxNS    = 3
-	stressMaxRes   = 5
-	stressResTypes = 5
+	// StressMaxNS is the maximum number of namespaces created per stress subtest.
+	StressMaxNS = 3
+
+	// StressMaxRes is the maximum number of resources created per namespace.
+	StressMaxRes = 5
+
+	// StressResTypes is the number of distinct resource types that can be created.
+	StressResTypes = 5
+
+	// defaultStressSubtests is the default number of stress subtests to run.
+	defaultStressSubtests = 100
 )
 
-// TestStress spawns 1000 parallel subtests that each acquire an instance,
-// create random namespaces and resources, verify them, and release.
-func TestStress(t *testing.T) {
-	t.Parallel()
+var (
+	stressSubtestsOnce  sync.Once
+	stressSubtestsCount int
+)
 
-	for i := range stressSubtests {
-		t.Run(fmt.Sprintf("worker-%d", i), func(t *testing.T) {
-			t.Parallel()
-			ctx := context.Background()
-
-			rng := rand.New(rand.NewPCG(uint64(i), 0)) //nolint:gosec // deterministic PRNG for reproducibility
-
-			inst, client := acquireWithClient(ctx, t, sharedManager)
-			defer inst.Release( //nolint:errcheck // safe to ignore in defer; on failure instance is removed from pool
-				false,
-			)
-
-			stressVerifyCleanInstance(ctx, t, client)
-
-			nsCount := rng.IntN(stressMaxNS) + 1
-			namespaces := make([]string, 0, nsCount)
-
-			for n := range nsCount {
-				nsName := uniqueNS("stress")
-				stressCreateNamespace(ctx, t, client, nsName)
-				namespaces = append(namespaces, nsName)
-
-				resCount := rng.IntN(stressMaxRes) + 1
-				for r := range resCount {
-					idx := n*stressMaxRes + r
-					stressCreateRandomResource(ctx, t, client, nsName, idx, rng)
-				}
+// StressSubtestCount returns the number of stress subtests to run, reading
+// K8SENV_STRESS_SUBTESTS on first call. Panics if the env var is set but invalid.
+func StressSubtestCount() int {
+	stressSubtestsOnce.Do(func() {
+		stressSubtestsCount = defaultStressSubtests
+		if v := os.Getenv("K8SENV_STRESS_SUBTESTS"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n <= 0 {
+				panic(fmt.Sprintf("invalid K8SENV_STRESS_SUBTESTS=%q: must be a positive integer", v))
 			}
 
-			for _, ns := range namespaces {
-				stressDeleteNamespace(ctx, t, client, ns)
-			}
-		})
-	}
+			stressSubtestsCount = n
+		}
+	})
+
+	return stressSubtestsCount
 }
 
-func stressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
+// StressCreateNamespace creates a namespace and fails the test on error.
+func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
 	t.Helper()
 
 	ns := &v1.Namespace{
@@ -94,7 +73,8 @@ func stressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.
 	}
 }
 
-func stressDeleteNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
+// StressDeleteNamespace deletes a namespace, logging a warning on error.
+func StressDeleteNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
 	t.Helper()
 
 	if err := client.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
@@ -102,7 +82,8 @@ func stressDeleteNamespace(ctx context.Context, t *testing.T, client kubernetes.
 	}
 }
 
-func stressCreateRandomResource(
+// StressCreateRandomResource creates a random Kubernetes resource in the given namespace.
+func StressCreateRandomResource(
 	ctx context.Context,
 	t *testing.T,
 	client kubernetes.Interface,
@@ -112,21 +93,24 @@ func stressCreateRandomResource(
 ) {
 	t.Helper()
 
-	switch rng.IntN(stressResTypes) {
+	switch rng.IntN(StressResTypes) {
 	case 0:
-		stressCreateConfigMap(ctx, t, client, ns, idx)
+		StressCreateConfigMap(ctx, t, client, ns, idx)
 	case 1:
-		stressCreateSecret(ctx, t, client, ns, idx)
+		StressCreateSecret(ctx, t, client, ns, idx)
 	case 2:
-		stressCreateService(ctx, t, client, ns, idx)
+		StressCreateService(ctx, t, client, ns, idx)
 	case 3:
-		stressCreatePod(ctx, t, client, ns, idx)
+		StressCreatePod(ctx, t, client, ns, idx)
 	case 4:
-		stressCreateServiceAccount(ctx, t, client, ns, idx)
+		StressCreateServiceAccount(ctx, t, client, ns, idx)
 	}
 }
 
-func stressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+// StressCreateConfigMap creates a ConfigMap with retry on NotFound.
+//
+//nolint:dupl // Each resource-creation helper builds a distinct Kubernetes object; structural similarity is inherent.
+func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
 	name := fmt.Sprintf("stress-cm-%d", idx)
@@ -138,7 +122,7 @@ func stressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.
 	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
 		created, createErr := client.CoreV1().ConfigMaps(ns).Create(ctx, cm, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for IsNotFound check
+			return createErr
 		}
 		if created.Name != name {
 			t.Fatalf("ConfigMap name mismatch: want %s, got %s", name, created.Name)
@@ -150,7 +134,10 @@ func stressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.
 	}
 }
 
-func stressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+// StressCreateSecret creates a Secret with retry on NotFound.
+//
+//nolint:dupl // Each resource-creation helper builds a distinct Kubernetes object; structural similarity is inherent.
+func StressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
 	name := fmt.Sprintf("stress-secret-%d", idx)
@@ -162,7 +149,7 @@ func stressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Int
 	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
 		created, createErr := client.CoreV1().Secrets(ns).Create(ctx, secret, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for IsNotFound check
+			return createErr
 		}
 		if created.Name != name {
 			t.Fatalf("Secret name mismatch: want %s, got %s", name, created.Name)
@@ -174,7 +161,8 @@ func stressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Int
 	}
 }
 
-func stressCreateService(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+// StressCreateService creates a headless Service with retry on NotFound.
+func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
 	name := fmt.Sprintf("stress-svc-%d", idx)
@@ -183,7 +171,7 @@ func stressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 		Spec: v1.ServiceSpec{
 			Ports: []v1.ServicePort{
 				{
-					Port:     int32(8080 + idx%1000), //nolint:gosec // idx is bounded by stressMaxNS*stressMaxRes (15)
+					Port:     int32(8080 + idx%1000), //nolint:gosec // idx is bounded by StressMaxNS*StressMaxRes (15)
 					Protocol: v1.ProtocolTCP,
 				},
 			},
@@ -194,7 +182,7 @@ func stressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
 		created, createErr := client.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for IsNotFound check
+			return createErr
 		}
 		if created.Name != name {
 			t.Fatalf("Service name mismatch: want %s, got %s", name, created.Name)
@@ -206,7 +194,8 @@ func stressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 	}
 }
 
-func stressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+// StressCreatePod creates a Pod with retry on NotFound.
+func StressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
 	name := fmt.Sprintf("stress-pod-%d", idx)
@@ -225,7 +214,7 @@ func stressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interf
 	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
 		created, createErr := client.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for IsNotFound check
+			return createErr
 		}
 		if created.Name != name {
 			t.Fatalf("Pod name mismatch: want %s, got %s", name, created.Name)
@@ -237,7 +226,8 @@ func stressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interf
 	}
 }
 
-func stressCreateServiceAccount(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+// StressCreateServiceAccount creates a ServiceAccount with retry on NotFound.
+func StressCreateServiceAccount(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
 	name := fmt.Sprintf("stress-sa-%d", idx)
@@ -248,7 +238,7 @@ func stressCreateServiceAccount(ctx context.Context, t *testing.T, client kubern
 	err := retry.OnError(retry.DefaultBackoff, errors.IsNotFound, func() error {
 		created, createErr := client.CoreV1().ServiceAccounts(ns).Create(ctx, sa, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for IsNotFound check
+			return createErr
 		}
 		if created.Name != name {
 			t.Fatalf("ServiceAccount name mismatch: want %s, got %s", name, created.Name)
@@ -257,21 +247,5 @@ func stressCreateServiceAccount(ctx context.Context, t *testing.T, client kubern
 	})
 	if err != nil {
 		t.Fatalf("Failed to create ServiceAccount %s/%s: %v", ns, name, err)
-	}
-}
-
-func stressVerifyCleanInstance(ctx context.Context, t *testing.T, client kubernetes.Interface) {
-	t.Helper()
-
-	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		t.Fatalf("Failed to list namespaces: %v", err)
-	}
-
-	for idx := range nsList.Items {
-		ns := nsList.Items[idx]
-		if _, ok := systemNamespaces[ns.Name]; !ok {
-			t.Fatalf("Instance not clean: found unexpected namespace %q", ns.Name)
-		}
 	}
 }

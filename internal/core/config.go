@@ -6,13 +6,67 @@ import (
 	"time"
 )
 
+// ReleaseStrategy controls what happens when an Instance is released back to the pool.
+type ReleaseStrategy int
+
+const (
+	// ReleaseRestart stops the instance without performing any API-level
+	// cleanup. The next Acquire starts a fresh instance — kine's Start()
+	// copies the SQLite database from the cached template, restoring the
+	// database to its pre-test state. This is the safest and simplest
+	// strategy: no cleanup code to get wrong, full isolation via DB restore.
+	// This is the default strategy.
+	ReleaseRestart ReleaseStrategy = iota
+
+	// ReleaseClean cleans all non-system namespaces and their resources
+	// but keeps the instance running. The next Acquire reuses the same
+	// running instance. Faster than ReleaseRestart (no stop/start cycle)
+	// but relies on cleanup correctness for isolation.
+	ReleaseClean
+
+	// ReleaseNone performs no cleanup. The instance is returned to the pool
+	// as-is with all namespaces and resources intact. Use this only when
+	// tests use unique namespaces and never share state, or when cleanup
+	// overhead is unacceptable.
+	//
+	// WARNING: Previous test state persists. The next consumer of this
+	// instance will see all namespaces and resources from prior tests.
+	// Use unique namespaces (e.g., with test name or UUID prefix) to
+	// ensure isolation.
+	ReleaseNone
+)
+
+// IsValid reports whether s is a recognized ReleaseStrategy value.
+func (s ReleaseStrategy) IsValid() bool {
+	switch s {
+	case ReleaseRestart, ReleaseClean, ReleaseNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the strategy.
+func (s ReleaseStrategy) String() string {
+	switch s {
+	case ReleaseRestart:
+		return "ReleaseRestart"
+	case ReleaseClean:
+		return "ReleaseClean"
+	case ReleaseNone:
+		return "ReleaseNone"
+	default:
+		return fmt.Sprintf("ReleaseStrategy(%d)", int(s))
+	}
+}
+
 // ManagerConfig holds configuration for Manager instances.
 //
 // Concurrency contract: all fields are immutable after construction via
 // NewManagerWithConfig. Instance goroutines read KineBinary and
 // KubeAPIServerBinary without synchronization, relying on this guarantee.
-// The CRD cache path (formerly mutated via DefaultDBPath) is now stored
-// as separate runtime state in Manager.cachedDBPath.
+// The CRD cache path is stored as separate runtime state in
+// Manager.cachedDBPath to preserve this immutability contract.
 type ManagerConfig struct {
 	KineBinary          string
 	KubeAPIServerBinary string
@@ -26,6 +80,10 @@ type ManagerConfig struct {
 	// are in use. 0 means unlimited (instances created on demand).
 	// Default: 4.
 	PoolSize int
+
+	// ReleaseStrategy controls what happens when an Instance is released
+	// back to the pool. Default: ReleaseRestart.
+	ReleaseStrategy ReleaseStrategy
 
 	// CRDCacheTimeout is the overall timeout for CRD cache creation, including
 	// spinning up a temporary kine + kube-apiserver, applying CRDs, and copying
@@ -46,6 +104,13 @@ type ManagerConfig struct {
 	// first, then kine), the worst-case total stop duration for one instance
 	// is 2*InstanceStopTimeout. Default: 10 seconds.
 	InstanceStopTimeout time.Duration
+
+	// CleanupTimeout is the maximum time for namespace cleanup during
+	// release. This timeout covers API calls to list and delete non-system
+	// namespaces. Although only exercised when ReleaseStrategy is
+	// ReleaseClean, a positive value is always required by Validate
+	// because validation does not vary by strategy. Default: 30 seconds.
+	CleanupTimeout time.Duration
 }
 
 // Validate checks all ManagerConfig invariants and returns an error describing
@@ -77,11 +142,17 @@ func (c ManagerConfig) Validate() error {
 	if c.InstanceStopTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("instance stop timeout must be greater than 0, got %s", c.InstanceStopTimeout))
 	}
+	if c.CleanupTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("cleanup timeout must be greater than 0, got %s", c.CleanupTimeout))
+	}
 	if c.CRDCacheTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("CRD cache timeout must be greater than 0, got %s", c.CRDCacheTimeout))
 	}
 	if c.PoolSize < 0 {
 		errs = append(errs, fmt.Errorf("pool size must not be negative, got %d", c.PoolSize))
+	}
+	if !c.ReleaseStrategy.IsValid() {
+		errs = append(errs, fmt.Errorf("invalid release strategy: %v", c.ReleaseStrategy))
 	}
 
 	return errors.Join(errs...)
@@ -97,6 +168,10 @@ type InstanceConfig struct {
 	// independently to each of kube-apiserver and kine. The worst-case
 	// total stop duration is therefore 2*StopTimeout.
 	StopTimeout time.Duration
+	// CleanupTimeout is the maximum time for namespace cleanup during
+	// release. Although only exercised when ReleaseStrategy is
+	// ReleaseClean, a positive value is always required by Validate.
+	CleanupTimeout time.Duration
 	// MaxStartRetries is the number of startup attempts before giving up.
 	MaxStartRetries int
 	// CachedDBPath is the path to a pre-populated SQLite database to copy
@@ -105,6 +180,7 @@ type InstanceConfig struct {
 	CachedDBPath        string
 	KineBinary          string
 	KubeAPIServerBinary string
+	ReleaseStrategy     ReleaseStrategy
 }
 
 // Validate checks all InstanceConfig invariants and returns an error describing
@@ -123,6 +199,9 @@ func (c InstanceConfig) Validate() error {
 	if c.StopTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("stop timeout must be greater than 0, got %s", c.StopTimeout))
 	}
+	if c.CleanupTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("cleanup timeout must be greater than 0, got %s", c.CleanupTimeout))
+	}
 	if c.MaxStartRetries <= 0 {
 		errs = append(errs, fmt.Errorf("max start retries must be greater than 0, got %d", c.MaxStartRetries))
 	}
@@ -131,6 +210,9 @@ func (c InstanceConfig) Validate() error {
 	}
 	if c.KubeAPIServerBinary == "" {
 		errs = append(errs, errors.New("kube-apiserver binary path must not be empty"))
+	}
+	if !c.ReleaseStrategy.IsValid() {
+		errs = append(errs, fmt.Errorf("invalid release strategy: %v", c.ReleaseStrategy))
 	}
 
 	return errors.Join(errs...)

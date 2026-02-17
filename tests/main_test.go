@@ -21,7 +21,7 @@ var sharedManager k8senv.Manager
 // TestMain configures logging, creates the shared singleton manager, and runs
 // all tests. Tests use sharedManager.Acquire() to get individual instances.
 func TestMain(m *testing.M) {
-	// Parse flags early so testParallel() reads the actual -test.parallel value
+	// Parse flags early so testutil.TestParallel() reads the actual -test.parallel value
 	// from the command line instead of the default (GOMAXPROCS). m.Run() skips
 	// re-parsing when flag.Parsed() is already true.
 	flag.Parse()
@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 	mgr := k8senv.NewManager(
 		k8senv.WithBaseDataDir(tmpDir),
 		k8senv.WithAcquireTimeout(5*time.Minute),
-		k8senv.WithPoolSize(testParallel()),
+		k8senv.WithPoolSize(testutil.TestParallel()),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
     Root["k8senv/"] --> Public["Public API\n(root package)"]
-    Root --> Tests["tests/\n+ crd/\n+ poolsize/"]
+    Root --> Tests["tests/\n+ cleanup/ + restart/\n+ stress/ + stressclean/\n+ crd/ + poolsize/"]
     Root --> Internal["internal/"]
     Root --> Docs["docs/"]
     Root --> CRDs["crds/"]
@@ -14,6 +14,8 @@ flowchart TD
     Public --> ifaces["interfaces.go"]
     Public --> factory["k8senv.go"]
     Public --> opts["options.go"]
+    Public --> strat["strategy.go"]
+    Public --> defs["defaults.go"]
     Public --> errs["errors.go"]
     Public --> cfg["config.go"]
     Public --> log["log.go"]
@@ -38,7 +40,9 @@ flowchart TD
 | `doc.go` | Package documentation with usage examples |
 | `interfaces.go` | `Manager` and `Instance` interfaces |
 | `k8senv.go` | `NewManager()` factory function, adapter wrappers |
-| `options.go` | Functional options: `WithCRDDir`, `WithAcquireTimeout`, etc. |
+| `options.go` | Functional options: `WithReleaseStrategy`, `WithCRDDir`, `WithAcquireTimeout`, etc. |
+| `strategy.go` | `ReleaseStrategy` type alias + constants (`ReleaseRestart`, `ReleaseClean`, `ReleaseNone`) |
+| `defaults.go` | Exported default constants (timeouts, binary names, strategy) |
 | `errors.go` | Sentinel error re-exports from internal/core |
 | `config.go` | Unexported `managerConfig` struct + conversion to `core.ManagerConfig` |
 | `log.go` | `SetLogger()` public logging API |
@@ -47,11 +51,12 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `manager.go` | Manager implementation: pool lifecycle, two-phase init, CRD cache setup |
-| `pool.go` | Bounded instance pool (default 4), instance tracking |
-| `instance.go` | Instance lifecycle: start, stop, release, port conflict retry |
-| `config.go` | `ManagerConfig` and `InstanceConfig` structs |
-| `log.go` | Package-level slog logger |
+| `manager.go` | Manager implementation: pool lifecycle, two-phase init, Acquire returns token |
+| `pool.go` | Bounded instance pool (default 4), token-based double-release detection |
+| `instance.go` | Instance lifecycle: strategy-based Release(), start, stop, port conflict retry |
+| `cleanup.go` | Namespace cleanup: parallel deletion, finalizer removal |
+| `config.go` | `ManagerConfig`, `InstanceConfig`, `ReleaseStrategy` type with `Validate()` |
+| `log.go` | Package-level slog logger with atomic pointers |
 
 ### internal/kubestack/ — Process Stack
 
@@ -94,7 +99,7 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `port.go` | `GetFreePort()`, `GetTwoFreePorts()` for dynamic port allocation |
+| `port.go` | `PortRegistry`: `AllocatePortPair()`, reserve/release tracking |
 
 ### internal/fileutil/ — File Utilities
 
@@ -109,34 +114,66 @@ flowchart TD
 |------|---------|
 | `sentinel.go` | `const`-compatible error type for sentinel errors |
 
-### tests/ — Integration Tests (package `k8senv_test`)
+### tests/ — Core Integration Tests (package `k8senv_test`)
 
 | File | Purpose |
 |------|---------|
-| `main_test.go` | `TestMain` with shared singleton manager setup |
-| `lifecycle_test.go` | Initialize idempotency and concurrency tests |
+| `main_test.go` | `TestMain`: singleton manager, binary validation, signal handling |
+| `instance_test.go` | Instance usage, reuse, ID uniqueness, double-release, API server mode |
 | `pool_test.go` | Pool acquire/release semantics and concurrent access |
-| `instance_test.go` | Instance usage, reuse, ID uniqueness, port retry, API server mode |
-| `cleanup_test.go` | Namespace cleanup on release, system namespace preservation |
-| `options_test.go` | Option validation (panics on invalid input) |
-| `coverage_test.go` | Coverage expansion: logger, context cancel, usable instance |
-| `stress_test.go` | High-concurrency stress test |
-| `helpers_test.go` | Shared test helper functions |
+| `lifecycle_test.go` | Initialize idempotency and concurrency tests |
+| `coverage_test.go` | Context cancel coverage |
 
-### tests/poolsize/ — Pool Size Tests (package `k8senv_poolsize_test`)
+### tests/cleanup/ — Namespace Cleanup Tests (package `k8senv_cleanup_test`)
 
 | File | Purpose |
 |------|---------|
-| `main_test.go` | `TestMain` with custom pool size singleton |
-| `poolsize_test.go` | Pool timeout, release unblocking, bounded instance reuse |
+| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleaseClean)` |
+| `cleanup_test.go` | System NS match, cleanup, preserve, no-user-NS fast path |
+
+### tests/restart/ — Restart Strategy Tests (package `k8senv_restart_test`)
+
+| File | Purpose |
+|------|---------|
+| `main_test.go` | `TestMain`: singleton with default `ReleaseRestart` strategy |
+| `restart_test.go` | Release stops instance, next Acquire starts fresh |
+
+### tests/stress/ — Stress Tests (package `k8senv_stress_test`)
+
+| File | Purpose |
+|------|---------|
+| `main_test.go` | `TestMain`: singleton with default strategy |
+| `stress_test.go` | 100+ parallel subtests with random resource creation |
+
+### tests/stressclean/ — Stress Tests with ReleaseClean (package `k8senv_stressclean_test`)
+
+| File | Purpose |
+|------|---------|
+| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleaseClean)` |
+| `stress_test.go` | Stress + verify clean instances on acquire |
 
 ### tests/crd/ — CRD Tests (package `k8senv_crd_test`)
 
 | File | Purpose |
 |------|---------|
-| `main_test.go` | `TestMain` with CRD-enabled singleton |
+| `main_test.go` | `TestMain`: singleton with `WithCRDDir` |
 | `crd_test.go` | CRD caching, multi-CRD, multi-doc YAML, .yml extension |
-| `helpers_test.go` | CRD test helper functions |
+| `helpers_test.go` | CRD-specific helpers + `verifyCRDExists` |
+| `testdata_test.go` | CRD YAML constants and `setupSharedCRDDir()` |
+
+### tests/poolsize/ — Pool Size Tests (package `k8senv_poolsize_test`)
+
+| File | Purpose |
+|------|---------|
+| `main_test.go` | `TestMain`: singleton with `WithPoolSize(2)` |
+| `poolsize_test.go` | Pool timeout, release unblocking, bounded instance reuse |
+
+### tests/internal/testutil/ — Shared Test Helpers
+
+| File | Purpose |
+|------|---------|
+| `testutil.go` | `UniqueNS`, `AcquireWithClient`, `RunTestMain`, `SetupTestLogging` |
+| `stress.go` | Stress test helpers: `StressCreateRandomResource`, `StressSubtestCount` |
 
 ### Runtime Data Directory
 

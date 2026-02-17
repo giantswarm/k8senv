@@ -28,7 +28,7 @@ func TestInitializeIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Acquire after double Initialize failed: %v", err)
 	}
-	if err = inst.Release(false); err != nil {
+	if err = inst.Release(); err != nil {
 		t.Logf("release error: %v", err)
 	}
 }
@@ -58,7 +58,7 @@ func TestInitializeConcurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Acquire failed: %v", err)
 	}
-	if err = inst.Release(false); err != nil {
+	if err = inst.Release(); err != nil {
 		t.Logf("release error: %v", err)
 	}
 }

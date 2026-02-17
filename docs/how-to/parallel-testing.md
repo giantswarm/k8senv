@@ -8,7 +8,7 @@ The pool uses a bounded design (default: 4 instances):
 
 1. **Bounded capacity**: Up to `DefaultPoolSize` (4) instances are created; `Acquire()` blocks when all are in use. Use `WithPoolSize(0)` for unlimited.
 2. **Lazy start**: Instances start kube-apiserver only when first acquired
-3. **Instance reuse**: `Release(false)` returns instances for reuse by subsequent `Acquire()` calls
+3. **Instance reuse**: `Release()` returns instances for reuse by subsequent `Acquire()` calls (behavior depends on `ReleaseStrategy`)
 
 Parallel tests share instances from the pool. When all instances are in use, `Acquire` blocks until one is released. Released instances are reused to minimize startup overhead.
 
@@ -51,7 +51,7 @@ func TestParallel(t *testing.T) {
             if err != nil {
                 t.Fatalf("Acquire failed: %v", err)
             }
-            defer inst.Release(false)
+            defer inst.Release()
 
             cfg, err := inst.Config()
             if err != nil {
@@ -95,7 +95,7 @@ func TestWithNamespaceIsolation(t *testing.T) {
             if err != nil {
                 t.Fatal(err)
             }
-            defer inst.Release(false)
+            defer inst.Release()
 
             cfg, err := inst.Config()
             if err != nil {
@@ -192,7 +192,7 @@ func TestFeatureA(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    defer inst.Release(false)
+    defer inst.Release()
 
     // Test logic...
 }
@@ -204,7 +204,7 @@ func TestFeatureB(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    defer inst.Release(false)
+    defer inst.Release()
 
     // Test logic...
 }
@@ -253,7 +253,7 @@ Each instance consumes:
 - 2 file descriptors for processes
 - ~10-20MB disk for SQLite database
 
-With the default pool size of 4, at most 4 instances run concurrently. Use `Release(false)` to allow instance reuse, keeping resource usage efficient. Adjust `WithPoolSize()` to match your resource budget.
+With the default pool size of 4, at most 4 instances run concurrently. The default `ReleaseRestart` strategy stops instances on release; use `WithReleaseStrategy(k8senv.ReleaseClean)` to keep instances running and reuse them with namespace cleanup. Adjust `WithPoolSize()` to match your resource budget.
 
 ## Complete Example: 10 Parallel Tests
 
@@ -300,7 +300,7 @@ func TestTenParallel(t *testing.T) {
             if err != nil {
                 t.Fatal(err)
             }
-            defer inst.Release(false)
+            defer inst.Release()
 
             // Record instance usage
             mu.Lock()

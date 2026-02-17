@@ -6,150 +6,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	v1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// =============================================================================
-// CRD YAML constants — each file in the shared CRD dir uses a unique CRD name
-// to avoid "already exists" conflicts when applied by a single manager.
-// =============================================================================
-
-// sampleCRDWidget is the Widget CRD (widgets.example.com), loaded from widget-crd.yaml.
-const sampleCRDWidget = `apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: widgets.example.com
-spec:
-  group: example.com
-  names:
-    kind: Widget
-    listKind: WidgetList
-    plural: widgets
-    singular: widget
-  scope: Namespaced
-  versions:
-  - name: v1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-        properties:
-          spec:
-            type: object
-            properties:
-              size:
-                type: string
-`
-
-// sampleCRDGadget is the Gadget CRD (gadgets.example.com), loaded from gadget-crd.yaml.
-const sampleCRDGadget = `apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: gadgets.example.com
-spec:
-  group: example.com
-  names:
-    kind: Gadget
-    listKind: GadgetList
-    plural: gadgets
-    singular: gadget
-  scope: Namespaced
-  versions:
-  - name: v1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-`
-
-// sampleCRDGizmo is the Gizmo CRD (gizmos.example.com), loaded from gizmo-crd.yaml.
-const sampleCRDGizmo = `apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: gizmos.example.com
-spec:
-  group: example.com
-  names:
-    kind: Gizmo
-    listKind: GizmoList
-    plural: gizmos
-    singular: gizmo
-  scope: Cluster
-  versions:
-  - name: v1alpha1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-`
-
-// sampleCRDThingamajig is the Thingamajig CRD (thingamajigs.example.com),
-// used in multi-document YAML (multi.yaml) alongside a ConfigMap.
-const sampleCRDThingamajig = `apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: thingamajigs.example.com
-spec:
-  group: example.com
-  names:
-    kind: Thingamajig
-    listKind: ThingamajigList
-    plural: thingamajigs
-    singular: thingamajig
-  scope: Namespaced
-  versions:
-  - name: v1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-`
-
-// sampleConfigMap is a ConfigMap for the multi-document YAML test.
-const sampleConfigMap = `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: test-config
-data:
-  key: value
-`
-
-// sampleMultiDoc is a multi-document YAML with a unique CRD + ConfigMap.
-var sampleMultiDoc = sampleCRDThingamajig + "---\n" + sampleConfigMap
-
-// sampleCRDSprocket is the Sprocket CRD (sprockets.example.com),
-// loaded from sprocket-crd.yml to exercise .yml extension matching.
-const sampleCRDSprocket = `apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: sprockets.example.com
-spec:
-  group: example.com
-  names:
-    kind: Sprocket
-    listKind: SprocketList
-    plural: sprockets
-    singular: sprocket
-  scope: Namespaced
-  versions:
-  - name: v1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-`
-
-// =============================================================================
-// CRD Tests
-// =============================================================================
 
 // TestCRDDirCaching verifies that CRDs from a directory are applied and cached.
 func TestCRDDirCaching(t *testing.T) {
@@ -161,7 +23,7 @@ func TestCRDDirCaching(t *testing.T) {
 		t.Fatalf("Failed to acquire instance: %v", err)
 	}
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -179,7 +41,7 @@ func TestCRDDirWithMultipleCRDs(t *testing.T) {
 		t.Fatalf("Failed to acquire instance: %v", err)
 	}
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -193,15 +55,15 @@ func TestCRDDirWithCRAndInstance(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := acquireWithClient(ctx, t, sharedManager)
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
 
 	// Create a test namespace
-	nsName := uniqueNS("test-widgets")
+	nsName := testutil.UniqueNS("test-widgets")
 	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
 	if _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create namespace: %v", err)
@@ -243,9 +105,9 @@ func TestCRDDirWithMultiDocumentYAML(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := acquireWithClient(ctx, t, sharedManager)
+	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
@@ -275,7 +137,7 @@ func TestCRDDirWithYmlExtension(t *testing.T) {
 		t.Fatalf("Acquire failed: %v", err)
 	}
 	defer func() {
-		if err := inst.Release(false); err != nil {
+		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()

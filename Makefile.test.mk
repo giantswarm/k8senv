@@ -9,6 +9,12 @@ PARALLEL        ?= 8
 STRESS_SUBTESTS ?=
 FLAKY_LOG       ?= find-flaky.log
 
+# Common test flags shared by both phases.
+_TEST_FLAGS = -tags=integration -parallel=$(PARALLEL) $(if $(RACE),-race) $(if $(NOCACHE),-count=1) -v $(if $(TEST),-run $(TEST)) -timeout=7m
+
+# Stress test packages (run sequentially after non-stress packages).
+_STRESS_PKGS = ./tests/stress ./tests/stressclean
+
 ##@ Testing
 
 .PHONY: test-unit
@@ -18,7 +24,11 @@ test-unit: ## Run unit tests (options: RACE=1, NOCACHE=1, TEST=pattern, LOG_LEVE
 .PHONY: test-integration
 test-integration: ## Run integration tests (options: RACE=1, NOCACHE=1, TEST=pattern, LOG_LEVEL=DEBUG)
 	@echo "Note: Requires kine and kube-apiserver binaries"
-	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test -tags=integration -parallel=$(PARALLEL) $(if $(RACE),-race) $(if $(NOCACHE),-count=1) -v $(if $(TEST),-run $(TEST)) -timeout=7m ./...
+	@echo "Phase 1: non-stress packages"
+	K8SENV_LOG_LEVEL=$(LOG_LEVEL) go test $(_TEST_FLAGS) $$(go list -tags=integration ./... | grep -v '/tests/stress$$' | grep -v '/tests/stressclean$$')
+	@echo "Phase 2: stress packages (sequential)"
+	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test $(_TEST_FLAGS) ./tests/stress
+	K8SENV_LOG_LEVEL=$(LOG_LEVEL) $(if $(STRESS_SUBTESTS),K8SENV_STRESS_SUBTESTS=$(STRESS_SUBTESTS)) go test $(_TEST_FLAGS) ./tests/stressclean
 
 .PHONY: test
 test: test-unit test-integration ## Run all tests (unit + integration)
@@ -39,6 +49,7 @@ find-flaky: ## Run integration tests in loop to find flaky tests (options: RACE=
 	race_flag="$(if $(RACE),-race)"; \
 	run_flag="$(if $(TEST),-run $(TEST))"; \
 	stress="$(if $(STRESS_SUBTESTS),$(STRESS_SUBTESTS),5000)"; \
+	non_stress=$$(go list -tags=integration ./... | grep -v '/tests/stress$$' | grep -v '/tests/stressclean$$'); \
 	cyan='\033[0;36m'; green='\033[0;32m'; red='\033[0;31m'; nc='\033[0m'; \
 	rcfile=$$(mktemp); \
 	trap 'rm -f "$$rcfile"' EXIT; \
@@ -54,12 +65,20 @@ find-flaky: ## Run integration tests in loop to find flaky tests (options: RACE=
 	printf "$${cyan}  STRESS_SUBTESTS = %s$${nc}\n" "$$stress"; \
 	i=1; \
 	while true; do \
-		(K8SENV_LOG_LEVEL="$(LOG_LEVEL)" K8SENV_STRESS_SUBTESTS="$$stress" \
-			go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=7m ./... 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
+		(K8SENV_LOG_LEVEL="$(LOG_LEVEL)" \
+			go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=7m $$non_stress 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
 		if [ "$$(cat "$$rcfile")" != "0" ]; then \
-			printf "$${red}Failed on pass %d$${nc}\n" "$$i" | tee -a "$(FLAKY_LOG)"; \
+			printf "$${red}Failed on pass %d (non-stress)$${nc}\n" "$$i" | tee -a "$(FLAKY_LOG)"; \
 			exit 1; \
 		fi; \
+		for pkg in ./tests/stress ./tests/stressclean; do \
+			(K8SENV_LOG_LEVEL="$(LOG_LEVEL)" K8SENV_STRESS_SUBTESTS="$$stress" \
+				go test -tags=integration -parallel="$(PARALLEL)" $$race_flag -count=1 -v $$run_flag -timeout=7m $$pkg 2>&1; echo $$? > "$$rcfile") | tee -a "$(FLAKY_LOG)"; \
+			if [ "$$(cat "$$rcfile")" != "0" ]; then \
+				printf "$${red}Failed on pass %d ($$pkg)$${nc}\n" "$$i" | tee -a "$(FLAKY_LOG)"; \
+				exit 1; \
+			fi; \
+		done; \
 		printf "$${green}Pass %d succeeded$${nc}\n" "$$i" | tee -a "$(FLAKY_LOG)"; \
 		i=$$((i + 1)); \
 	done

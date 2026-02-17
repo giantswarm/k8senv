@@ -135,6 +135,25 @@ func WithInstanceStopTimeout(d time.Duration) ManagerOption {
 	}
 }
 
+// WithCleanupTimeout sets the maximum time allowed for namespace cleanup
+// during release. This timeout covers API calls to list and delete non-system
+// namespaces, which may need more time than process shutdown (StopTimeout).
+//
+// This timeout is only used when the Manager's ReleaseStrategy is
+// [ReleaseClean]. It has no effect with [ReleaseRestart] (which stops the
+// instance instead of cleaning) or [ReleaseNone] (which skips cleanup
+// entirely).
+//
+// Default: 30 seconds.
+//
+// Panics if d <= 0.
+func WithCleanupTimeout(d time.Duration) ManagerOption {
+	requirePositive("cleanup timeout", d)
+	return func(c *managerConfig) {
+		c.CleanupTimeout = d
+	}
+}
+
 // WithCRDDir sets a directory containing YAML files to pre-apply to the cached database.
 // On manager creation, all YAML files in this directory will be applied to create
 // a cached database that all pool instances share.
@@ -145,6 +164,21 @@ func WithCRDDir(dirPath string) ManagerOption {
 	requireNonEmpty("CRD directory path", dirPath)
 	return func(c *managerConfig) {
 		c.CRDDir = dirPath
+	}
+}
+
+// WithReleaseStrategy sets the strategy used by Instance.Release().
+// See ReleaseStrategy constants for available strategies.
+//
+// Default: ReleaseRestart.
+//
+// Panics if strategy is not a recognized ReleaseStrategy value.
+func WithReleaseStrategy(strategy ReleaseStrategy) ManagerOption {
+	if !strategy.IsValid() {
+		panic(fmt.Sprintf("k8senv: invalid release strategy: %v", strategy))
+	}
+	return func(c *managerConfig) {
+		c.ReleaseStrategy = strategy
 	}
 }
 

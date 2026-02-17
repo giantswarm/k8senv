@@ -4,6 +4,7 @@ package k8senv_poolsize_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"testing"
@@ -20,6 +21,11 @@ var sharedManager k8senv.Manager
 // TestMain configures logging, creates a singleton manager with a bounded pool
 // (size 2), and runs all tests in this package.
 func TestMain(m *testing.M) {
+	// Parse flags early so testutil.TestParallel() reads the actual -test.parallel value
+	// from the command line instead of the default (GOMAXPROCS). m.Run() skips
+	// re-parsing when flag.Parsed() is already true.
+	flag.Parse()
+
 	testutil.SetupTestLogging()
 	testutil.RequireBinariesOrExit()
 
