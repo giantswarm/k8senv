@@ -49,21 +49,21 @@ const DefaultMaxStartRetries = 3
 
 // Stack manages a coordinated kine + kube-apiserver pair.
 type Stack struct {
-	config    Config
-	kine      *kine.Process
-	apiserver *apiserver.Process
-	log       *slog.Logger
-
+	// Immutable after New: configuration, logger, and shared port registry.
+	config Config
+	log    *slog.Logger
 	// ports is the canonical reference to the port registry, extracted from
 	// Config.PortRegistry during construction. All port operations use this
 	// field exclusively; config.PortRegistry is never accessed after New.
 	ports *netutil.PortRegistry
 
-	// Ports allocated for this stack, released on Stop.
-	kinePort int
-	apiPort  int
-
-	started bool // true after successful Start, cleared by Stop
+	// Set by Start, cleared by Stop: process handles, allocated ports, and
+	// lifecycle flag.
+	kine      *kine.Process
+	apiserver *apiserver.Process
+	kinePort  int // allocated port for kine, released on Stop
+	apiPort   int // allocated port for kube-apiserver, released on Stop
+	started   bool
 }
 
 // validate checks that all required Config fields are set and returns an error
