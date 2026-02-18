@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/giantswarm/k8senv"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -270,5 +271,56 @@ func StressCreateServiceAccount(ctx context.Context, t *testing.T, client kubern
 	})
 	if err != nil {
 		t.Fatalf("Failed to create ServiceAccount %s/%s: %v", ns, name, err)
+	}
+}
+
+// StressVerifyCleanInstance asserts that the instance has only system
+// namespaces, confirming the previous release removed all user namespaces.
+func StressVerifyCleanInstance(ctx context.Context, t *testing.T, client kubernetes.Interface) {
+	t.Helper()
+
+	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list namespaces: %v", err)
+	}
+
+	sysNS := SystemNamespaces()
+	for i := range nsList.Items {
+		if _, ok := sysNS[nsList.Items[i].Name]; !ok {
+			t.Fatalf("instance not clean on acquire: unexpected namespace %q", nsList.Items[i].Name)
+		}
+	}
+}
+
+// StressWorker is the common body for stress test workers. It acquires an
+// instance, verifies it is clean (only system namespaces), creates random
+// namespaces and resources, deletes the namespaces, and releases.
+func StressWorker(ctx context.Context, t *testing.T, mgr k8senv.Manager, workerID int, nsPrefix string) {
+	t.Helper()
+
+	rng := rand.New(rand.NewPCG(uint64(workerID), 0)) //nolint:gosec // deterministic PRNG for reproducibility
+
+	inst, client := AcquireWithClient(ctx, t, mgr)
+	defer inst.Release() //nolint:errcheck // safe to ignore in defer; on failure instance is removed from pool
+
+	StressVerifyCleanInstance(ctx, t, client)
+
+	nsCount := rng.IntN(StressMaxNS) + 1
+	namespaces := make([]string, 0, nsCount)
+
+	for n := range nsCount {
+		nsName := UniqueName(nsPrefix)
+		StressCreateNamespace(ctx, t, client, nsName)
+		namespaces = append(namespaces, nsName)
+
+		resCount := rng.IntN(StressMaxRes) + 1
+		for r := range resCount {
+			idx := n*StressMaxRes + r
+			StressCreateRandomResource(ctx, t, client, nsName, idx, rng)
+		}
+	}
+
+	for _, ns := range namespaces {
+		StressDeleteNamespace(ctx, t, client, ns)
 	}
 }

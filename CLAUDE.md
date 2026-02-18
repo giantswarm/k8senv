@@ -227,7 +227,7 @@ Tests are organized across the root package (unit tests) and seven integration t
 - `TestReleaseCleanupWithNoUserNamespaces` - Fast path when no user namespaces exist
 
 **`tests/stress/` (package `k8senv_stress_test`)** — Stress tests (separate package, run sequentially after other tests):
-- `TestStress` - Spawns parallel subtests that create random resources (configurable via `K8SENV_STRESS_SUBTESTS`)
+- `TestStress` - Spawns parallel subtests that verify instance cleanliness and create random resources (configurable via `K8SENV_STRESS_SUBTESTS`)
 
 **`tests/stressclean/` (package `k8senv_stressclean_test`)** — Stress tests with `ReleaseClean` strategy (separate package, run sequentially after other tests):
 - `TestStressClean` - Stress test verifying ReleaseClean under high concurrency (configurable via `K8SENV_STRESS_SUBTESTS`)

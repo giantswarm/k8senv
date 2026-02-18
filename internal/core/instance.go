@@ -565,9 +565,9 @@ func (i *Instance) Release(token uint64) error {
 		}
 
 	case ReleaseRestart:
-		// Stop the instance. The next Acquire will start fresh with the
-		// database restored from the cached template. No API-level cleanup
-		// is needed since the DB is replaced on restart.
+		// Stop the instance. The next Acquire will start fresh — kine's
+		// Start removes the old database (or restores from the cached
+		// template when CRDs are configured). No API-level cleanup needed.
 		ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
 		defer cancel()
 		if err := i.Stop(ctx); err != nil {

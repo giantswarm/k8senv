@@ -12,10 +12,10 @@ type ReleaseStrategy int
 const (
 	// ReleaseRestart stops the instance without performing any API-level
 	// cleanup. The next Acquire starts a fresh instance — kine's Start()
-	// copies the SQLite database from the cached template, restoring the
-	// database to its pre-test state. This is the safest and simplest
-	// strategy: no cleanup code to get wrong, full isolation via DB restore.
-	// This is the default strategy.
+	// either restores the database from the cached template (when CRDs are
+	// configured) or removes the old database so kine creates a fresh one.
+	// This is the safest and simplest strategy: no cleanup code to get
+	// wrong, full isolation via DB reset. This is the default strategy.
 	ReleaseRestart ReleaseStrategy = iota
 
 	// ReleaseClean cleans all non-system namespaces and their resources

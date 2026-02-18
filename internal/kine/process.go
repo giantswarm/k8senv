@@ -85,10 +85,18 @@ func (p *Process) Start(ctx context.Context) error {
 		return process.ErrAlreadyStarted
 	}
 
-	// Prepopulate if cached DB provided.
+	// Ensure a clean database state before launching.
 	if p.config.CachedDBPath != "" {
+		// Restore from cached template (e.g., pre-loaded CRDs).
 		if err := prepopulateDB(p.config.CachedDBPath, p.config.SQLitePath); err != nil {
 			return fmt.Errorf("prepopulate kine database: %w", err)
+		}
+	} else {
+		// No template — remove any stale database so kine creates a fresh
+		// one. Without this, ReleaseRestart would reopen the previous
+		// test's database, leaking state across acquisitions.
+		if err := removeSQLiteFiles(p.config.SQLitePath); err != nil {
+			return fmt.Errorf("remove stale kine database: %w", err)
 		}
 	}
 
@@ -153,6 +161,17 @@ func prepopulateDB(srcPath, dstPath string) error {
 	mode := os.FileMode(0o600)
 	if err := fileutil.CopyFile(srcPath, dstPath, &fileutil.CopyFileOptions{Mode: &mode}); err != nil {
 		return fmt.Errorf("copy database from %s to %s: %w", srcPath, dstPath, err)
+	}
+	return nil
+}
+
+// removeSQLiteFiles removes a SQLite database and its companion WAL/SHM files.
+// Missing files are silently ignored.
+func removeSQLiteFiles(dbPath string) error {
+	for _, path := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
 	}
 	return nil
 }
