@@ -352,8 +352,7 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	// our instance before we re-acquired, we get a different one where the
 	// ConfigMap was never created. Only verify when we got the same instance.
 	if inst2.ID() != instID {
-		t.Log("got different instance (pool concurrency); skipping system resource verification")
-		return
+		t.Skip("got different instance (pool concurrency); skipping system resource verification")
 	}
 
 	// Verify the kube-system ConfigMap still exists.
