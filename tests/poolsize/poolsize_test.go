@@ -72,6 +72,18 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 		t.Fatalf("Failed to acquire second instance: %v", err)
 	}
 
+	// Track whether inst2 was released on the happy path. The cleanup
+	// guard ensures release on any failure path without risking a
+	// double-release panic on the happy path.
+	inst2Released := false
+	t.Cleanup(func() {
+		if !inst2Released {
+			if relErr := inst2.Release(); relErr != nil {
+				t.Logf("release error: %v", relErr)
+			}
+		}
+	})
+
 	// Release one instance in a goroutine. The readyCh gate ensures the
 	// goroutine does not call Release before the test is ready, but there is
 	// no strict ordering between close(readyCh) and the Acquire call below —
@@ -112,6 +124,7 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 	if relErr := inst2.Release(); relErr != nil {
 		t.Logf("release error: %v", relErr)
 	}
+	inst2Released = true
 }
 
 // TestPoolBoundedInstanceReuse verifies that a bounded pool reuses instances
