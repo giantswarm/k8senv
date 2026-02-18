@@ -101,9 +101,13 @@ type clientCache struct {
 //     all lazily-built Kubernetes clients. Individual fields are populated via
 //     CAS loops that copy-on-write the struct. Stop invalidates the entire
 //     cache with a single Store(nil).
-//   - stack and cancel are only accessed under startMu (in doStart and Stop),
-//     so no additional lock is needed. started.Store(true) after setting
-//     stack/cancel under startMu provides happens-before via the Go memory model.
+//   - stack and cancel are written under startMu (in doStart and Stop).
+//     started.Store(true) after setting stack/cancel under startMu provides
+//     happens-before via the Go memory model. Stop extracts stack/cancel
+//     under the lock, clears them and publishes started=false, then releases
+//     the lock before performing the expensive stack.Stop I/O. This avoids
+//     holding startMu for the entire stop duration, reducing acquire latency
+//     under the ReleaseRestart strategy.
 type Instance struct {
 	cfg InstanceConfig
 
@@ -443,8 +447,11 @@ func (i *Instance) Config() (*rest.Config, error) {
 // time and the configured StopTimeout. If the context has no deadline, the
 // configured StopTimeout is used as a fallback.
 //
-// Safe for concurrent calls with Start: startMu serializes them so Stop
-// cannot run while Start is launching processes (and vice versa).
+// Safe for concurrent calls with Start: startMu serializes the state
+// transition (clearing stack/cancel and publishing started=false), and the
+// expensive stack.Stop I/O runs after the lock is released. A concurrent
+// Start sees started==false and stack==nil, so it creates a new stack
+// independently. A concurrent Stop sees stack==nil and returns immediately.
 func (i *Instance) Stop(ctx context.Context) error {
 	// Fail fast if the caller has already canceled the context, to avoid
 	// acquiring startMu and doing unnecessary work.
@@ -460,15 +467,19 @@ func (i *Instance) Stop(ctx context.Context) error {
 	// significant complexity for a scenario that only arises when Start and
 	// Stop race, which the pool layer already prevents.
 	i.startMu.Lock()
-	defer i.startMu.Unlock()
 
-	// Clear state under startMu, then publish started=false.
+	// Extract references under the lock, clear state, then release the
+	// lock before performing the expensive stack.Stop I/O. After unlock,
+	// started is false and stack is nil, so concurrent Start creates a new
+	// stack independently and concurrent Stop returns immediately.
 	stack := i.stack
 	cancel := i.cancel
 	i.stack = nil
 	i.cancel = nil
 	i.clients.Store(nil)
 	i.started.Store(false)
+
+	i.startMu.Unlock()
 
 	if cancel != nil {
 		cancel()
