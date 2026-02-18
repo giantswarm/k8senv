@@ -370,7 +370,7 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 // is owned by a single Instance whose startMu serializes lifecycle calls.
 func (s *Stack) Stop(timeout time.Duration) error {
 	if timeout <= 0 {
-		timeout = time.Millisecond
+		return fmt.Errorf("stop timeout must be positive, got %s", timeout)
 	}
 	if !s.started {
 		return nil
