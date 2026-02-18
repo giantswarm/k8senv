@@ -119,6 +119,11 @@ func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
 //  2. Schedule SIGKILL via time.AfterFunc after a grace period (canceled if
 //     the process exits first).
 //  3. Wait for process exit or total timeout.
+//
+// Worst-case blocking duration is timeout + killDrainTimeout (currently 10s).
+// This occurs when the main timeout expires and the post-SIGKILL drain also
+// blocks for its full duration. Callers allocating time budgets should account
+// for this additional killDrainTimeout beyond the configured timeout.
 func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name string) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
