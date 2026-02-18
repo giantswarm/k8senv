@@ -6,6 +6,8 @@ import (
 )
 
 // requirePositive panics if v <= 0 with a descriptive message.
+// It intentionally rejects zero; do not use for values where zero
+// has special meaning (e.g., pool size, where 0 means unlimited).
 func requirePositive[T int | time.Duration](name string, v T) {
 	if v <= 0 {
 		panic(fmt.Sprintf("k8senv: %s must be greater than 0, got %v", name, v))
