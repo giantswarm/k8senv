@@ -63,4 +63,40 @@
 // k8senv runs only kube-apiserver without scheduler or controller-manager.
 // This means pods remain Pending and controllers don't reconcile, but this is
 // ideal for API server testing (CRDs, RBAC, namespaces, ConfigMaps, Secrets).
+//
+// # Error Handling
+//
+// The package exports sentinel errors for inspection with [errors.Is].
+// Operations wrap these sentinels with additional context, so callers should
+// use [errors.Is] rather than direct comparison:
+//
+//	inst, err := mgr.Acquire(ctx)
+//	if err != nil {
+//	    switch {
+//	    case errors.Is(err, k8senv.ErrNotInitialized):
+//	        // Initialize was not called before Acquire
+//	    case errors.Is(err, k8senv.ErrShuttingDown):
+//	        // Manager is shutting down, stop requesting instances
+//	    case errors.Is(err, k8senv.ErrPoolClosed):
+//	        // Pool was closed during shutdown
+//	    default:
+//	        // Unexpected error (timeout, process failure, etc.)
+//	    }
+//	}
+//
+// Instance methods return their own sentinels:
+//
+//	cfg, err := inst.Config()
+//	if errors.Is(err, k8senv.ErrInstanceReleased) {
+//	    // Instance was already released; Config is no longer valid
+//	}
+//
+// CRD initialization reports sentinels for invalid CRD directories:
+//
+//	err := mgr.Initialize(ctx)
+//	if errors.Is(err, k8senv.ErrNoYAMLFiles) {
+//	    // CRD directory contained no YAML files
+//	}
+//
+// See the exported Err variables for the complete list of sentinel errors.
 package k8senv
