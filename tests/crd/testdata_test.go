@@ -118,7 +118,7 @@ data:
 `
 
 // sampleMultiDoc is a multi-document YAML with a unique CRD + ConfigMap.
-var sampleMultiDoc = sampleCRDThingamajig + "---\n" + sampleConfigMap
+const sampleMultiDoc = sampleCRDThingamajig + "---\n" + sampleConfigMap
 
 // sampleCRDSprocket is the Sprocket CRD (sprockets.example.com),
 // loaded from sprocket-crd.yml to exercise .yml extension matching.

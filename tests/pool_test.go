@@ -139,7 +139,7 @@ func TestParallelAcquisition(t *testing.T) {
 				if err := inst.Release(); err != nil {
 					t.Logf("release error: %v", err)
 				}
-			}() // Keep instance running for reuse
+			}()
 
 			// Track instance usage
 			mu.Lock()

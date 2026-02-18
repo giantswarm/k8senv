@@ -115,7 +115,9 @@ func StressCreateRandomResource(
 ) {
 	t.Helper()
 
-	switch rng.IntN(StressResTypes) {
+	resType := rng.IntN(StressResTypes)
+
+	switch resType {
 	case 0:
 		StressCreateConfigMap(ctx, t, client, ns, idx)
 	case 1:
@@ -126,6 +128,8 @@ func StressCreateRandomResource(
 		StressCreatePod(ctx, t, client, ns, idx)
 	case 4:
 		StressCreateServiceAccount(ctx, t, client, ns, idx)
+	default:
+		t.Fatalf("unhandled resource type %d; update switch to match StressResTypes=%d", resType, StressResTypes)
 	}
 }
 
