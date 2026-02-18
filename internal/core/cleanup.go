@@ -286,8 +286,11 @@ func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error
 		}
 	}
 
-	i.cachedGVRs.Store(&gvrs)
-	return gvrs, nil
+	if i.cachedGVRs.CompareAndSwap(nil, &gvrs) {
+		return gvrs, nil
+	}
+	// Another goroutine won the race — use its cached result.
+	return *i.cachedGVRs.Load(), nil
 }
 
 // deleteResourcesForGVR deletes all instances of the given resource type in the
@@ -445,6 +448,8 @@ func (i *Instance) deleteResourceItem(
 // It disables client-side rate limiting (QPS=-1) because the client only
 // targets a local, ephemeral kube-apiserver — no shared infrastructure can
 // be overwhelmed.
+//
+//nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 	if c := i.cleanupClient.Load(); c != nil {
 		return c, nil
@@ -459,11 +464,16 @@ func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create cleanup client: %w", err)
 	}
-	i.cleanupClient.Store(c)
-	return c, nil
+	if i.cleanupClient.CompareAndSwap(nil, c) {
+		return c, nil
+	}
+	// Another goroutine won the race — use its client.
+	return i.cleanupClient.Load(), nil
 }
 
 // getOrBuildDiscoveryClient returns the cached discovery client or creates one.
+//
+//nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, error) {
 	if dc := i.discoveryClient.Load(); dc != nil {
 		return dc, nil
@@ -478,11 +488,16 @@ func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, erro
 	if err != nil {
 		return nil, fmt.Errorf("create discovery client: %w", err)
 	}
-	i.discoveryClient.Store(dc)
-	return dc, nil
+	if i.discoveryClient.CompareAndSwap(nil, dc) {
+		return dc, nil
+	}
+	// Another goroutine won the race — use its client.
+	return i.discoveryClient.Load(), nil
 }
 
 // getOrBuildDynamicClient returns the cached dynamic client or creates one.
+//
+//nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	if dc := i.dynamicClient.Load(); dc != nil {
 		return dc, nil
@@ -497,8 +512,11 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create dynamic client: %w", err)
 	}
-	i.dynamicClient.Store(dc)
-	return dc, nil
+	if i.dynamicClient.CompareAndSwap(nil, dc) {
+		return dc, nil
+	}
+	// Another goroutine won the race — use its client.
+	return i.dynamicClient.Load(), nil
 }
 
 // listUserNamespaces returns the names of all non-system namespaces on the
