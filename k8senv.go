@@ -88,6 +88,25 @@ func (w *instanceWrapper) ID() string {
 	return w.inst.ID()
 }
 
+// defaultManagerConfig returns a managerConfig populated with all default
+// values. Both NewManager and test helpers use this to avoid duplicating
+// the default field assignments.
+func defaultManagerConfig() managerConfig {
+	return managerConfig{core.ManagerConfig{
+		PoolSize:             DefaultPoolSize,
+		ReleaseStrategy:      DefaultReleaseStrategy,
+		KineBinary:           DefaultKineBinary,
+		KubeAPIServerBinary:  DefaultKubeAPIServerBinary,
+		AcquireTimeout:       DefaultAcquireTimeout,
+		BaseDataDir:          filepath.Join(os.TempDir(), DefaultBaseDataDirName),
+		CRDCacheTimeout:      DefaultCRDCacheTimeout,
+		InstanceStartTimeout: DefaultInstanceStartTimeout,
+		InstanceStopTimeout:  DefaultInstanceStopTimeout,
+		CleanupTimeout:       DefaultCleanupTimeout,
+		ShutdownDrainTimeout: DefaultShutdownDrainTimeout,
+	}}
+}
+
 // resetForTesting resets the singleton state so that the next call to
 // NewManager creates a fresh manager. This follows the Go stdlib pattern
 // (e.g., net/http/internal) for enabling test isolation within a single
@@ -114,19 +133,7 @@ func resetForTesting() {
 func NewManager(opts ...ManagerOption) Manager {
 	created := false
 	singletonOnce.Do(func() {
-		cfg := managerConfig{core.ManagerConfig{
-			PoolSize:             DefaultPoolSize,
-			ReleaseStrategy:      DefaultReleaseStrategy,
-			KineBinary:           DefaultKineBinary,
-			KubeAPIServerBinary:  DefaultKubeAPIServerBinary,
-			AcquireTimeout:       DefaultAcquireTimeout,
-			BaseDataDir:          filepath.Join(os.TempDir(), DefaultBaseDataDirName),
-			CRDCacheTimeout:      DefaultCRDCacheTimeout,
-			InstanceStartTimeout: DefaultInstanceStartTimeout,
-			InstanceStopTimeout:  DefaultInstanceStopTimeout,
-			CleanupTimeout:       DefaultCleanupTimeout,
-			ShutdownDrainTimeout: DefaultShutdownDrainTimeout,
-		}}
+		cfg := defaultManagerConfig()
 		for _, opt := range opts {
 			opt(&cfg)
 		}

@@ -1,10 +1,6 @@
 package k8senv
 
-import (
-	"os"
-	"path/filepath"
-	"time"
-)
+import "time"
 
 // ResetForTesting resets the singleton manager state so that the next
 // call to NewManager creates a fresh instance. This is exported only
@@ -34,19 +30,7 @@ type ConfigSnapshot struct {
 // options, and returns a ConfigSnapshot of the result. This tests the option
 // closures directly without touching the singleton.
 func ApplyOptionsForTesting(opts ...ManagerOption) ConfigSnapshot {
-	cfg := managerConfig{}
-	cfg.PoolSize = DefaultPoolSize
-	cfg.ReleaseStrategy = DefaultReleaseStrategy
-	cfg.KineBinary = DefaultKineBinary
-	cfg.KubeAPIServerBinary = DefaultKubeAPIServerBinary
-	cfg.AcquireTimeout = DefaultAcquireTimeout
-	cfg.BaseDataDir = filepath.Join(os.TempDir(), DefaultBaseDataDirName)
-	cfg.CRDCacheTimeout = DefaultCRDCacheTimeout
-	cfg.InstanceStartTimeout = DefaultInstanceStartTimeout
-	cfg.InstanceStopTimeout = DefaultInstanceStopTimeout
-	cfg.CleanupTimeout = DefaultCleanupTimeout
-	cfg.ShutdownDrainTimeout = DefaultShutdownDrainTimeout
-
+	cfg := defaultManagerConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
