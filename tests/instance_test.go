@@ -101,15 +101,15 @@ func TestIDUniqueness(t *testing.T) {
 		})
 
 		id := inst.ID()
+
+		// Check empty first — an empty ID would produce a confusing duplicate error.
+		if id == "" {
+			t.Error("Instance ID should not be empty")
+		}
 		if _, exists := ids[id]; exists {
 			t.Errorf("Duplicate ID: %s", id)
 		}
 		ids[id] = struct{}{}
-
-		// IDs should be non-empty and unique (format: inst-N-XXXXXXXX)
-		if id == "" {
-			t.Error("Instance ID should not be empty")
-		}
 	}
 }
 
