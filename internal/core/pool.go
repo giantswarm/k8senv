@@ -275,7 +275,7 @@ func (p *Pool) returnSlot() {
 		closed := p.closed
 		p.mu.Unlock()
 		if !closed {
-			Logger().Debug("returnSlot: semaphore full during normal operation, possible extra release")
+			Logger().Error("returnSlot: semaphore full during normal operation, possible extra release")
 		}
 	}
 }
