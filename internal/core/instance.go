@@ -22,8 +22,16 @@ import (
 )
 
 // DefaultMaxStartRetries is the default number of startup retries for transient startup failures
-// (port conflicts, namespace readiness timeouts).
+// such as port conflicts during kubestack startup.
 const DefaultMaxStartRetries = 5
+
+// maxNamespaceRetries is the number of full restart attempts when system
+// namespaces fail to appear after an otherwise successful stack start.
+// This is intentionally decoupled from MaxStartRetries (used by
+// kubestack.StartWithRetry for port-conflict retries) to avoid an N*N
+// worst case where the outer namespace loop multiplies the inner
+// port-conflict loop.
+const maxNamespaceRetries = 3
 
 // ErrInstanceReleased is returned by Config when called on an instance that has
 // been released back to the pool. After Release, the instance may be re-acquired
@@ -251,7 +259,7 @@ func (i *Instance) doStart(ctx context.Context) error {
 	}
 
 	var lastNSErr error
-	for attempt := 1; attempt <= i.cfg.MaxStartRetries; attempt++ {
+	for attempt := 1; attempt <= maxNamespaceRetries; attempt++ {
 		// Create process context just before starting processes.
 		// Using Background so processes survive beyond the Acquire() call.
 		// The passed ctx is only used for startup timeouts (readiness checks).
@@ -295,10 +303,10 @@ func (i *Instance) doStart(ctx context.Context) error {
 			i.cachedGVRs.Store(nil)
 
 			lastNSErr = err
-			if attempt < i.cfg.MaxStartRetries {
+			if attempt < maxNamespaceRetries {
 				i.log.Warn("system namespace timeout, retrying instance start",
 					"attempt", attempt,
-					"max_retries", i.cfg.MaxStartRetries,
+					"max_retries", maxNamespaceRetries,
 					"error", err,
 				)
 				continue
