@@ -85,7 +85,7 @@ func TestConfig_logger(t *testing.T) {
 	t.Run("returns configured logger", func(t *testing.T) {
 		t.Parallel()
 
-		custom := slog.New(slog.NewTextHandler(nil, nil))
+		custom := slog.New(slog.DiscardHandler)
 		cfg := Config{Logger: custom}
 
 		if cfg.logger() != custom {
