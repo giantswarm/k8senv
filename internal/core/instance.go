@@ -69,6 +69,27 @@ type InstanceReleaser interface {
 	ReleaseFailed(i *Instance, token uint64)
 }
 
+// clientCache groups lazily-built Kubernetes clients and discovery data that
+// share the same lifecycle: all are created on demand and invalidated together
+// when the instance is stopped or a startup attempt fails.
+//
+// The struct is treated as immutable after construction. To add a new field,
+// copy the existing struct with the new field set and CAS the pointer on
+// Instance. This allows multiple goroutines to read the cache concurrently
+// while writers race-free via CompareAndSwap.
+type clientCache struct {
+	// config is the parsed rest.Config from the kubeconfig file.
+	config *rest.Config
+	// cleanup is the typed client for namespace operations.
+	cleanup *kubernetes.Clientset
+	// discovery is the discovery client for resource enumeration.
+	discovery *discovery.DiscoveryClient
+	// dynamic is the dynamic client for resource deletion.
+	dynamic *dynamic.DynamicClient
+	// gvrs is the discovered set of deletable namespaced resource types.
+	gvrs *[]schema.GroupVersionResource
+}
+
 // Instance represents a single kube-apiserver + kine test environment.
 // It holds both consumer-facing methods (Config, Release, ID) exposed through
 // the public k8senv.Instance interface, and lifecycle methods (Start, Stop,
@@ -76,6 +97,10 @@ type InstanceReleaser interface {
 //
 // Synchronization strategy:
 //   - busy, started, lastErr use atomics for lock-free reads (the common path).
+//   - clients is a single atomic pointer to a clientCache struct that groups
+//     all lazily-built Kubernetes clients. Individual fields are populated via
+//     CAS loops that copy-on-write the struct. Stop invalidates the entire
+//     cache with a single Store(nil).
 //   - stack and cancel are only accessed under startMu (in doStart and Stop),
 //     so no additional lock is needed. started.Store(true) after setting
 //     stack/cancel under startMu provides happens-before via the Go memory model.
@@ -99,22 +124,9 @@ type Instance struct {
 	started atomic.Bool
 	// lastErr is set during warm-up or start failure.
 	lastErr atomic.Pointer[error]
-	// cleanupClient is a cached client for namespace cleanup.
-	// Set on first Release, cleared by Stop.
-	cleanupClient atomic.Pointer[kubernetes.Clientset]
-	// cachedConfig is a cached rest.Config.
-	// Set on first Config() call, cleared by Stop.
-	cachedConfig atomic.Pointer[rest.Config]
-	// discoveryClient is a cached discovery client for resource enumeration.
-	// Set on first cleanNamespacedResources call, cleared by Stop.
-	discoveryClient atomic.Pointer[discovery.DiscoveryClient]
-	// dynamicClient is a cached dynamic client for resource deletion.
-	// Set on first cleanNamespacedResources call, cleared by Stop.
-	dynamicClient atomic.Pointer[dynamic.DynamicClient]
-	// cachedGVRs is the discovered set of deletable namespaced resource types.
-	// Cached across Release calls since CRDs don't change after initialization.
-	// Cleared by Stop (API server may have different resources after restart).
-	cachedGVRs atomic.Pointer[[]schema.GroupVersionResource]
+	// clients holds lazily-built Kubernetes clients and discovery data.
+	// Populated incrementally via CAS loops; cleared to nil by Stop.
+	clients atomic.Pointer[clientCache]
 
 	// startMu serializes Start/Stop to prevent duplicate process launches.
 	startMu sync.Mutex
@@ -339,11 +351,7 @@ func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubes
 	}
 	// Clear stale state from the failed attempt — the old apiserver
 	// ports are gone, so cached configs and clients are invalid.
-	i.cleanupClient.Store(nil)
-	i.cachedConfig.Store(nil)
-	i.discoveryClient.Store(nil)
-	i.dynamicClient.Store(nil)
-	i.cachedGVRs.Store(nil)
+	i.clients.Store(nil)
 
 	if attempt < maxNamespaceRetries {
 		i.log.Warn("system namespace timeout, retrying instance start",
@@ -358,15 +366,48 @@ func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubes
 // from the kubeconfig file and caches it for future calls. The returned copy is
 // safe for callers to mutate (e.g., setting QPS) without affecting the cache.
 func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
-	if cfg := i.cachedConfig.Load(); cfg != nil {
-		return rest.CopyConfig(cfg), nil
+	if cache := i.clients.Load(); cache != nil && cache.config != nil {
+		return rest.CopyConfig(cache.config), nil
 	}
 	cfg, err := clientcmd.BuildConfigFromFlags("", i.kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("build config from kubeconfig: %w", err)
 	}
-	i.cachedConfig.CompareAndSwap(nil, cfg)
-	return rest.CopyConfig(i.cachedConfig.Load()), nil
+	i.casClientCache(func(c *clientCache) *clientCache {
+		if c.config != nil {
+			return nil // another goroutine won the race
+		}
+		updated := *c
+		updated.config = cfg
+		return &updated
+	})
+	// Always return from the cache so every caller sees the same config.
+	return rest.CopyConfig(i.clients.Load().config), nil
+}
+
+// casClientCache applies fn to the current clientCache in a compare-and-swap
+// loop. If the cache pointer is nil, fn receives a zero-value clientCache.
+// fn must return a new *clientCache to store, or nil to abort (e.g., when
+// another goroutine already populated the field). The loop retries on CAS
+// failure, which occurs when a concurrent goroutine updates the cache between
+// Load and CompareAndSwap.
+func (i *Instance) casClientCache(fn func(*clientCache) *clientCache) {
+	for {
+		old := i.clients.Load()
+		var base clientCache
+		if old != nil {
+			base = *old
+		}
+		updated := fn(&base)
+		if updated == nil {
+			return // caller decided no update is needed
+		}
+		if i.clients.CompareAndSwap(old, updated) {
+			return
+		}
+		// CAS failed — another goroutine modified the cache; retry with
+		// the new snapshot.
+	}
 }
 
 // Config returns *rest.Config for connecting to this instance's kube-apiserver.
@@ -424,11 +465,7 @@ func (i *Instance) Stop(ctx context.Context) error {
 	cancel := i.cancel
 	i.stack = nil
 	i.cancel = nil
-	i.cleanupClient.Store(nil)
-	i.cachedConfig.Store(nil)
-	i.discoveryClient.Store(nil)
-	i.dynamicClient.Store(nil)
-	i.cachedGVRs.Store(nil)
+	i.clients.Store(nil)
 	i.started.Store(false)
 
 	if cancel != nil {

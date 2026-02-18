@@ -243,8 +243,8 @@ func (i *Instance) cleanNamespacedResources(ctx context.Context, userNamespaces 
 // since the set of API resources doesn't change (CRDs are pre-applied once
 // during initialization and never modified). The cache is invalidated on Stop.
 func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error) {
-	if cached := i.cachedGVRs.Load(); cached != nil {
-		return *cached, nil
+	if cache := i.clients.Load(); cache != nil && cache.gvrs != nil {
+		return *cache.gvrs, nil
 	}
 
 	disc, err := i.getOrBuildDiscoveryClient()
@@ -286,11 +286,15 @@ func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error
 		}
 	}
 
-	if i.cachedGVRs.CompareAndSwap(nil, &gvrs) {
-		return gvrs, nil
-	}
-	// Another goroutine won the race — use its cached result.
-	return *i.cachedGVRs.Load(), nil
+	i.casClientCache(func(cc *clientCache) *clientCache {
+		if cc.gvrs != nil {
+			return nil // another goroutine won the race
+		}
+		updated := *cc
+		updated.gvrs = &gvrs
+		return &updated
+	})
+	return *i.clients.Load().gvrs, nil
 }
 
 // deleteResourcesForGVR deletes all instances of the given resource type in the
@@ -451,8 +455,8 @@ func (i *Instance) deleteResourceItem(
 //
 //nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
-	if c := i.cleanupClient.Load(); c != nil {
-		return c, nil
+	if cache := i.clients.Load(); cache != nil && cache.cleanup != nil {
+		return cache.cleanup, nil
 	}
 	cfg, err := i.getOrBuildRestConfig()
 	if err != nil {
@@ -465,19 +469,23 @@ func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create cleanup client: %w", err)
 	}
-	if i.cleanupClient.CompareAndSwap(nil, c) {
-		return c, nil
-	}
-	// Another goroutine won the race — use its client.
-	return i.cleanupClient.Load(), nil
+	i.casClientCache(func(cc *clientCache) *clientCache {
+		if cc.cleanup != nil {
+			return nil // another goroutine won the race
+		}
+		updated := *cc
+		updated.cleanup = c
+		return &updated
+	})
+	return i.clients.Load().cleanup, nil
 }
 
 // getOrBuildDiscoveryClient returns the cached discovery client or creates one.
 //
 //nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, error) {
-	if dc := i.discoveryClient.Load(); dc != nil {
-		return dc, nil
+	if cache := i.clients.Load(); cache != nil && cache.discovery != nil {
+		return cache.discovery, nil
 	}
 	cfg, err := i.getOrBuildRestConfig()
 	if err != nil {
@@ -490,19 +498,23 @@ func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, erro
 	if err != nil {
 		return nil, fmt.Errorf("create discovery client: %w", err)
 	}
-	if i.discoveryClient.CompareAndSwap(nil, dc) {
-		return dc, nil
-	}
-	// Another goroutine won the race — use its client.
-	return i.discoveryClient.Load(), nil
+	i.casClientCache(func(cc *clientCache) *clientCache {
+		if cc.discovery != nil {
+			return nil // another goroutine won the race
+		}
+		updated := *cc
+		updated.discovery = dc
+		return &updated
+	})
+	return i.clients.Load().discovery, nil
 }
 
 // getOrBuildDynamicClient returns the cached dynamic client or creates one.
 //
 //nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
-	if dc := i.dynamicClient.Load(); dc != nil {
-		return dc, nil
+	if cache := i.clients.Load(); cache != nil && cache.dynamic != nil {
+		return cache.dynamic, nil
 	}
 	cfg, err := i.getOrBuildRestConfig()
 	if err != nil {
@@ -515,11 +527,15 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create dynamic client: %w", err)
 	}
-	if i.dynamicClient.CompareAndSwap(nil, dc) {
-		return dc, nil
-	}
-	// Another goroutine won the race — use its client.
-	return i.dynamicClient.Load(), nil
+	i.casClientCache(func(cc *clientCache) *clientCache {
+		if cc.dynamic != nil {
+			return nil // another goroutine won the race
+		}
+		updated := *cc
+		updated.dynamic = dc
+		return &updated
+	})
+	return i.clients.Load().dynamic, nil
 }
 
 // listUserNamespaces returns the names of all non-system namespaces on the
