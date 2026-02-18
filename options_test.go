@@ -155,6 +155,63 @@ func TestWithShutdownDrainTimeoutPanicsOnInvalid(t *testing.T) {
 	})
 }
 
+func TestWithInstanceStartTimeoutPanicsOnInvalid(t *testing.T) {
+	t.Parallel()
+	runPanicTests(t, []panicTestCase{
+		{
+			"zero",
+			true,
+			"k8senv: instance start timeout must be greater than 0, got 0s",
+			func() { k8senv.WithInstanceStartTimeout(0) },
+		},
+		{
+			"negative",
+			true,
+			"k8senv: instance start timeout must be greater than 0, got -1s",
+			func() { k8senv.WithInstanceStartTimeout(-1 * time.Second) },
+		},
+		{"valid", false, "", func() { k8senv.WithInstanceStartTimeout(5 * time.Minute) }},
+	})
+}
+
+func TestWithInstanceStopTimeoutPanicsOnInvalid(t *testing.T) {
+	t.Parallel()
+	runPanicTests(t, []panicTestCase{
+		{
+			"zero",
+			true,
+			"k8senv: instance stop timeout must be greater than 0, got 0s",
+			func() { k8senv.WithInstanceStopTimeout(0) },
+		},
+		{
+			"negative",
+			true,
+			"k8senv: instance stop timeout must be greater than 0, got -1s",
+			func() { k8senv.WithInstanceStopTimeout(-1 * time.Second) },
+		},
+		{"valid", false, "", func() { k8senv.WithInstanceStopTimeout(10 * time.Second) }},
+	})
+}
+
+func TestWithCRDCacheTimeoutPanicsOnInvalid(t *testing.T) {
+	t.Parallel()
+	runPanicTests(t, []panicTestCase{
+		{
+			"zero",
+			true,
+			"k8senv: CRD cache timeout must be greater than 0, got 0s",
+			func() { k8senv.WithCRDCacheTimeout(0) },
+		},
+		{
+			"negative",
+			true,
+			"k8senv: CRD cache timeout must be greater than 0, got -1s",
+			func() { k8senv.WithCRDCacheTimeout(-1 * time.Second) },
+		},
+		{"valid", false, "", func() { k8senv.WithCRDCacheTimeout(10 * time.Minute) }},
+	})
+}
+
 func TestWithEmptyStringOptionsPanic(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
