@@ -54,9 +54,9 @@ type Stack struct {
 	apiserver *apiserver.Process
 	log       *slog.Logger
 
-	// ports is the canonical reference to the port registry. It is extracted
-	// from Config.PortRegistry during construction; the config copy is nilled
-	// out to avoid a duplicate reference.
+	// ports is the canonical reference to the port registry, extracted from
+	// Config.PortRegistry during construction. All port operations use this
+	// field exclusively; config.PortRegistry is never accessed after New.
 	ports *netutil.PortRegistry
 
 	// Ports allocated for this stack, released on Stop.
@@ -114,7 +114,6 @@ func New(cfg Config) (*Stack, error) {
 		log = slog.Default()
 	}
 	ports := cfg.PortRegistry
-	cfg.PortRegistry = nil // Avoid duplicate reference; use s.ports exclusively.
 	return &Stack{config: cfg, log: log, ports: ports}, nil
 }
 
