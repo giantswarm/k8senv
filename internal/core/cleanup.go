@@ -227,12 +227,19 @@ func (i *Instance) cleanNamespacedResources(ctx context.Context, userNamespaces 
 
 	i.log.Debug("discovered namespaced resource types", "count", len(gvrs))
 
+	// Build the user-namespace set once and share it across all goroutines.
+	// The map is read-only after construction, so concurrent access is safe.
+	userNSSet := make(map[string]struct{}, len(userNamespaces))
+	for _, ns := range userNamespaces {
+		userNSSet[ns] = struct{}{}
+	}
+
 	g, gCtx := errgroup.WithContext(ctx)
 	g.SetLimit(10)
 
 	for _, gvr := range gvrs {
 		g.Go(func() error {
-			i.deleteResourcesForGVR(gCtx, dynClient, gvr, userNamespaces)
+			i.deleteResourcesForGVR(gCtx, dynClient, gvr, userNSSet)
 			return nil
 		})
 	}
@@ -309,11 +316,14 @@ func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error
 // items exist in user namespaces (the common case for ~90% of GVR types), the
 // function returns immediately. For GVRs that do have items, DeleteCollection
 // is used for batch deletion with a follow-up List for finalizer-stuck resources.
+//
+// userNSSet is a pre-built read-only set of user namespace names for O(1)
+// lookup, constructed once by the caller and shared across goroutines.
 func (i *Instance) deleteResourcesForGVR(
 	ctx context.Context,
 	dynClient *dynamic.DynamicClient,
 	gvr schema.GroupVersionResource,
-	userNamespaces []string,
+	userNSSet map[string]struct{},
 ) {
 	// Fast path: a single cluster-wide List determines whether any items exist
 	// in user namespaces. Most GVR types (configmaps, secrets, pods, etc.) are
@@ -325,17 +335,12 @@ func (i *Instance) deleteResourcesForGVR(
 		return
 	}
 
-	// Build a set of user namespaces for O(1) lookup.
-	userNSSet := make(map[string]struct{}, len(userNamespaces))
-	for _, ns := range userNamespaces {
-		userNSSet[ns] = struct{}{}
-	}
-
 	// Identify which user namespaces actually contain items for this GVR.
 	nsWithItems := make(map[string]struct{})
 	for idx := range list.Items {
-		if _, ok := userNSSet[list.Items[idx].GetNamespace()]; ok {
-			nsWithItems[list.Items[idx].GetNamespace()] = struct{}{}
+		ns := list.Items[idx].GetNamespace()
+		if _, ok := userNSSet[ns]; ok {
+			nsWithItems[ns] = struct{}{}
 		}
 	}
 
