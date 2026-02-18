@@ -60,6 +60,9 @@ func StressSubtestCount() int {
 // retry (timeouts, throttling, internal errors). Used as the predicate for
 // retry.OnError in stress helpers.
 func isRetryable(err error) bool {
+	// IsNotFound is retryable because in tests the API server's admission
+	// controller namespace cache may not have caught up yet after a namespace
+	// is created, causing namespaced creates to transiently return NotFound.
 	return errors.IsNotFound(err) ||
 		errors.IsTimeout(err) ||
 		errors.IsServerTimeout(err) ||
