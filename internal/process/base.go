@@ -107,6 +107,9 @@ func (b *BaseProcess) IsStarted() bool {
 // Returns ErrAlreadyStarted if the process is already running. Callers must
 // Stop and Close the process before calling SetupAndStart again.
 func (b *BaseProcess) SetupAndStart(cmd *exec.Cmd, dataDir string) error {
+	if cmd == nil {
+		return errors.New("cmd must not be nil")
+	}
 	if dataDir == "" {
 		return errors.New("data directory must not be empty")
 	}
