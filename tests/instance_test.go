@@ -161,22 +161,36 @@ func TestAPIServerOnlyMode(t *testing.T) {
 
 	nsName := testutil.UniqueName("test-api-only")
 
-	t.Run("NamespaceOperations", func(t *testing.T) {
-		ns := &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nsName,
-			},
-		}
-		_, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-		if err != nil {
-			t.Fatalf("Failed to create namespace: %v", err)
-		}
+	// Create the namespace at the parent test level so all subtests can depend
+	// on it. If this fails, t.Fatal stops the entire test and no subtest runs
+	// with a missing namespace.
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nsName,
+		},
+	}
+	_, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create namespace: %v", err)
+	}
 
+	t.Run("NamespaceOperations", func(t *testing.T) {
 		nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			t.Fatalf("Failed to list namespaces: %v", err)
 		}
-		t.Logf("Listed %d namespaces", len(nsList.Items))
+		found := false
+		for _, item := range nsList.Items {
+			if item.Name == nsName {
+				found = true
+
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Expected namespace %s in list, but not found", nsName)
+		}
+		t.Logf("Listed %d namespaces, found %s", len(nsList.Items), nsName)
 	})
 
 	t.Run("ConfigMapOperations", func(t *testing.T) {
