@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/giantswarm/k8senv/internal/sentinel"
@@ -69,6 +70,7 @@ type parsedDoc struct {
 // The mapper is refreshed on demand when a NoKindMatch error indicates
 // the cache is stale (e.g., after applying a CRD that registers a new type).
 type discoveryMapper struct {
+	mu         sync.RWMutex
 	mapper     meta.RESTMapper
 	discClient discovery.DiscoveryInterface
 }
@@ -84,13 +86,26 @@ func newDiscoveryMapper(discClient discovery.DiscoveryInterface) (*discoveryMapp
 	return dm, nil
 }
 
+// RESTMapping resolves the REST mapping for a GroupKind under the read lock,
+// allowing concurrent lookups while refresh holds the write lock.
+func (dm *discoveryMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+
+	return dm.mapper.RESTMapping(gk, versions...)
+}
+
 // refresh rebuilds the cached RESTMapper from live API server discovery.
 func (dm *discoveryMapper) refresh() error {
 	gr, err := restmapper.GetAPIGroupResources(dm.discClient)
 	if err != nil {
 		return fmt.Errorf("get api groups: %w", err)
 	}
+
+	dm.mu.Lock()
 	dm.mapper = restmapper.NewDiscoveryRESTMapper(gr)
+	dm.mu.Unlock()
+
 	return nil
 }
 
@@ -318,7 +333,7 @@ func discoverRESTMapping(
 	gvk schema.GroupVersionKind,
 ) (*meta.RESTMapping, error) {
 	// Fast path: try the cached mapper without any HTTP calls.
-	mapping, err := dm.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	mapping, err := dm.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err == nil {
 		return mapping, nil
 	}
@@ -340,7 +355,7 @@ func discoverRESTMapping(
 			return nil, err
 		}
 
-		mapping, err := dm.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+		mapping, err := dm.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err == nil {
 			return mapping, nil
 		}
