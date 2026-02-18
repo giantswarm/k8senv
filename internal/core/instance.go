@@ -243,11 +243,12 @@ func (i *Instance) Start(ctx context.Context) error {
 	return i.doStart(ctx)
 }
 
-// doStart performs a single startup attempt. On success it sets stack and
-// cancel under startMu, then publishes started=true via an atomic store.
-// The atomic store provides a happens-before edge: any goroutine that
-// observes started==true is guaranteed to see the stack/cancel writes
-// that preceded the store (Go memory model §sync/atomic).
+// doStart performs the startup sequence with retries for namespace readiness.
+// On success it sets stack and cancel under startMu, then publishes
+// started=true via an atomic store. The atomic store provides a
+// happens-before edge: any goroutine that observes started==true is
+// guaranteed to see the stack/cancel writes that preceded the store
+// (Go memory model §sync/atomic).
 func (i *Instance) doStart(ctx context.Context) error {
 	startTime := time.Now()
 	i.log.Debug("starting instance", "time", startTime.Format("15:04:05.000"))
@@ -260,76 +261,97 @@ func (i *Instance) doStart(ctx context.Context) error {
 
 	var lastNSErr error
 	for attempt := 1; attempt <= maxNamespaceRetries; attempt++ {
-		// Create process context just before starting processes.
-		// Using Background so processes survive beyond the Acquire() call.
-		// The passed ctx is only used for startup timeouts (readiness checks).
-		processCtx, cancel := context.WithCancel(context.Background())
-
-		// Create and start stack with retry logic for transient port conflicts.
-		// Each retry creates a fresh kubestack with new port allocations.
-		stack, err := kubestack.StartWithRetry(processCtx, ctx, kubestack.Config{
-			DataDir:               i.dataDir,
-			SQLitePath:            i.sqlitePath,
-			KubeconfigPath:        i.kubeconfig,
-			KineBinary:            i.cfg.KineBinary,
-			APIServerBinary:       i.cfg.KubeAPIServerBinary,
-			CachedDBPath:          i.cfg.CachedDBPath,
-			KineReadyTimeout:      i.cfg.StartTimeout,
-			APIServerReadyTimeout: i.cfg.StartTimeout,
-			PortRegistry:          i.ports,
-			Logger:                i.log,
-		}, i.cfg.MaxStartRetries, i.cfg.StopTimeout)
-		if err != nil {
-			cancel()
-			// StartWithRetry already exhausted its internal retries for port
-			// conflicts — no point retrying at this level.
-			return fmt.Errorf("start kubestack: %w", err)
-		}
-
-		// Wait for all system namespaces to exist before marking started.
-		// /livez returns 200 before the namespace controller creates them;
-		// this closes that gap (~10-50ms) so consumers never see missing namespaces.
-		if err := i.waitForSystemNamespaces(ctx); err != nil {
-			cancel()
-			if stopErr := stack.Stop(i.cfg.StopTimeout); stopErr != nil {
-				i.log.Warn("cleanup stack after namespace wait failure", "error", stopErr)
+		done, err := i.tryStartAttempt(ctx, attempt)
+		if done {
+			if err == nil {
+				i.log.Debug("instance started successfully", "total_elapsed", time.Since(startTime))
 			}
-			// Clear stale state from the failed attempt — the old apiserver
-			// ports are gone, so cached configs and clients are invalid.
-			i.cleanupClient.Store(nil)
-			i.cachedConfig.Store(nil)
-			i.discoveryClient.Store(nil)
-			i.dynamicClient.Store(nil)
-			i.cachedGVRs.Store(nil)
-
-			lastNSErr = err
-			if attempt < maxNamespaceRetries {
-				i.log.Warn("system namespace timeout, retrying instance start",
-					"attempt", attempt,
-					"max_retries", maxNamespaceRetries,
-					"error", err,
-				)
-				continue
-			}
-			// Final attempt exhausted — fall through to return error.
-			break
+			return err
 		}
-
-		// Install process handles under startMu (already held by caller),
-		// then publish started=true. The atomic store creates a happens-before
-		// edge so any reader that sees started==true also sees stack/cancel.
-		i.cancel = cancel
-		i.stack = stack
-		i.started.Store(true)
-
-		if attempt > 1 {
-			i.log.Info("instance started after namespace retry", "attempt", attempt)
-		}
-		i.log.Debug("instance started successfully", "total_elapsed", time.Since(startTime))
-		return nil
+		// Retryable namespace failure — record and continue.
+		lastNSErr = err
 	}
 
 	return fmt.Errorf("wait for system namespaces: %w", lastNSErr)
+}
+
+// tryStartAttempt performs a single start-and-verify cycle. It launches the
+// kubestack, then waits for system namespaces to appear. The return values
+// tell the caller how to proceed:
+//   - (true, nil): success — instance is started and ready.
+//   - (true, err): fatal error — stop retrying.
+//   - (false, err): retryable failure — caller should try again.
+func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, error) {
+	// Create process context just before starting processes.
+	// Using Background so processes survive beyond the Acquire() call.
+	// The passed ctx is only used for startup timeouts (readiness checks).
+	processCtx, cancel := context.WithCancel(context.Background())
+
+	// Create and start stack with retry logic for transient port conflicts.
+	// Each retry creates a fresh kubestack with new port allocations.
+	stack, err := kubestack.StartWithRetry(processCtx, ctx, kubestack.Config{
+		DataDir:               i.dataDir,
+		SQLitePath:            i.sqlitePath,
+		KubeconfigPath:        i.kubeconfig,
+		KineBinary:            i.cfg.KineBinary,
+		APIServerBinary:       i.cfg.KubeAPIServerBinary,
+		CachedDBPath:          i.cfg.CachedDBPath,
+		KineReadyTimeout:      i.cfg.StartTimeout,
+		APIServerReadyTimeout: i.cfg.StartTimeout,
+		PortRegistry:          i.ports,
+		Logger:                i.log,
+	}, i.cfg.MaxStartRetries, i.cfg.StopTimeout)
+	if err != nil {
+		cancel()
+		// StartWithRetry already exhausted its internal retries for port
+		// conflicts — no point retrying at this level.
+		return true, fmt.Errorf("start kubestack: %w", err)
+	}
+
+	// Wait for all system namespaces to exist before marking started.
+	// /livez returns 200 before the namespace controller creates them;
+	// this closes that gap (~10-50ms) so consumers never see missing namespaces.
+	if err := i.waitForSystemNamespaces(ctx); err != nil {
+		i.teardownFailedAttempt(cancel, stack, attempt, err)
+		return false, err
+	}
+
+	// Install process handles under startMu (already held by caller),
+	// then publish started=true. The atomic store creates a happens-before
+	// edge so any reader that sees started==true also sees stack/cancel.
+	i.cancel = cancel
+	i.stack = stack
+	i.started.Store(true)
+
+	if attempt > 1 {
+		i.log.Info("instance started after namespace retry", "attempt", attempt)
+	}
+	return true, nil
+}
+
+// teardownFailedAttempt cleans up after a failed namespace wait: cancels the
+// process context, stops the stack, and clears cached clients that reference
+// the now-defunct API server ports.
+func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubestack.Stack, attempt int, err error) {
+	cancel()
+	if stopErr := stack.Stop(i.cfg.StopTimeout); stopErr != nil {
+		i.log.Warn("cleanup stack after namespace wait failure", "error", stopErr)
+	}
+	// Clear stale state from the failed attempt — the old apiserver
+	// ports are gone, so cached configs and clients are invalid.
+	i.cleanupClient.Store(nil)
+	i.cachedConfig.Store(nil)
+	i.discoveryClient.Store(nil)
+	i.dynamicClient.Store(nil)
+	i.cachedGVRs.Store(nil)
+
+	if attempt < maxNamespaceRetries {
+		i.log.Warn("system namespace timeout, retrying instance start",
+			"attempt", attempt,
+			"max_retries", maxNamespaceRetries,
+			"error", err,
+		)
+	}
 }
 
 // getOrBuildRestConfig returns a copy of the cached rest.Config, or builds one
