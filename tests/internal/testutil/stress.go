@@ -78,10 +78,11 @@ func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.
 	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr //nolint:wrapcheck // retry.OnError needs unwrapped error for predicate check
+			return createErr
 		}
 		if created.Name != name {
-			t.Fatalf("Namespace name mismatch: want %s, got %s", name, created.Name)
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
+			return fmt.Errorf("namespace name mismatch: want %s, got %s", name, created.Name)
 		}
 		return nil
 	})
@@ -142,7 +143,8 @@ func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.
 			return createErr
 		}
 		if created.Name != name {
-			t.Fatalf("ConfigMap name mismatch: want %s, got %s", name, created.Name)
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
+			return fmt.Errorf("configmap name mismatch: want %s, got %s", name, created.Name)
 		}
 		return nil
 	})
@@ -169,7 +171,8 @@ func StressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Int
 			return createErr
 		}
 		if created.Name != name {
-			t.Fatalf("Secret name mismatch: want %s, got %s", name, created.Name)
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
+			return fmt.Errorf("secret name mismatch: want %s, got %s", name, created.Name)
 		}
 		return nil
 	})
@@ -202,7 +205,8 @@ func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 			return createErr
 		}
 		if created.Name != name {
-			t.Fatalf("Service name mismatch: want %s, got %s", name, created.Name)
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
+			return fmt.Errorf("service name mismatch: want %s, got %s", name, created.Name)
 		}
 		return nil
 	})
@@ -234,7 +238,8 @@ func StressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interf
 			return createErr
 		}
 		if created.Name != name {
-			t.Fatalf("Pod name mismatch: want %s, got %s", name, created.Name)
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
+			return fmt.Errorf("pod name mismatch: want %s, got %s", name, created.Name)
 		}
 		return nil
 	})
@@ -258,7 +263,8 @@ func StressCreateServiceAccount(ctx context.Context, t *testing.T, client kubern
 			return createErr
 		}
 		if created.Name != name {
-			t.Fatalf("ServiceAccount name mismatch: want %s, got %s", name, created.Name)
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
+			return fmt.Errorf("serviceaccount name mismatch: want %s, got %s", name, created.Name)
 		}
 		return nil
 	})
