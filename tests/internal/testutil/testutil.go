@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/giantswarm/k8senv"
 	"k8s.io/client-go/kubernetes"
@@ -220,4 +221,73 @@ func RunTestMain(m *testing.M, mgr k8senv.Manager, tmpDir string) int {
 	_ = os.RemoveAll(tmpDir)
 
 	return code
+}
+
+// SetupAndRun handles the standard TestMain boilerplate: flag parsing, logging
+// setup, binary checks, temp dir creation, manager creation with
+// WithBaseDataDir and WithAcquireTimeout prepended, initialization, test
+// execution, and cleanup. The created manager is assigned to *mgr so tests can
+// reference it. This function calls os.Exit and never returns.
+//
+//nolint:gocritic // ptrToRefParam: pointer-to-interface needed to assign the created manager back to the caller's variable.
+func SetupAndRun(m *testing.M, mgr *k8senv.Manager, prefix string, opts ...k8senv.ManagerOption) {
+	SetupAndRunWithHook(m, mgr, prefix, nil, opts...)
+}
+
+// SetupHook is called after temp dir creation, allowing custom setup that
+// depends on the temp dir path. It returns additional manager options.
+type SetupHook func(tmpDir string) ([]k8senv.ManagerOption, error)
+
+// SetupAndRunWithHook is like SetupAndRun but calls hook after temp dir
+// creation, prepending the returned options before opts.
+//
+//nolint:gocritic // ptrToRefParam: pointer-to-interface needed to assign the created manager back to the caller's variable.
+func SetupAndRunWithHook(
+	m *testing.M,
+	mgr *k8senv.Manager,
+	prefix string,
+	hook SetupHook,
+	opts ...k8senv.ManagerOption,
+) {
+	flag.Parse()
+	SetupTestLogging()
+	RequireBinariesOrExit()
+
+	tmpDir, err := os.MkdirTemp("", prefix)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+
+	baseOpts := []k8senv.ManagerOption{
+		k8senv.WithBaseDataDir(tmpDir),
+		k8senv.WithAcquireTimeout(5 * time.Minute),
+	}
+
+	if hook != nil {
+		extra, hookErr := hook(tmpDir)
+		if hookErr != nil {
+			fmt.Fprintf(os.Stderr, "setup hook failed: %v\n", hookErr)
+			os.Exit(1)
+		}
+
+		baseOpts = append(baseOpts, extra...)
+	}
+
+	baseOpts = append(baseOpts, opts...)
+
+	created := k8senv.NewManager(baseOpts...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	if initErr := created.Initialize(ctx); initErr != nil {
+		cancel()
+		fmt.Fprintf(os.Stderr, "Initialize failed: %v\n", initErr)
+		os.Exit(1)
+	}
+
+	cancel()
+
+	*mgr = created
+
+	os.Exit(RunTestMain(m, created, tmpDir))
 }
