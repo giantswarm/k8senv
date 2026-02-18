@@ -167,7 +167,7 @@ linters:
       min-occurrences: 3
 
     dupl:
-      threshold: 150
+      threshold: 100
 
     gocritic:
       enabled-tags:
@@ -264,7 +264,7 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # Exclude some linters from running on test files
+      # Exclude some linters from running on test files and test helpers
       - linters:
           - dupl
           - forcetypeassert
@@ -272,7 +272,7 @@ linters:
           - goconst
           - gocyclo
           - unparam
-        path: _test\.go
+        path: (_test\.go|^tests/)
 
       # TestParallelAcquisition is intentionally complex (parallel test orchestration)
       - linters:

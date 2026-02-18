@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // systemNamespaceCount is the number of namespaces created by kube-apiserver
@@ -454,97 +455,86 @@ func (i *Instance) deleteResourceItem(
 	}
 }
 
+// getOrBuildCachedClient deduplicates the cache-check → build-config →
+// create-client → CAS-store pattern shared by the three cleanup client
+// builders. It checks the cache first, builds a high-QPS rest.Config if
+// needed, calls build to create the client, and stores it via CAS.
+func getOrBuildCachedClient[T any](
+	i *Instance,
+	get func(*clientCache) T,
+	isNil func(T) bool,
+	build func(*rest.Config) (T, error),
+	set func(*clientCache, T),
+	name string,
+) (T, error) {
+	if cache := i.clients.Load(); cache != nil {
+		if v := get(cache); !isNil(v) {
+			return v, nil
+		}
+	}
+
+	cfg, err := i.getOrBuildRestConfig()
+	if err != nil {
+		var zero T
+		return zero, fmt.Errorf("build config for %s: %w", name, err)
+	}
+	cfg.QPS = 10_000
+	cfg.Burst = 10_000
+
+	v, err := build(cfg)
+	if err != nil {
+		var zero T
+		return zero, fmt.Errorf("create %s: %w", name, err)
+	}
+
+	i.casClientCache(func(cc *clientCache) *clientCache {
+		if !isNil(get(cc)) {
+			return nil // another goroutine won the race
+		}
+		updated := *cc
+		set(&updated, v)
+		return &updated
+	})
+	// Return the locally-built client directly instead of re-reading from
+	// i.clients.Load(), which could race with a concurrent Stop() that
+	// stores nil between the CAS and the Load.
+	return v, nil
+}
+
 // getOrBuildCleanupClient returns the cached cleanup client or creates one.
 // It effectively disables client-side rate limiting (QPS=10000, Burst=10000)
 // because the client only targets a local, ephemeral kube-apiserver — no
 // shared infrastructure can be overwhelmed.
 func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
-	if cache := i.clients.Load(); cache != nil && cache.cleanup != nil {
-		return cache.cleanup, nil
-	}
-	cfg, err := i.getOrBuildRestConfig()
-	if err != nil {
-		return nil, fmt.Errorf("build config for cleanup client: %w", err)
-	}
-	cfg.QPS = 10_000
-	cfg.Burst = 10_000
-
-	c, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cleanup client: %w", err)
-	}
-	i.casClientCache(func(cc *clientCache) *clientCache {
-		if cc.cleanup != nil {
-			return nil // another goroutine won the race
-		}
-		updated := *cc
-		updated.cleanup = c
-		return &updated
-	})
-	// Return the locally-built client directly instead of re-reading from
-	// i.clients.Load(), which could race with a concurrent Stop() that
-	// stores nil between the CAS and the Load.
-	return c, nil
+	return getOrBuildCachedClient(i,
+		func(cc *clientCache) *kubernetes.Clientset { return cc.cleanup },
+		func(c *kubernetes.Clientset) bool { return c == nil },
+		kubernetes.NewForConfig,
+		func(cc *clientCache, c *kubernetes.Clientset) { cc.cleanup = c },
+		"cleanup client",
+	)
 }
 
 // getOrBuildDiscoveryClient returns the cached discovery client or creates one.
 func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, error) {
-	if cache := i.clients.Load(); cache != nil && cache.discovery != nil {
-		return cache.discovery, nil
-	}
-	cfg, err := i.getOrBuildRestConfig()
-	if err != nil {
-		return nil, fmt.Errorf("build config for discovery client: %w", err)
-	}
-	cfg.QPS = 10_000
-	cfg.Burst = 10_000
-
-	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create discovery client: %w", err)
-	}
-	i.casClientCache(func(cc *clientCache) *clientCache {
-		if cc.discovery != nil {
-			return nil // another goroutine won the race
-		}
-		updated := *cc
-		updated.discovery = dc
-		return &updated
-	})
-	// Return the locally-built client directly instead of re-reading from
-	// i.clients.Load(), which could race with a concurrent Stop() that
-	// stores nil between the CAS and the Load.
-	return dc, nil
+	return getOrBuildCachedClient(i,
+		func(cc *clientCache) *discovery.DiscoveryClient { return cc.discovery },
+		func(c *discovery.DiscoveryClient) bool { return c == nil },
+		discovery.NewDiscoveryClientForConfig,
+		func(cc *clientCache, c *discovery.DiscoveryClient) { cc.discovery = c },
+		"discovery client",
+	)
 }
 
 // getOrBuildDynamicClient returns the cached dynamic client or creates one.
 func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
-	if cache := i.clients.Load(); cache != nil && cache.dynamic != nil {
-		return cache.dynamic, nil
-	}
-	cfg, err := i.getOrBuildRestConfig()
-	if err != nil {
-		return nil, fmt.Errorf("build config for dynamic client: %w", err)
-	}
-	cfg.QPS = 10_000
-	cfg.Burst = 10_000
-
-	dc, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-	i.casClientCache(func(cc *clientCache) *clientCache {
-		if cc.dynamic != nil {
-			return nil // another goroutine won the race
-		}
-		updated := *cc
-		updated.dynamic = dc
-		return &updated
-	})
-	// Return the locally-built client directly instead of re-reading from
-	// i.clients.Load(), which could race with a concurrent Stop() that
-	// stores nil between the CAS and the Load.
-	return dc, nil
+	return getOrBuildCachedClient(i,
+		func(cc *clientCache) *dynamic.DynamicClient { return cc.dynamic },
+		func(c *dynamic.DynamicClient) bool { return c == nil },
+		dynamic.NewForConfig,
+		func(cc *clientCache, c *dynamic.DynamicClient) { cc.dynamic = c },
+		"dynamic client",
+	)
 }
 
 // listUserNamespaces returns the names of all non-system namespaces on the
