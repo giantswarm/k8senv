@@ -151,17 +151,20 @@ func setupSharedCRDDir(baseDir string) (string, error) {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
 
-	files := map[string]string{
-		"widget-crd.yaml":  sampleCRDWidget,
-		"gadget-crd.yaml":  sampleCRDGadget,
-		"gizmo-crd.yaml":   sampleCRDGizmo,
-		"multi.yaml":       sampleMultiDoc,
-		"sprocket-crd.yml": sampleCRDSprocket, // exercises .yml extension
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"widget-crd.yaml", sampleCRDWidget},
+		{"gadget-crd.yaml", sampleCRDGadget},
+		{"gizmo-crd.yaml", sampleCRDGizmo},
+		{"multi.yaml", sampleMultiDoc},
+		{"sprocket-crd.yml", sampleCRDSprocket}, // exercises .yml extension
 	}
 
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(crdDir, name), []byte(content), 0o644); err != nil {
-			return "", fmt.Errorf("write %s: %w", name, err)
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(crdDir, f.name), []byte(f.content), 0o644); err != nil {
+			return "", fmt.Errorf("write %s: %w", f.name, err)
 		}
 	}
 
