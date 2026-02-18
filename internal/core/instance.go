@@ -504,20 +504,34 @@ func (i *Instance) Release(token uint64) error {
 			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
 			defer cleanCancel()
 
-			err := i.cleanNamespacedResources(cleanCtx)
+			// Fast path: skip the expensive resource sweep (~20+ cluster-wide
+			// List calls) when no user namespaces exist. This is common when
+			// tests use unique namespaces that were already cleaned up, or when
+			// no resources were created at all.
+			hasUser, err := i.hasUserNamespaces(cleanCtx)
 			if err != nil {
-				cleanupErr := fmt.Errorf("resource cleanup during release: %w", err)
+				cleanupErr := fmt.Errorf("user namespace check during release: %w", err)
 				i.setErr(cleanupErr)
 				i.releaser.ReleaseFailed(i, token)
 				return cleanupErr
 			}
 
-			err = i.cleanNamespaces(cleanCtx)
-			if err != nil {
-				cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
-				i.setErr(cleanupErr)
-				i.releaser.ReleaseFailed(i, token)
-				return cleanupErr
+			if hasUser {
+				err = i.cleanNamespacedResources(cleanCtx)
+				if err != nil {
+					cleanupErr := fmt.Errorf("resource cleanup during release: %w", err)
+					i.setErr(cleanupErr)
+					i.releaser.ReleaseFailed(i, token)
+					return cleanupErr
+				}
+
+				err = i.cleanNamespaces(cleanCtx)
+				if err != nil {
+					cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
+					i.setErr(cleanupErr)
+					i.releaser.ReleaseFailed(i, token)
+					return cleanupErr
+				}
 			}
 		}
 

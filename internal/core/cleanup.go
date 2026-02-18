@@ -451,6 +451,42 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	return dc, nil
 }
 
+// hasUserNamespaces reports whether any non-system namespaces exist on the
+// instance's kube-apiserver. It reuses the cached cleanup client (or builds one)
+// and is designed as a cheap pre-check before the expensive resource sweep in
+// cleanNamespacedResources.
+func (i *Instance) hasUserNamespaces(ctx context.Context) (bool, error) {
+	client := i.cleanupClient.Load()
+	if client == nil {
+		cfg, err := i.getOrBuildRestConfig()
+		if err != nil {
+			return false, fmt.Errorf("build kubeconfig for user namespace check: %w", err)
+		}
+
+		// Disable client-side rate limiting for the local ephemeral API server.
+		cfg.QPS = -1
+
+		var clientErr error
+		client, clientErr = kubernetes.NewForConfig(cfg)
+		if clientErr != nil {
+			return false, fmt.Errorf("create client for user namespace check: %w", clientErr)
+		}
+		i.cleanupClient.Store(client)
+	}
+
+	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, fmt.Errorf("list namespaces for user namespace check: %w", err)
+	}
+
+	for idx := range nsList.Items {
+		if _, ok := systemNamespaces[nsList.Items[idx].Name]; !ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // deleteAndFinalizeNamespace deletes a namespace and clears its finalizers via
 // the Finalize subresource. In API-only mode the kubernetes finalizer is always
 // present, so we construct a minimal namespace object directly instead of
