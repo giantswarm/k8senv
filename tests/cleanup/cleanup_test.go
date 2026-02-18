@@ -70,14 +70,8 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 	ctx := context.Background()
 
 	// Acquire an instance and create user namespaces.
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
-	released := false
-	defer func() {
-		if !released {
-			inst.Release() //nolint:errcheck,gosec // safety net on test failure
-		}
-	}()
 
 	userNS := []string{
 		testutil.UniqueNS("cleanup-a"),
@@ -99,10 +93,7 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 	}
 
 	// Release — cleanup runs (ReleaseClean strategy), instance returns to pool.
-	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() should succeed: %v", err)
-	}
-	released = true
+	release()
 
 	// Re-acquire. The pool is LIFO, so we expect the same instance back
 	// (no other test should be using this specific instance since we just
@@ -198,14 +189,8 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
-	released := false
-	defer func() {
-		if !released {
-			inst.Release() //nolint:errcheck,gosec // safety net on test failure
-		}
-	}()
 
 	nsName := testutil.UniqueNS("res-cleanup")
 	createNamespace(ctx, t, client, nsName)
@@ -228,10 +213,7 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	}
 
 	// Release and re-acquire.
-	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() failed: %v", err)
-	}
-	released = true
+	release()
 
 	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
@@ -285,14 +267,8 @@ func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
-	released := false
-	defer func() {
-		if !released {
-			inst.Release() //nolint:errcheck,gosec // safety net on test failure
-		}
-	}()
 
 	nsName := testutil.UniqueNS("finalizer-cleanup")
 	createNamespace(ctx, t, client, nsName)
@@ -311,10 +287,7 @@ func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 	}
 
 	// Release and re-acquire.
-	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() failed: %v", err)
-	}
-	released = true
+	release()
 
 	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
@@ -347,14 +320,8 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
-	released := false
-	defer func() {
-		if !released {
-			inst.Release() //nolint:errcheck,gosec // safety net on test failure
-		}
-	}()
 
 	// Create a ConfigMap in kube-system.
 	cmName := testutil.UniqueNS("sys-cm")
@@ -370,10 +337,7 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	userNS := testutil.UniqueNS("trigger-cleanup")
 	createNamespace(ctx, t, client, userNS)
 
-	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() failed: %v", err)
-	}
-	released = true
+	release()
 
 	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {

@@ -111,6 +111,47 @@ func AcquireWithClient(ctx context.Context, t *testing.T, mgr k8senv.Manager) (k
 	return inst, client
 }
 
+// AcquireWithGuardedRelease acquires an instance and client, then registers a
+// deferred safety-net release that only fires if the caller has not already
+// released the instance explicitly. It returns the instance, client, and a
+// release function. Calling the release function performs the explicit release
+// and disarms the safety net; subsequent calls to the release function are
+// no-ops. The test fails immediately if the explicit release returns an error.
+//
+//nolint:ireturn // Test helper returns Instance and kubernetes.Interface matching the public API.
+func AcquireWithGuardedRelease(
+	ctx context.Context,
+	t *testing.T,
+	mgr k8senv.Manager,
+) (k8senv.Instance, kubernetes.Interface, func()) {
+	t.Helper()
+
+	inst, client := AcquireWithClient(ctx, t, mgr)
+
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			inst.Release() //nolint:errcheck,gosec // safety net on test failure
+		}
+	})
+
+	release := func() {
+		t.Helper()
+
+		if released {
+			return
+		}
+
+		if err := inst.Release(); err != nil {
+			t.Fatalf("Release() failed: %v", err)
+		}
+
+		released = true
+	}
+
+	return inst, client, release
+}
+
 // SetupTestLogging configures slog based on the K8SENV_LOG_LEVEL environment variable.
 // This only affects test runs - the library itself inherits the application's logging config.
 func SetupTestLogging() {
