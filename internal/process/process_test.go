@@ -11,24 +11,26 @@ import (
 func TestExpectSignalExit(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
+	type testCase struct {
 		err     error
+		signal  syscall.Signal
 		wantErr bool
-	}{
+	}
+
+	tests := map[string]testCase{
 		"nil error returns nil": {
-			err:     nil,
 			wantErr: false,
 		},
 		"SIGTERM exit is expected": {
-			err:     makeSignalExitError(syscall.SIGTERM),
+			signal:  syscall.SIGTERM,
 			wantErr: false,
 		},
 		"SIGKILL exit is expected": {
-			err:     makeSignalExitError(syscall.SIGKILL),
+			signal:  syscall.SIGKILL,
 			wantErr: false,
 		},
 		"other signal is unexpected": {
-			err:     makeSignalExitError(syscall.SIGINT),
+			signal:  syscall.SIGINT,
 			wantErr: true,
 		},
 		"non-ExitError is unexpected": {
@@ -40,7 +42,13 @@ func TestExpectSignalExit(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got := expectSignalExit(tc.err, "test-proc")
+
+			inputErr := tc.err
+			if inputErr == nil && tc.signal != 0 {
+				inputErr = makeSignalExitError(t, tc.signal)
+			}
+
+			got := expectSignalExit(inputErr, "test-proc")
 
 			if tc.wantErr && got == nil {
 				t.Fatal("expected error, got nil")
@@ -283,20 +291,28 @@ func (f *fakeStoppable) Close() {
 
 // makeSignalExitError creates an *exec.ExitError with the given signal.
 // It uses a real process to generate an authentic WaitStatus.
-// Panics if the process cannot be started or does not produce an ExitError,
-// since both conditions indicate a broken test environment.
-func makeSignalExitError(sig syscall.Signal) *exec.ExitError {
+// Calls t.Fatalf if the process cannot be started, signaled, or does not
+// produce an ExitError, since all conditions indicate a broken test environment.
+func makeSignalExitError(tb testing.TB, sig syscall.Signal) *exec.ExitError {
+	tb.Helper()
+
 	cmd := exec.Command("sleep", "60")
 	if err := cmd.Start(); err != nil {
-		panic("test setup: start sleep: " + err.Error())
+		tb.Fatalf("test setup: start sleep: %v", err)
 	}
 
-	_ = cmd.Process.Signal(sig)
+	if err := cmd.Process.Signal(sig); err != nil {
+		// Kill the process to avoid leaking it, then fail.
+		_ = cmd.Process.Kill() // best-effort cleanup
+		tb.Fatalf("test setup: signal process with %v: %v", sig, err)
+	}
+
 	err := cmd.Wait()
 
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
-		panic("test setup: expected *exec.ExitError from signaled process")
+		tb.Fatalf("test setup: expected *exec.ExitError from signaled process, got %v", err)
 	}
+
 	return exitErr
 }
