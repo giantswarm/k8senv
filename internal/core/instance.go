@@ -409,6 +409,13 @@ func (i *Instance) Stop(ctx context.Context) error {
 		return fmt.Errorf("stop instance: %w", err)
 	}
 
+	// NOTE: startMu.Lock is not context-aware — it blocks until the mutex
+	// is available regardless of ctx cancellation. A concurrent Start holds
+	// this mutex for the entire startup sequence, so Stop may block here
+	// longer than the caller's context deadline. This is acceptable because
+	// the alternative (select on ctx.Done + TryLock loop) would add
+	// significant complexity for a scenario that only arises when Start and
+	// Stop race, which the pool layer already prevents.
 	i.startMu.Lock()
 	defer i.startMu.Unlock()
 

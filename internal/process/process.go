@@ -137,6 +137,11 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 
 	// Schedule SIGKILL after the grace period. If the process exits before
 	// the grace period, killTimer.Stop() cancels the escalation.
+	//
+	// grace is clamped to timeout so SIGKILL always fires before the total
+	// timeout expires. This guarantees the process receives a kill signal
+	// while totalTimer is still running, giving drainDone a window to
+	// collect the exit status rather than hitting the timeout path.
 	grace := min(termGracePeriod, timeout)
 	killTimer := time.AfterFunc(grace, func() {
 		// Kill after Wait (process already exited) is a no-op that returns

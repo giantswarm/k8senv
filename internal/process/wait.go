@@ -43,6 +43,10 @@ func WaitReady(ctx context.Context, cfg WaitReadyConfig, check ReadinessCheck) e
 		log = slog.Default()
 	}
 
+	// attempt is safe to increment without synchronization because
+	// PollUntilContextTimeout invokes the condition function sequentially:
+	// each call completes before the next is scheduled. The closure is
+	// never called concurrently with itself.
 	attempt := 0
 	if err := wait.PollUntilContextTimeout(ctx, cfg.Interval, cfg.Timeout, true,
 		func(pollCtx context.Context) (bool, error) {
