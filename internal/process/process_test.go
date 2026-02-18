@@ -70,7 +70,7 @@ func TestDrainDone_ReceivesValue(t *testing.T) {
 	done := make(chan error, 1)
 	done <- nil
 
-	ok, err := drainDone(done)
+	ok, err := drainDone(done, time.Second)
 	if !ok {
 		t.Fatal("expected ok=true when channel has a value")
 	}
@@ -86,7 +86,7 @@ func TestDrainDone_ReceivesError(t *testing.T) {
 	want := errors.New("process crashed")
 	done <- want
 
-	ok, err := drainDone(done)
+	ok, err := drainDone(done, time.Second)
 	if !ok {
 		t.Fatal("expected ok=true when channel has a value")
 	}
@@ -98,14 +98,15 @@ func TestDrainDone_ReceivesError(t *testing.T) {
 func TestDrainDone_TimesOutOnEmpty(t *testing.T) {
 	t.Parallel()
 
-	// Save and override the drain timeout for a fast test.
-	// drainDone uses killDrainTimeout which is a const.
-	// Instead, we test the behavior indirectly: an empty unbuffered
-	// channel will cause drainDone to wait for killDrainTimeout.
-	// Since killDrainTimeout is 10s and that's too long for a unit test,
-	// we skip this scenario and trust the select logic based on the
-	// above two passing tests. The timeout path is structurally identical.
-	t.Skip("skipping: killDrainTimeout is 10s; timeout path is structurally verified by other tests")
+	done := make(chan error) // unbuffered, never written to
+
+	ok, err := drainDone(done, 10*time.Millisecond)
+	if ok {
+		t.Fatal("expected ok=false when timeout elapses")
+	}
+	if err != nil {
+		t.Fatalf("expected nil error on timeout, got %v", err)
+	}
 }
 
 func TestNewBaseProcess(t *testing.T) {

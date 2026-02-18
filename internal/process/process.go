@@ -89,16 +89,16 @@ const termGracePeriod = 5 * time.Second
 // never returns (e.g., due to stuck I/O or kernel issues).
 const killDrainTimeout = 10 * time.Second
 
-// drainDone reads from the done channel with a hard upper bound of
-// killDrainTimeout. Under normal conditions cmd.Wait returns almost
-// immediately after the process exits, so this timeout should never
-// fire. It exists purely as a safety net to prevent indefinite blocking
-// if cmd.Wait hangs due to stuck I/O or kernel issues.
+// drainDone reads from the done channel with the given timeout as a hard
+// upper bound. Under normal conditions cmd.Wait returns almost immediately
+// after the process exits, so this timeout should never fire. It exists
+// purely as a safety net to prevent indefinite blocking if cmd.Wait hangs
+// due to stuck I/O or kernel issues.
 //
 // Returns true and the cmd.Wait error if the channel delivered in time,
 // or false and a nil error if the timeout elapsed.
-func drainDone(done <-chan error) (bool, error) {
-	t := time.NewTimer(killDrainTimeout)
+func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
+	t := time.NewTimer(timeout)
 	defer t.Stop()
 
 	select {
@@ -128,7 +128,7 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		// Process already exited; drain the wait goroutine with a hard
 		// upper bound to avoid blocking indefinitely.
-		ok, waitErr := drainDone(done)
+		ok, waitErr := drainDone(done, killDrainTimeout)
 		if !ok {
 			return fmt.Errorf("%s: timed out draining process after signal failure", name)
 		}
@@ -155,7 +155,7 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	case err := <-done:
 		return expectSignalExit(err, name)
 	case <-totalTimer.C:
-		ok, waitErr := drainDone(done)
+		ok, waitErr := drainDone(done, killDrainTimeout)
 		if !ok {
 			return fmt.Errorf("%s: timed out waiting for process to exit after SIGKILL", name)
 		}
