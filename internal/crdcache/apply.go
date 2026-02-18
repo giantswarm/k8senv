@@ -309,6 +309,10 @@ func applyParsedDocument(
 // runtime.missingKindErr.Error(). Used as a last-resort string check when
 // typed error unwrapping fails because upstream wrappers (YAMLSyntaxError,
 // JSON unmarshaler) do not implement Unwrap and use unexported inner fields.
+//
+// Last verified against k8s.io/apimachinery v0.35.1.
+// The canary test TestApplyMissingKindErrSubstring will fail if the upstream
+// message format changes in a future version.
 const missingKindErrSubstring = "Object 'Kind' is missing"
 
 // isMissingKindDecodeError reports whether a decode error indicates a missing
