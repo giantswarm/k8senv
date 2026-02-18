@@ -52,6 +52,7 @@ func computeDirHash(dirPath string) (string, []hashedFile, error) {
 
 		h.Write([]byte(relPath + "\x00")) // hash.Hash.Write never returns an error
 		h.Write(content)
+		h.Write([]byte{0}) // separator after content to prevent cross-file collisions
 
 		files = append(files, hashedFile{path: p, content: content})
 	}
