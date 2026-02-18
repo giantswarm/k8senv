@@ -51,27 +51,32 @@ func (c Config) stopTimeout() time.Duration {
 }
 
 // validate checks that all required Config fields are set and returns an error
-// describing the first missing or invalid field.
+// describing every violation found. It uses errors.Join to report multiple
+// issues at once, allowing callers to fix all problems in a single pass rather
+// than playing whack-a-mole with one error at a time.
 func (c Config) validate() error {
+	var errs []error
+
 	if c.CRDDir == "" {
-		return errors.New("crd dir must not be empty")
+		errs = append(errs, errors.New("crd dir must not be empty"))
 	}
 	if c.CacheDir == "" {
-		return errors.New("cache dir must not be empty")
+		errs = append(errs, errors.New("cache dir must not be empty"))
 	}
 	if c.KineBinary == "" {
-		return errors.New("kine binary path must not be empty")
+		errs = append(errs, errors.New("kine binary path must not be empty"))
 	}
 	if c.KubeAPIServerBinary == "" {
-		return errors.New("kube-apiserver binary path must not be empty")
+		errs = append(errs, errors.New("kube-apiserver binary path must not be empty"))
 	}
 	if c.Timeout <= 0 {
-		return errors.New("timeout must be positive")
+		errs = append(errs, errors.New("timeout must be positive"))
 	}
 	if c.PortRegistry == nil {
-		return errors.New("port registry must not be nil")
+		errs = append(errs, errors.New("port registry must not be nil"))
 	}
-	return nil
+
+	return errors.Join(errs...)
 }
 
 // Result contains the outcome of cache initialization.
