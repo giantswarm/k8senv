@@ -383,7 +383,7 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for CRDs to be established: %w", context.Cause(ctx))
+			return fmt.Errorf("waiting for CRDs to be established: %w", context.Cause(ctx))
 		case <-ticker.C:
 		}
 	}
