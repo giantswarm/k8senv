@@ -30,7 +30,7 @@ func TestStress(t *testing.T) {
 			namespaces := make([]string, 0, nsCount)
 
 			for n := range nsCount {
-				nsName := testutil.UniqueNS("stress")
+				nsName := testutil.UniqueName("stress")
 				testutil.StressCreateNamespace(ctx, t, client, nsName)
 				namespaces = append(namespaces, nsName)
 

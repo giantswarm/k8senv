@@ -97,7 +97,7 @@ k8senv/
 │   ├── lifecycle_test.go      # Initialize idempotent/concurrent
 │   ├── coverage_test.go       # Context cancel coverage
 │   └── internal/testutil/
-│       ├── testutil.go        # Shared helpers: UniqueNS, AcquireWithClient, RunTestMain
+│       ├── testutil.go        # Shared helpers: UniqueName, AcquireWithClient, RunTestMain
 │       └── stress.go          # Stress test helpers: random resource creation
 ├── tests/cleanup/             # Namespace cleanup tests (ReleaseClean strategy)
 │   ├── main_test.go           # TestMain: singleton with WithReleaseStrategy(ReleaseClean)
@@ -492,7 +492,7 @@ BaseProcess (embeddable)
 
 | Function | Purpose |
 |----------|---------|
-| `UniqueNS(prefix)` | Atomic counter for unique namespace names |
+| `UniqueName(prefix)` | Atomic counter for unique resource names |
 | `TestParallel()` | Returns effective `-test.parallel` value |
 | `AcquireWithClient(ctx, t, mgr)` | Acquires instance + creates k8s client |
 | `SetupTestLogging()` | Configures slog from `K8SENV_LOG_LEVEL` |
@@ -759,7 +759,7 @@ stateDiagram-v2
 
 **To change pool behavior**: Edit `internal/core/pool.go` — `Acquire`, `Release`, or `ReleaseFailed` methods.
 
-**To add an integration test**: Add to appropriate file in `tests/` with `//go:build integration` tag. Use `sharedManager.Acquire()`, `testutil.UniqueNS()`, `t.Parallel()`.
+**To add an integration test**: Add to appropriate file in `tests/` with `//go:build integration` tag. Use `sharedManager.Acquire()`, `testutil.UniqueName()`, `t.Parallel()`.
 
 **To add a strategy-specific test**: Create new package under `tests/[name]/` with `main_test.go` (configure strategy in TestMain) and `[name]_test.go`.
 

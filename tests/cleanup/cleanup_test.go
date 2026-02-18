@@ -74,9 +74,9 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 	instID := inst.ID()
 
 	userNS := []string{
-		testutil.UniqueNS("cleanup-a"),
-		testutil.UniqueNS("cleanup-b"),
-		testutil.UniqueNS("cleanup-c"),
+		testutil.UniqueName("cleanup-a"),
+		testutil.UniqueName("cleanup-b"),
+		testutil.UniqueName("cleanup-c"),
 	}
 	for _, name := range userNS {
 		createNamespace(ctx, t, client, name)
@@ -135,7 +135,7 @@ func TestReleasePreservesSystemNamespaces(t *testing.T) {
 
 	// Create a user namespace so cleanup actually runs (not just the fast path).
 	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
-	createNamespace(ctx, t, client, testutil.UniqueNS("preserve-test"))
+	createNamespace(ctx, t, client, testutil.UniqueName("preserve-test"))
 
 	if err := inst.Release(); err != nil {
 		t.Fatalf("Release() failed: %v", err)
@@ -192,7 +192,7 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
 
-	nsName := testutil.UniqueNS("res-cleanup")
+	nsName := testutil.UniqueName("res-cleanup")
 	createNamespace(ctx, t, client, nsName)
 
 	// Create resources in the namespace.
@@ -270,7 +270,7 @@ func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
 
-	nsName := testutil.UniqueNS("finalizer-cleanup")
+	nsName := testutil.UniqueName("finalizer-cleanup")
 	createNamespace(ctx, t, client, nsName)
 
 	// Create a ConfigMap and add a finalizer to it.
@@ -324,7 +324,7 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	instID := inst.ID()
 
 	// Create a ConfigMap in kube-system.
-	cmName := testutil.UniqueNS("sys-cm")
+	cmName := testutil.UniqueName("sys-cm")
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: "kube-system"},
 		Data:       map[string]string{"key": "preserved"},
@@ -334,7 +334,7 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	}
 
 	// Also create a user namespace so cleanup actually runs.
-	userNS := testutil.UniqueNS("trigger-cleanup")
+	userNS := testutil.UniqueName("trigger-cleanup")
 	createNamespace(ctx, t, client, userNS)
 
 	release()

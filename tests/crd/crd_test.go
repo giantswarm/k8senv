@@ -66,7 +66,7 @@ func TestCRDDirWithCRAndInstance(t *testing.T) {
 	}()
 
 	// Create a test namespace
-	nsName := testutil.UniqueNS("test-widgets")
+	nsName := testutil.UniqueName("test-widgets")
 	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
 	if _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create namespace: %v", err)
@@ -169,7 +169,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	}()
 
 	// Create a namespace for the CRD instance.
-	nsName := testutil.UniqueNS("crd-cleanup")
+	nsName := testutil.UniqueName("crd-cleanup")
 	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
 	if _, createErr := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); createErr != nil {
 		t.Fatalf("create namespace: %v", createErr)

@@ -159,7 +159,7 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		}
 	}()
 
-	nsName := testutil.UniqueNS("test-api-only")
+	nsName := testutil.UniqueName("test-api-only")
 
 	t.Run("NamespaceOperations", func(t *testing.T) {
 		ns := &v1.Namespace{

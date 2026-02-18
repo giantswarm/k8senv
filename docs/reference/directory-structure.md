@@ -172,7 +172,7 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `testutil.go` | `UniqueNS`, `AcquireWithClient`, `RunTestMain`, `SetupTestLogging` |
+| `testutil.go` | `UniqueName`, `AcquireWithClient`, `RunTestMain`, `SetupTestLogging` |
 | `stress.go` | Stress test helpers: `StressCreateRandomResource`, `StressSubtestCount` |
 
 ### Runtime Data Directory

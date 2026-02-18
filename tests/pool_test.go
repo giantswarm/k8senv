@@ -169,7 +169,7 @@ func TestParallelAcquisition(t *testing.T) {
 			t.Logf("Test %d: Successfully listed %d namespaces", i, len(namespaces.Items))
 
 			// Create a unique namespace for this test
-			nsName := testutil.UniqueNS(fmt.Sprintf("test-%d", i))
+			nsName := testutil.UniqueName(fmt.Sprintf("test-%d", i))
 			ns := &v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: nsName,

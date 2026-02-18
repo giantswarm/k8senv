@@ -44,14 +44,15 @@ func SystemNamespaces() map[string]struct{} {
 	return cp
 }
 
-// nsCounter is an atomic counter used by UniqueNS to generate namespace names
-// that are unique across parallel test goroutines.
-var nsCounter atomic.Int64
+// nameCounter is an atomic counter used by UniqueName to generate resource
+// names that are unique across parallel test goroutines.
+var nameCounter atomic.Int64
 
-// UniqueNS returns a namespace name that is unique across all parallel tests.
+// UniqueName returns a resource name that is unique across all parallel tests.
 // It combines the given prefix with a monotonically increasing counter value.
-func UniqueNS(prefix string) string {
-	return fmt.Sprintf("%s-%d", prefix, nsCounter.Add(1))
+// Use it for any Kubernetes resource name: namespaces, ConfigMaps, etc.
+func UniqueName(prefix string) string {
+	return fmt.Sprintf("%s-%d", prefix, nameCounter.Add(1))
 }
 
 // TestParallel returns the effective -test.parallel value for the current test
