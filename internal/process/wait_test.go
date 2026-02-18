@@ -8,6 +8,8 @@ import (
 )
 
 func TestWaitReady_ZeroInterval(t *testing.T) {
+	t.Parallel()
+
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 0,
 		Timeout:  5 * time.Second,
@@ -26,6 +28,8 @@ func TestWaitReady_ZeroInterval(t *testing.T) {
 }
 
 func TestWaitReady_NegativeInterval(t *testing.T) {
+	t.Parallel()
+
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: -1 * time.Second,
 		Timeout:  5 * time.Second,
@@ -44,6 +48,8 @@ func TestWaitReady_NegativeInterval(t *testing.T) {
 }
 
 func TestWaitReady_ZeroTimeout(t *testing.T) {
+	t.Parallel()
+
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 100 * time.Millisecond,
 		Timeout:  0,
@@ -62,6 +68,8 @@ func TestWaitReady_ZeroTimeout(t *testing.T) {
 }
 
 func TestWaitReady_NegativeTimeout(t *testing.T) {
+	t.Parallel()
+
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 100 * time.Millisecond,
 		Timeout:  -1 * time.Second,

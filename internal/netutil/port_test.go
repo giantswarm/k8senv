@@ -6,6 +6,8 @@ import (
 )
 
 func TestNewPortRegistry(t *testing.T) {
+	t.Parallel()
+
 	t.Run("nil logger uses default", func(t *testing.T) {
 		r := NewPortRegistry(nil)
 		if r == nil {
@@ -20,6 +22,8 @@ func TestNewPortRegistry(t *testing.T) {
 }
 
 func TestPortRegistry_reserve(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		setup      func(r *PortRegistry)
 		port       int
@@ -70,6 +74,8 @@ func TestPortRegistry_reserve(t *testing.T) {
 }
 
 func TestPortRegistry_Release(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		setup         func(r *PortRegistry)
 		port          int
@@ -127,6 +133,8 @@ func TestPortRegistry_Release(t *testing.T) {
 }
 
 func TestPortRegistry_reserveReleaseCycle(t *testing.T) {
+	t.Parallel()
+
 	r := NewPortRegistry(nil)
 
 	if !r.reserve(8080) {
