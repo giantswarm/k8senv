@@ -58,8 +58,8 @@ func (c Config) validate() error {
 	if c.SQLitePath == "" {
 		return errors.New("sqlite path must not be empty")
 	}
-	if c.Port <= 0 {
-		return errors.New("port must be positive")
+	if c.Port <= 0 || c.Port > 65535 {
+		return errors.New("port must be between 1 and 65535")
 	}
 	return nil
 }
