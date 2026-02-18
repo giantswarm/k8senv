@@ -26,7 +26,7 @@ import (
 // systemNamespaces is the set of namespaces created by kube-apiserver that
 // must survive cleanup. The authoritative source is internal/core/cleanup.go.
 //
-// KEEP IN SYNC with internal/core/cleanup.go:systemNamespaces.
+// KEEP IN SYNC with internal/core/cleanup.go:isSystemNamespace.
 // TestSystemNamespacesMatchAPIServer (in tests/cleanup/) verifies this set at
 // runtime against the namespaces that kube-apiserver actually creates on startup.
 var systemNamespaces = map[string]struct{}{

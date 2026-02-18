@@ -20,18 +20,21 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// systemNamespaces is the set of namespaces that must never be deleted during
-// cleanup. These are created by kube-apiserver itself and are required for the
-// instance to function correctly on reuse.
-//
-// This map is effectively immutable: it is initialized at package level and
-// never modified after program startup, so concurrent reads are safe without
-// synchronization.
-var systemNamespaces = map[string]struct{}{
-	"default":         {},
-	"kube-system":     {},
-	"kube-public":     {},
-	"kube-node-lease": {},
+// systemNamespaceCount is the number of namespaces created by kube-apiserver
+// that must never be deleted during cleanup. Keep in sync with
+// isSystemNamespace.
+const systemNamespaceCount = 4
+
+// isSystemNamespace reports whether name is a namespace created by
+// kube-apiserver that must never be deleted during cleanup. These namespaces
+// are required for the instance to function correctly on reuse.
+func isSystemNamespace(name string) bool {
+	switch name {
+	case "default", "kube-system", "kube-public", "kube-node-lease":
+		return true
+	default:
+		return false
+	}
 }
 
 // cleanupConfirmDelay is the short delay before a confirmation re-list when no
@@ -84,15 +87,15 @@ func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
 
 			found := 0
 			for idx := range nsList.Items {
-				if _, ok := systemNamespaces[nsList.Items[idx].Name]; ok {
+				if isSystemNamespace(nsList.Items[idx].Name) {
 					found++
 				}
 			}
-			if found >= len(systemNamespaces) {
+			if found >= systemNamespaceCount {
 				return true, nil
 			}
 
-			i.log.Debug("waiting for system namespaces", "found", found, "expected", len(systemNamespaces))
+			i.log.Debug("waiting for system namespaces", "found", found, "expected", systemNamespaceCount)
 			return false, nil
 		},
 	); err != nil {
@@ -152,7 +155,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context) error {
 		userNamespaces = userNamespaces[:0]
 		for idx := range nsList.Items {
 			name := nsList.Items[idx].Name
-			if _, ok := systemNamespaces[name]; !ok {
+			if !isSystemNamespace(name) {
 				userNamespaces = append(userNamespaces, name)
 			}
 		}
@@ -561,7 +564,7 @@ func (i *Instance) listUserNamespaces(ctx context.Context) ([]string, error) {
 
 	var names []string
 	for idx := range nsList.Items {
-		if _, ok := systemNamespaces[nsList.Items[idx].Name]; !ok {
+		if !isSystemNamespace(nsList.Items[idx].Name) {
 			names = append(names, nsList.Items[idx].Name)
 		}
 	}
