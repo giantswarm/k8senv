@@ -56,6 +56,18 @@ const (
 	// apiextensions.k8s.io/v1 mapping, so concurrent RESTMapping calls
 	// are safe reads on an immutable mapper.
 	crdApplyConcurrency = 10
+
+	// applyQPS is the client-go QPS override used when applying YAML
+	// documents to the local, ephemeral kube-apiserver during cache
+	// creation. The default client-go QPS of 5 is far too low for bulk
+	// CRD apply against a localhost server with no shared-infrastructure
+	// risk. 10 000 effectively disables client-side rate limiting.
+	applyQPS = 10_000
+
+	// applyBurst is the client-go burst override paired with applyQPS.
+	// Like applyQPS, the value effectively disables client-side rate
+	// limiting for the local cache-building phase.
+	applyBurst = 10_000
 )
 
 // parsedDoc holds a decoded YAML document ready for API server creation.
@@ -137,8 +149,8 @@ func applyYAMLFiles(
 	// server that has no shared-infrastructure risk. Copy the config
 	// to avoid mutating the caller's rest.Config.
 	applyCfg := rest.CopyConfig(restCfg)
-	applyCfg.QPS = 10_000
-	applyCfg.Burst = 10_000
+	applyCfg.QPS = applyQPS
+	applyCfg.Burst = applyBurst
 
 	// Create dynamic client
 	dynClient, err := dynamic.NewForConfig(applyCfg)
