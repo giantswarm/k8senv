@@ -6,7 +6,12 @@
 //
 // # Basic Usage
 //
-//	import "github.com/giantswarm/k8senv"
+//	import (
+//	    "context"
+//	    "log"
+//
+//	    "github.com/giantswarm/k8senv"
+//	)
 //
 //	ctx := context.Background()
 //

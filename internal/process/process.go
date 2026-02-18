@@ -139,6 +139,10 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	// the grace period, killTimer.Stop() cancels the escalation.
 	grace := min(termGracePeriod, timeout)
 	killTimer := time.AfterFunc(grace, func() {
+		// Kill after Wait (process already exited) is a no-op that returns
+		// an "os: process already finished" error, which we intentionally
+		// discard. This is safe because the OS has already released the
+		// process, and Kill on a finished process is explicitly harmless.
 		_ = cmd.Process.Kill()
 	})
 	// Safety: killTimer.Stop cancels the pending SIGKILL before this function

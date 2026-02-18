@@ -23,6 +23,10 @@ import (
 // systemNamespaces is the set of namespaces that must never be deleted during
 // cleanup. These are created by kube-apiserver itself and are required for the
 // instance to function correctly on reuse.
+//
+// This map is effectively immutable: it is initialized at package level and
+// never modified after program startup, so concurrent reads are safe without
+// synchronization.
 var systemNamespaces = map[string]struct{}{
 	"default":         {},
 	"kube-system":     {},

@@ -26,6 +26,7 @@ var (
 )
 
 // managerWrapper wraps core.Manager to implement the Manager interface.
+// It serves as the concrete singleton implementation returned by NewManager.
 // This allows returning Instance interface from Acquire instead of *core.Instance.
 //
 // The core.Manager is stored as a named (unexported) field rather than embedded

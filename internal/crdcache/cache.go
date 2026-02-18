@@ -186,6 +186,12 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 	// cancellation propagates to the temporary kube stack processes. Unlike
 	// long-lived pool instances (which use context.Background to outlive
 	// Acquire), this stack is ephemeral and must stop when the caller cancels.
+	//
+	// procCtx governs process lifetime (cancel = stop processes), while
+	// timeoutCtx (above) governs operation deadlines (API calls, polling).
+	// Both derive from the parent ctx but serve different purposes: procCtx
+	// is passed to StartWithRetry to control when processes are killed,
+	// whereas timeoutCtx gates how long we wait for readiness and CRD apply.
 	procCtx, procCancel := context.WithCancel(ctx)
 	defer procCancel()
 
