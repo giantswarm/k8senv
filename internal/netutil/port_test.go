@@ -56,6 +56,8 @@ func TestPortRegistry_reserve(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			r := NewPortRegistry(nil)
 			tc.setup(r)
 
@@ -109,6 +111,8 @@ func TestPortRegistry_Release(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			r := NewPortRegistry(nil)
 			tc.setup(r)
 
@@ -152,6 +156,8 @@ func TestPortRegistry_reserveReleaseCycle(t *testing.T) {
 }
 
 func TestPortRegistry_ConcurrentReserve(t *testing.T) {
+	t.Parallel()
+
 	r := NewPortRegistry(nil)
 	const goroutines = 50
 
@@ -180,6 +186,8 @@ func TestPortRegistry_ConcurrentReserve(t *testing.T) {
 }
 
 func TestPortRegistry_ConcurrentRelease(t *testing.T) {
+	t.Parallel()
+
 	r := NewPortRegistry(nil)
 	const goroutines = 50
 
@@ -209,6 +217,8 @@ func TestPortRegistry_ConcurrentRelease(t *testing.T) {
 }
 
 func TestPortRegistry_ConcurrentDuplicateReserve(t *testing.T) {
+	t.Parallel()
+
 	r := NewPortRegistry(nil)
 	const goroutines = 100
 	const targetPort = 12345
@@ -237,6 +247,8 @@ func TestPortRegistry_ConcurrentDuplicateReserve(t *testing.T) {
 }
 
 func TestPortRegistry_AllocatePortPair(t *testing.T) {
+	t.Parallel()
+
 	r := NewPortRegistry(nil)
 
 	p1, p2, err := r.AllocatePortPair()
@@ -275,6 +287,8 @@ func TestPortRegistry_AllocatePortPair(t *testing.T) {
 }
 
 func TestPortRegistry_AllocateMultiplePairs(t *testing.T) {
+	t.Parallel()
+
 	r := NewPortRegistry(nil)
 
 	seen := make(map[int]bool)
