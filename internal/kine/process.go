@@ -132,7 +132,7 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 			log.Debug("waitForKine attempt", "port", p.config.Port, "attempt", attempt, "error", err)
 			return false, nil // Not ready yet
 		}
-		_ = conn.Close()
+		_ = conn.Close() // best-effort close of readiness check connection
 		return true, nil // kine is listening
 	}); err != nil {
 		return fmt.Errorf("kine not ready: %w", err)
