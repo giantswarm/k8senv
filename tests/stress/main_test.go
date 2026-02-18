@@ -12,7 +12,5 @@ import (
 var sharedManager k8senv.Manager
 
 func TestMain(m *testing.M) {
-	testutil.SetupAndRun(m, &sharedManager, "k8senv-stress-test-*",
-		k8senv.WithPoolSize(testutil.TestParallel()),
-	)
+	testutil.SetupAndRun(m, &sharedManager, "k8senv-stress-test-*")
 }

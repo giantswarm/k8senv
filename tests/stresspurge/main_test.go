@@ -13,7 +13,6 @@ var sharedManager k8senv.Manager
 
 func TestMain(m *testing.M) {
 	testutil.SetupAndRun(m, &sharedManager, "k8senv-stresspurge-test-*",
-		k8senv.WithPoolSize(testutil.TestParallel()),
 		k8senv.WithReleaseStrategy(k8senv.ReleasePurge),
 	)
 }

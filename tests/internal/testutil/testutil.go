@@ -268,6 +268,7 @@ func SetupAndRunWithHook(
 	baseOpts := []k8senv.ManagerOption{
 		k8senv.WithBaseDataDir(tmpDir),
 		k8senv.WithAcquireTimeout(5 * time.Minute),
+		k8senv.WithPoolSize(TestParallel()),
 	}
 
 	if hook != nil {

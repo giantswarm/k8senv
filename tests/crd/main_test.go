@@ -22,6 +22,5 @@ func TestMain(m *testing.M) {
 
 			return []k8senv.ManagerOption{k8senv.WithCRDDir(crdDir)}, nil
 		},
-		k8senv.WithPoolSize(testutil.TestParallel()),
 	)
 }
