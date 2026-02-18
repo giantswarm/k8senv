@@ -258,9 +258,15 @@ func (p *Pool) Close() {
 
 // returnSlot returns a semaphore slot, unblocking a waiting Acquire call.
 // No-op when the pool is unbounded (sem is nil).
+//
+// Uses a non-blocking send: after Close(), the semaphore channel may already
+// be at capacity (no Acquire will drain it), so a blocking send would hang.
 func (p *Pool) returnSlot() {
 	if p.sem == nil {
 		return
 	}
-	p.sem <- struct{}{}
+	select {
+	case p.sem <- struct{}{}:
+	default:
+	}
 }
