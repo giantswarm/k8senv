@@ -53,8 +53,8 @@ func TestCRDDirWithMultipleCRDs(t *testing.T) {
 	verifyCRDExists(ctx, t, inst, "gizmos.example.com")
 }
 
-// TestCRDDirWithCRAndInstance verifies that CRs can be created using CRDs from cache.
-func TestCRDDirWithCRAndInstance(t *testing.T) {
+// TestCRDDirWithEstablishedCondition verifies that a cached CRD is established on an acquired instance.
+func TestCRDDirWithEstablishedCondition(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 

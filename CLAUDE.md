@@ -238,7 +238,7 @@ Tests are organized across the root package (unit tests) and seven integration t
 **`tests/crd/` (package `k8senv_crd_test`)** — CRD tests (separate package for CRD-enabled singleton):
 - `TestCRDDirCaching` - CRD directory caching behavior
 - `TestCRDDirWithMultipleCRDs` - Multiple CRD files
-- `TestCRDDirWithCRAndInstance` - CRDs with instance usage
+- `TestCRDDirWithEstablishedCondition` - Cached CRD is established on acquired instance
 - `TestCRDDirWithMultiDocumentYAML` - Multi-document YAML processing
 - `TestCRDDirWithYmlExtension` - .yml extension file support
 
