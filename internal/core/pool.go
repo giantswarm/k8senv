@@ -271,12 +271,11 @@ func (p *Pool) returnSlot() {
 		// Semaphore is full. After Close() this is expected because no
 		// Acquire will drain tokens. During normal operation it indicates
 		// a bug: more releases than acquires.
-		p.mu.Lock()
-		closed := p.closed
-		p.mu.Unlock()
-		if !closed {
+		select {
+		case <-p.closeCh:
+			Logger().Debug("returnSlot: semaphore full after pool close, token dropped (expected)")
+		default:
 			panic("k8senv: returnSlot: semaphore full during normal operation — more releases than acquires")
 		}
-		Logger().Debug("returnSlot: semaphore full after pool close, token dropped (expected)")
 	}
 }
