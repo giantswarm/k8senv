@@ -59,25 +59,11 @@ const nsReadinessTimeout = 30 * time.Second
 // Called during startup after /livez passes but before the instance is marked
 // as started, to close the gap where /livez returns 200 before the namespace
 // controller has created all system namespaces.
-//
-// As a side effect, the Kubernetes client created here is stored in
-// i.cleanupClient for reuse by later cleanNamespaces calls.
 func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
-	cfg, err := i.getOrBuildRestConfig()
+	client, err := i.getOrBuildCleanupClient()
 	if err != nil {
-		return fmt.Errorf("build kubeconfig for namespace readiness: %w", err)
+		return fmt.Errorf("build cleanup client for namespace readiness: %w", err)
 	}
-	// Disable client-side rate limiting so startup polling is not throttled.
-	// This is safe because the client only targets a local, ephemeral
-	// kube-apiserver that serves this single test process — there is no
-	// shared infrastructure at risk of being overwhelmed.
-	cfg.QPS = -1
-
-	client, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("create client for namespace readiness: %w", err)
-	}
-	i.cleanupClient.Store(client)
 
 	// Use a local timeout so we don't spin forever, but also respect the
 	// caller's context (e.g. acquire timeout).
@@ -124,27 +110,9 @@ func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
 //
 // Returns nil immediately if no user namespaces exist (fast path).
 func (i *Instance) cleanNamespaces(ctx context.Context) error {
-	client := i.cleanupClient.Load()
-	if client == nil {
-		cfg, err := i.getOrBuildRestConfig()
-		if err != nil {
-			return fmt.Errorf("build kubeconfig for cleanup: %w", err)
-		}
-
-		// Disable client-side rate limiting for internal cleanup operations.
-		// The cached Clientset retains its rate limiter across Release calls;
-		// with rapid instance reuse the default QPS=5/Burst=10 starves between
-		// cleanups, adding ~150 s of throttle waits across the stress test.
-		// Safe here because the client only targets a local, ephemeral
-		// kube-apiserver — no shared infrastructure can be overwhelmed.
-		cfg.QPS = -1
-
-		var clientErr error
-		client, clientErr = kubernetes.NewForConfig(cfg)
-		if clientErr != nil {
-			return fmt.Errorf("create client for cleanup: %w", clientErr)
-		}
-		i.cleanupClient.Store(client)
+	client, err := i.getOrBuildCleanupClient()
+	if err != nil {
+		return fmt.Errorf("build cleanup client for namespace cleanup: %w", err)
 	}
 
 	// Unified cleanup loop: delete any user namespaces found and require
@@ -417,6 +385,28 @@ func (i *Instance) deleteResourceItem(
 	}
 }
 
+// getOrBuildCleanupClient returns the cached cleanup client or creates one.
+// It disables client-side rate limiting (QPS=-1) because the client only
+// targets a local, ephemeral kube-apiserver — no shared infrastructure can
+// be overwhelmed.
+func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
+	if c := i.cleanupClient.Load(); c != nil {
+		return c, nil
+	}
+	cfg, err := i.getOrBuildRestConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build config for cleanup client: %w", err)
+	}
+	cfg.QPS = -1
+
+	c, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cleanup client: %w", err)
+	}
+	i.cleanupClient.Store(c)
+	return c, nil
+}
+
 // getOrBuildDiscoveryClient returns the cached discovery client or creates one.
 func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, error) {
 	if dc := i.discoveryClient.Load(); dc != nil {
@@ -460,22 +450,9 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 // and is designed as a cheap pre-check before the expensive resource sweep in
 // cleanNamespacedResources.
 func (i *Instance) hasUserNamespaces(ctx context.Context) (bool, error) {
-	client := i.cleanupClient.Load()
-	if client == nil {
-		cfg, err := i.getOrBuildRestConfig()
-		if err != nil {
-			return false, fmt.Errorf("build kubeconfig for user namespace check: %w", err)
-		}
-
-		// Disable client-side rate limiting for the local ephemeral API server.
-		cfg.QPS = -1
-
-		var clientErr error
-		client, clientErr = kubernetes.NewForConfig(cfg)
-		if clientErr != nil {
-			return false, fmt.Errorf("create client for user namespace check: %w", clientErr)
-		}
-		i.cleanupClient.Store(client)
+	client, err := i.getOrBuildCleanupClient()
+	if err != nil {
+		return false, fmt.Errorf("build cleanup client for user namespace check: %w", err)
 	}
 
 	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
