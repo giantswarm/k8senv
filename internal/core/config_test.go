@@ -83,6 +83,10 @@ func TestManagerConfig_Validate(t *testing.T) {
 			modify:       func(c *ManagerConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
 			wantContains: "release strategy",
 		},
+		"invalid release strategy boundary": {
+			modify:       func(c *ManagerConfig) { c.ReleaseStrategy = ReleaseStrategy(3) },
+			wantContains: "release strategy",
+		},
 	}
 
 	for name, tc := range tests {
@@ -192,6 +196,10 @@ func TestInstanceConfig_Validate(t *testing.T) {
 		},
 		"invalid release strategy": {
 			modify:       func(c *InstanceConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
+			wantContains: "release strategy",
+		},
+		"invalid release strategy boundary": {
+			modify:       func(c *InstanceConfig) { c.ReleaseStrategy = ReleaseStrategy(3) },
 			wantContains: "release strategy",
 		},
 	}
