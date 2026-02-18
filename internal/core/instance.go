@@ -537,7 +537,7 @@ func (i *Instance) Release(token uint64) error {
 			// List calls) when no user namespaces exist. This is common when
 			// tests use unique namespaces that were already cleaned up, or when
 			// no resources were created at all.
-			hasUser, err := i.hasUserNamespaces(cleanCtx)
+			userNS, err := i.listUserNamespaces(cleanCtx)
 			if err != nil {
 				cleanupErr := fmt.Errorf("user namespace check during release: %w", err)
 				i.setErr(cleanupErr)
@@ -545,8 +545,8 @@ func (i *Instance) Release(token uint64) error {
 				return cleanupErr
 			}
 
-			if hasUser {
-				err = i.cleanNamespacedResources(cleanCtx)
+			if len(userNS) > 0 {
+				err = i.cleanNamespacedResources(cleanCtx, userNS)
 				if err != nil {
 					cleanupErr := fmt.Errorf("resource cleanup during release: %w", err)
 					i.setErr(cleanupErr)

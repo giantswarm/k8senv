@@ -202,7 +202,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context) error {
 }
 
 // cleanNamespacedResources discovers all namespaced resource types on the API
-// server and deletes all instances in non-system namespaces. This must run
+// server and deletes all instances in the given user namespaces. This must run
 // before cleanNamespaces to avoid orphaned resources persisting in kine/SQLite
 // storage after namespace objects are deleted.
 //
@@ -210,7 +210,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context) error {
 // list/delete failures are logged at Debug level and skipped — some built-in
 // types (e.g., events, endpoints) may have API quirks but are harmless since
 // they live inside namespaces that will be deleted next.
-func (i *Instance) cleanNamespacedResources(ctx context.Context) error {
+func (i *Instance) cleanNamespacedResources(ctx context.Context, userNamespaces []string) error {
 	gvrs, err := i.discoverDeletableGVRs()
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (i *Instance) cleanNamespacedResources(ctx context.Context) error {
 
 	for _, gvr := range gvrs {
 		g.Go(func() error {
-			i.deleteResourcesForGVR(gCtx, dynClient, gvr)
+			i.deleteResourcesForGVR(gCtx, dynClient, gvr, userNamespaces)
 			return nil
 		})
 	}
@@ -290,48 +290,74 @@ func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error
 	return gvrs, nil
 }
 
-// deleteResourcesForGVR lists all instances of the given resource type and
-// deletes those in non-system namespaces, clearing finalizers first if present.
+// deleteResourcesForGVR deletes all instances of the given resource type in the
+// provided user namespaces. It uses DeleteCollection for batch deletion, falling
+// back to per-item deletion when the API does not support it. After a successful
+// DeleteCollection, a follow-up List finds any resources stuck due to finalizers
+// and clears them individually.
 func (i *Instance) deleteResourcesForGVR(
 	ctx context.Context,
 	dynClient *dynamic.DynamicClient,
 	gvr schema.GroupVersionResource,
+	userNamespaces []string,
 ) {
-	list, err := dynClient.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
+	for _, ns := range userNamespaces {
+		i.deleteCollectionInNamespace(ctx, dynClient, gvr, ns)
+	}
+}
+
+// deleteCollectionInNamespace batch-deletes all resources of a GVR in a single
+// namespace. If DeleteCollection is not supported (405 MethodNotAllowed), it
+// falls back to listing and deleting items individually. After a successful
+// DeleteCollection, it re-lists the namespace to clear any finalizer-stuck
+// resources via deleteResourceItem.
+func (i *Instance) deleteCollectionInNamespace(
+	ctx context.Context,
+	dynClient *dynamic.DynamicClient,
+	gvr schema.GroupVersionResource,
+	ns string,
+) {
+	res := dynClient.Resource(gvr).Namespace(ns)
+
+	err := res.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+	if apierrors.IsMethodNotSupported(err) {
+		// Fallback: list and delete items individually.
+		i.deleteItemsInNamespace(ctx, dynClient, gvr, ns)
+		return
+	}
 	if err != nil {
-		i.log.Debug("resource cleanup skipped", "gvr", gvr.String(), "error", err)
+		i.log.Debug("resource cleanup skipped", "gvr", gvr.String(), "namespace", ns, "error", err)
 		return
 	}
 
-	// Filter to items in non-system namespaces.
-	var items []unstructured.Unstructured
+	// Follow-up: find resources stuck due to finalizers and clear them.
+	remaining, listErr := res.List(ctx, metav1.ListOptions{})
+	if listErr != nil {
+		i.log.Debug("resource cleanup follow-up list failed", "gvr", gvr.String(), "namespace", ns, "error", listErr)
+		return
+	}
+	for idx := range remaining.Items {
+		i.deleteResourceItem(ctx, dynClient, gvr, &remaining.Items[idx])
+	}
+}
+
+// deleteItemsInNamespace lists all resources of a GVR in a namespace and
+// deletes each one individually via deleteResourceItem. Used as a fallback
+// when DeleteCollection is not supported for the resource type.
+func (i *Instance) deleteItemsInNamespace(
+	ctx context.Context,
+	dynClient *dynamic.DynamicClient,
+	gvr schema.GroupVersionResource,
+	ns string,
+) {
+	list, err := dynClient.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		i.log.Debug("resource cleanup skipped", "gvr", gvr.String(), "namespace", ns, "error", err)
+		return
+	}
 	for idx := range list.Items {
-		ns := list.Items[idx].GetNamespace()
-		if _, ok := systemNamespaces[ns]; !ok {
-			items = append(items, list.Items[idx])
-		}
+		i.deleteResourceItem(ctx, dynClient, gvr, &list.Items[idx])
 	}
-
-	if len(items) == 0 {
-		return
-	}
-
-	i.log.Debug("cleaning namespaced resources", "gvr", gvr.String(), "count", len(items))
-
-	g, gCtx := errgroup.WithContext(ctx)
-	g.SetLimit(5) //nolint:mnd // concurrency limit for per-item deletion within a GVR
-
-	for idx := range items {
-		item := &items[idx]
-
-		g.Go(func() error {
-			i.deleteResourceItem(gCtx, dynClient, gvr, item)
-			return nil
-		})
-	}
-
-	// errgroup always returns nil here since goroutines always return nil.
-	_ = g.Wait()
 }
 
 // deleteResourceItem clears finalizers (if any) and deletes a single resource
@@ -445,27 +471,28 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	return dc, nil
 }
 
-// hasUserNamespaces reports whether any non-system namespaces exist on the
+// listUserNamespaces returns the names of all non-system namespaces on the
 // instance's kube-apiserver. It reuses the cached cleanup client (or builds one)
 // and is designed as a cheap pre-check before the expensive resource sweep in
-// cleanNamespacedResources.
-func (i *Instance) hasUserNamespaces(ctx context.Context) (bool, error) {
+// cleanNamespacedResources. Returns nil if no user namespaces exist.
+func (i *Instance) listUserNamespaces(ctx context.Context) ([]string, error) {
 	client, err := i.getOrBuildCleanupClient()
 	if err != nil {
-		return false, fmt.Errorf("build cleanup client for user namespace check: %w", err)
+		return nil, fmt.Errorf("build cleanup client for user namespace check: %w", err)
 	}
 
 	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return false, fmt.Errorf("list namespaces for user namespace check: %w", err)
+		return nil, fmt.Errorf("list namespaces for user namespace check: %w", err)
 	}
 
+	var names []string
 	for idx := range nsList.Items {
 		if _, ok := systemNamespaces[nsList.Items[idx].Name]; !ok {
-			return true, nil
+			names = append(names, nsList.Items[idx].Name)
 		}
 	}
-	return false, nil
+	return names, nil
 }
 
 // deleteAndFinalizeNamespace deletes a namespace and clears its finalizers via
