@@ -102,8 +102,8 @@ func TestParallelAcquisition(t *testing.T) {
 	instanceUsage := make(map[string]int)
 	var mu sync.Mutex
 
-	// Register cleanup to verify instance reuse after all parallel tests complete
-	// (t.Run subtests without t.Parallel() run before parallel subtests continue)
+	// Register cleanup to verify instance reuse after all parallel tests complete.
+	// Go guarantees parent t.Cleanup runs after all subtests (including parallel) finish.
 	t.Cleanup(func() {
 		mu.Lock()
 		defer mu.Unlock()
