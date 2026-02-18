@@ -381,8 +381,10 @@ func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 		updated.config = cfg
 		return &updated
 	})
-	// Always return from the cache so every caller sees the same config.
-	return rest.CopyConfig(i.clients.Load().config), nil
+	// Return a copy of the locally-built config directly instead of
+	// re-reading from i.clients.Load(), which could race with a concurrent
+	// Stop() that stores nil between the CAS and the Load.
+	return rest.CopyConfig(cfg), nil
 }
 
 // casClientCache applies fn to the current clientCache in a compare-and-swap

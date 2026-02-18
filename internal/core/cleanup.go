@@ -294,7 +294,10 @@ func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error
 		updated.gvrs = &gvrs
 		return &updated
 	})
-	return *i.clients.Load().gvrs, nil
+	// Return the locally-built slice directly instead of re-reading from
+	// i.clients.Load(), which could race with a concurrent Stop() that
+	// stores nil between the CAS and the Load.
+	return gvrs, nil
 }
 
 // deleteResourcesForGVR deletes all instances of the given resource type in the
@@ -477,7 +480,10 @@ func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 		updated.cleanup = c
 		return &updated
 	})
-	return i.clients.Load().cleanup, nil
+	// Return the locally-built client directly instead of re-reading from
+	// i.clients.Load(), which could race with a concurrent Stop() that
+	// stores nil between the CAS and the Load.
+	return c, nil
 }
 
 // getOrBuildDiscoveryClient returns the cached discovery client or creates one.
@@ -506,7 +512,10 @@ func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, erro
 		updated.discovery = dc
 		return &updated
 	})
-	return i.clients.Load().discovery, nil
+	// Return the locally-built client directly instead of re-reading from
+	// i.clients.Load(), which could race with a concurrent Stop() that
+	// stores nil between the CAS and the Load.
+	return dc, nil
 }
 
 // getOrBuildDynamicClient returns the cached dynamic client or creates one.
@@ -535,7 +544,10 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 		updated.dynamic = dc
 		return &updated
 	})
-	return i.clients.Load().dynamic, nil
+	// Return the locally-built client directly instead of re-reading from
+	// i.clients.Load(), which could race with a concurrent Stop() that
+	// stores nil between the CAS and the Load.
+	return dc, nil
 }
 
 // listUserNamespaces returns the names of all non-system namespaces on the
