@@ -110,6 +110,9 @@ func (b *BaseProcess) SetupAndStart(cmd *exec.Cmd, dataDir string) error {
 	if cmd == nil {
 		return errors.New("cmd must not be nil")
 	}
+	if cmd.Path == "" {
+		return errors.New("cmd.Path must not be empty")
+	}
 	if dataDir == "" {
 		return errors.New("data directory must not be empty")
 	}
