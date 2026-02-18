@@ -129,152 +129,122 @@ func StressCreateRandomResource(
 	}
 }
 
-// StressCreateConfigMap creates a ConfigMap with retry on transient errors.
-//
-//nolint:dupl // Each resource-creation helper builds a distinct Kubernetes object; structural similarity is inherent.
-func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+// named is satisfied by all Kubernetes resource types via embedded ObjectMeta.
+// It lets stressCreateWithRetry verify the created resource's name without
+// callers having to extract and return it manually.
+type named interface {
+	GetName() string
+}
+
+// stressCreateWithRetry generates a resource name from namePrefix and idx,
+// then retries the create call until it succeeds or all retries are exhausted.
+// The create function receives the generated name and must return the created
+// object (any Kubernetes resource satisfies named via ObjectMeta). The helper
+// verifies the returned name matches, using resourceType for error context.
+func stressCreateWithRetry[T named](
+	t *testing.T,
+	resourceType string,
+	ns string,
+	namePrefix string,
+	idx int,
+	create func(name string) (T, error),
+) {
 	t.Helper()
 
-	name := fmt.Sprintf("stress-cm-%d", idx)
-	cm := &v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Data:       map[string]string{"key": fmt.Sprintf("value-%d", idx)},
-	}
+	name := fmt.Sprintf("%s-%d", namePrefix, idx)
 
 	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
-		created, createErr := client.CoreV1().ConfigMaps(ns).Create(ctx, cm, metav1.CreateOptions{})
+		created, createErr := create(name)
 		if createErr != nil {
 			return createErr
 		}
-		if created.Name != name {
-			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
-			return fmt.Errorf("configmap name mismatch: want %s, got %s", name, created.Name)
+		if created.GetName() != name {
+			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit,
+			// preventing retry.OnError from observing the result.
+			return fmt.Errorf("%s name mismatch: want %s, got %s", resourceType, name, created.GetName())
 		}
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to create ConfigMap %s/%s: %v", ns, name, err)
+		t.Fatalf("Failed to create %s %s/%s: %v", resourceType, ns, name, err)
 	}
 }
 
+// StressCreateConfigMap creates a ConfigMap with retry on transient errors.
+func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
+	t.Helper()
+
+	stressCreateWithRetry(t, "ConfigMap", ns, "stress-cm", idx, func(name string) (*v1.ConfigMap, error) {
+		return client.CoreV1().ConfigMaps(ns).Create(ctx, &v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Data:       map[string]string{"key": fmt.Sprintf("value-%d", idx)},
+		}, metav1.CreateOptions{})
+	})
+}
+
 // StressCreateSecret creates a Secret with retry on transient errors.
-//
-//nolint:dupl // Each resource-creation helper builds a distinct Kubernetes object; structural similarity is inherent.
 func StressCreateSecret(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
-	name := fmt.Sprintf("stress-secret-%d", idx)
-	secret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		StringData: map[string]string{"secret": fmt.Sprintf("val-%d", idx)},
-	}
-
-	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
-		created, createErr := client.CoreV1().Secrets(ns).Create(ctx, secret, metav1.CreateOptions{})
-		if createErr != nil {
-			return createErr
-		}
-		if created.Name != name {
-			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
-			return fmt.Errorf("secret name mismatch: want %s, got %s", name, created.Name)
-		}
-		return nil
+	stressCreateWithRetry(t, "Secret", ns, "stress-secret", idx, func(name string) (*v1.Secret, error) {
+		return client.CoreV1().Secrets(ns).Create(ctx, &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			StringData: map[string]string{"secret": fmt.Sprintf("val-%d", idx)},
+		}, metav1.CreateOptions{})
 	})
-	if err != nil {
-		t.Fatalf("Failed to create Secret %s/%s: %v", ns, name, err)
-	}
 }
 
 // StressCreateService creates a headless Service with retry on transient errors.
 func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
-	name := fmt.Sprintf("stress-svc-%d", idx)
-	svc := &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: v1.ServiceSpec{
-			Ports: []v1.ServicePort{
-				{
-					Port:     int32(8080 + idx%1000), //nolint:gosec // idx is bounded by StressMaxNS*StressMaxRes (15)
-					Protocol: v1.ProtocolTCP,
+	stressCreateWithRetry(t, "Service", ns, "stress-svc", idx, func(name string) (*v1.Service, error) {
+		return client.CoreV1().Services(ns).Create(ctx, &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: v1.ServiceSpec{
+				Ports: []v1.ServicePort{
+					{
+						//nolint:gosec // idx is bounded by StressMaxNS*StressMaxRes (15)
+						Port: int32(
+							8080 + idx%1000,
+						),
+						Protocol: v1.ProtocolTCP,
+					},
 				},
+				ClusterIP: "None",
 			},
-			ClusterIP: "None",
-		},
-	}
-
-	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
-		created, createErr := client.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
-		if createErr != nil {
-			return createErr
-		}
-		if created.Name != name {
-			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
-			return fmt.Errorf("service name mismatch: want %s, got %s", name, created.Name)
-		}
-		return nil
+		}, metav1.CreateOptions{})
 	})
-	if err != nil {
-		t.Fatalf("Failed to create Service %s/%s: %v", ns, name, err)
-	}
 }
 
 // StressCreatePod creates a Pod with retry on transient errors.
 func StressCreatePod(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
-	name := fmt.Sprintf("stress-pod-%d", idx)
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:  "nginx",
-					Image: "nginx",
+	stressCreateWithRetry(t, "Pod", ns, "stress-pod", idx, func(name string) (*v1.Pod, error) {
+		return client.CoreV1().Pods(ns).Create(ctx, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name:  "nginx",
+						Image: "nginx",
+					},
 				},
 			},
-		},
-	}
-
-	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
-		created, createErr := client.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
-		if createErr != nil {
-			return createErr
-		}
-		if created.Name != name {
-			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
-			return fmt.Errorf("pod name mismatch: want %s, got %s", name, created.Name)
-		}
-		return nil
+		}, metav1.CreateOptions{})
 	})
-	if err != nil {
-		t.Fatalf("Failed to create Pod %s/%s: %v", ns, name, err)
-	}
 }
 
 // StressCreateServiceAccount creates a ServiceAccount with retry on transient errors.
 func StressCreateServiceAccount(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
-	name := fmt.Sprintf("stress-sa-%d", idx)
-	sa := &v1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-	}
-
-	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
-		created, createErr := client.CoreV1().ServiceAccounts(ns).Create(ctx, sa, metav1.CreateOptions{})
-		if createErr != nil {
-			return createErr
-		}
-		if created.Name != name {
-			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
-			return fmt.Errorf("serviceaccount name mismatch: want %s, got %s", name, created.Name)
-		}
-		return nil
+	stressCreateWithRetry(t, "ServiceAccount", ns, "stress-sa", idx, func(name string) (*v1.ServiceAccount, error) {
+		return client.CoreV1().ServiceAccounts(ns).Create(ctx, &v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		}, metav1.CreateOptions{})
 	})
-	if err != nil {
-		t.Fatalf("Failed to create ServiceAccount %s/%s: %v", ns, name, err)
-	}
 }
 
 // StressVerifyCleanInstance asserts that the instance has only system

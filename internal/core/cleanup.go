@@ -455,8 +455,6 @@ func (i *Instance) deleteResourceItem(
 // It effectively disables client-side rate limiting (QPS=10000, Burst=10000)
 // because the client only targets a local, ephemeral kube-apiserver — no
 // shared infrastructure can be overwhelmed.
-//
-//nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 	if cache := i.clients.Load(); cache != nil && cache.cleanup != nil {
 		return cache.cleanup, nil
@@ -487,8 +485,6 @@ func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 }
 
 // getOrBuildDiscoveryClient returns the cached discovery client or creates one.
-//
-//nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, error) {
 	if cache := i.clients.Load(); cache != nil && cache.discovery != nil {
 		return cache.discovery, nil
@@ -519,8 +515,6 @@ func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, erro
 }
 
 // getOrBuildDynamicClient returns the cached dynamic client or creates one.
-//
-//nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	if cache := i.clients.Load(); cache != nil && cache.dynamic != nil {
 		return cache.dynamic, nil
