@@ -322,16 +322,19 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 			log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "error", err)
 			return false, nil
 		}
-		defer func() {
-			// Drain the body so the underlying connection is properly closed.
+		// drainAndClose drains and closes the response body so the
+		// underlying connection is properly released.
+		drainAndClose := func() {
 			_, _ = io.Copy(io.Discard, resp.Body) // best-effort drain
 			_ = resp.Body.Close()
-		}()
+		}
 
 		if resp.StatusCode == http.StatusOK {
+			drainAndClose()
 			return true, nil
 		}
 		log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "status", resp.StatusCode)
+		drainAndClose()
 		return false, nil
 	}); err != nil {
 		return fmt.Errorf("apiserver not ready: %w", err)
