@@ -133,6 +133,13 @@ func StartWithRetry(
 	maxRetries int,
 	stopTimeout time.Duration,
 ) (*Stack, error) {
+	if maxRetries < 1 {
+		return nil, fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
+	}
+	if stopTimeout <= 0 {
+		return nil, fmt.Errorf("stopTimeout must be positive, got %s", stopTimeout)
+	}
+
 	log := cfg.Logger
 	if log == nil {
 		log = slog.Default()
@@ -357,6 +364,9 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 // Start) are not called concurrently on the same Stack. In practice, each Stack
 // is owned by a single Instance whose startMu serializes lifecycle calls.
 func (s *Stack) Stop(timeout time.Duration) error {
+	if timeout <= 0 {
+		return fmt.Errorf("stop timeout must be positive, got %s", timeout)
+	}
 	if !s.started {
 		return nil
 	}
