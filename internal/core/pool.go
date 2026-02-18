@@ -268,5 +268,14 @@ func (p *Pool) returnSlot() {
 	select {
 	case p.sem <- struct{}{}:
 	default:
+		// Semaphore is full. After Close() this is expected because no
+		// Acquire will drain tokens. During normal operation it indicates
+		// a bug: more releases than acquires.
+		p.mu.Lock()
+		closed := p.closed
+		p.mu.Unlock()
+		if !closed {
+			Logger().Debug("returnSlot: semaphore full during normal operation, possible extra release")
+		}
 	}
 }
