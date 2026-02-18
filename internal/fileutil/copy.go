@@ -66,7 +66,9 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	closed := false
 	defer func() {
 		if !closed {
-			_ = dstFile.Close()
+			if closeErr := dstFile.Close(); closeErr != nil && retErr == nil {
+				retErr = fmt.Errorf("close destination: %w", closeErr)
+			}
 		}
 		if retErr != nil {
 			_ = os.Remove(writePath)
