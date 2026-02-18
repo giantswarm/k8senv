@@ -18,8 +18,5 @@ func EnsureDir(path string) error {
 // EnsureDirForFile creates the parent directory of filePath if it does not
 // already exist, ensuring the file can be created without a missing-directory error.
 func EnsureDirForFile(filePath string) error {
-	if err := EnsureDir(filepath.Dir(filePath)); err != nil {
-		return fmt.Errorf("ensure dir for %s: %w", filePath, err)
-	}
-	return nil
+	return EnsureDir(filepath.Dir(filePath))
 }
