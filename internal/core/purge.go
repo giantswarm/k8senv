@@ -27,9 +27,15 @@ import (
 //   - Cluster-scoped resources (CRDs, APIServices, ClusterRoles, etc.)
 //   - Internal kine bookkeeping keys (compact_rev_key, gap-*)
 func purgeViaSQL(ctx context.Context, sqlitePath string, log *slog.Logger) error {
-	// Open with WAL mode (matching kine's own mode) and a generous busy
-	// timeout to handle concurrent access from kine's connection.
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)", sqlitePath)
+	// Open with WAL mode (matching kine's own mode), a generous busy
+	// timeout to handle concurrent access from kine's connection, and
+	// relaxed synchronous mode. NORMAL is safe here because the database
+	// is ephemeral test data — crash durability is irrelevant — and it
+	// reduces fsync calls during transaction commit.
+	dsn := fmt.Sprintf(
+		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)",
+		sqlitePath,
+	)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("open sqlite %s: %w", sqlitePath, err)
@@ -113,9 +119,14 @@ func findUserNamespaces(ctx context.Context, db *sql.DB) ([]string, error) {
 }
 
 // deleteNamespaceData removes all kine rows associated with the given
-// namespaces in a single transaction. For each namespace it deletes:
+// namespaces in a single statement. For each namespace it deletes:
 //   - The namespace object itself: name = '/registry/namespaces/<ns>'
 //   - All resources in the namespace: name LIKE '%/<ns>/%'
+//
+// All namespace patterns are combined into one DELETE with OR clauses so
+// that SQLite scans the table once instead of once per namespace. The
+// leading-wildcard LIKE patterns prevent index usage, making this O(rows)
+// rather than O(N * rows) where N is the namespace count.
 //
 // All historical revisions and deletion markers are removed, not just the
 // current state. This is safe because the instance is idle (no watchers or
@@ -127,20 +138,26 @@ func deleteNamespaceData(ctx context.Context, db *sql.DB, namespaces []string) e
 	}
 	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
 
-	for _, ns := range namespaces {
-		nsKeyPath := "/registry/namespaces/" + ns
+	// Build a single DELETE: ... WHERE (name = ? OR name LIKE ?) OR (name = ? OR name LIKE ?) ...
+	// Two parameters per namespace: exact match for the namespace object,
+	// LIKE pattern for all resources in the namespace.
+	var b strings.Builder
+	b.WriteString("DELETE FROM kine WHERE ")
+	args := make([]any, 0, len(namespaces)*2)
+
+	for idx, ns := range namespaces {
+		if idx > 0 {
+			b.WriteString(" OR ")
+		}
 		// Pattern matches any key with /<ns>/ as a path segment, catching
 		// both core resources (/registry/configmaps/<ns>/foo) and group
 		// resources (/registry/deployments/apps/<ns>/foo).
-		nsResourcePattern := "%/" + ns + "/%"
+		b.WriteString("name = ? OR name LIKE ?")
+		args = append(args, "/registry/namespaces/"+ns, "%/"+ns+"/%")
+	}
 
-		_, err := tx.ExecContext(ctx,
-			`DELETE FROM kine WHERE name = ? OR name LIKE ?`,
-			nsKeyPath, nsResourcePattern,
-		)
-		if err != nil {
-			return fmt.Errorf("delete namespace %s data: %w", ns, err)
-		}
+	if _, err := tx.ExecContext(ctx, b.String(), args...); err != nil {
+		return fmt.Errorf("delete namespace data: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
