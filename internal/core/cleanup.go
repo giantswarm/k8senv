@@ -346,47 +346,69 @@ func (i *Instance) deleteResourcesForGVR(
 
 	i.log.Debug("cleaning namespaced resources", "gvr", gvr.String(), "count", len(items))
 
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(5) //nolint:mnd // concurrency limit for per-item deletion within a GVR
+
 	for idx := range items {
 		item := &items[idx]
-		ns := item.GetNamespace()
-		name := item.GetName()
 
-		// Clear finalizers if present so the resource can be deleted.
-		if len(item.GetFinalizers()) > 0 {
-			item.SetFinalizers(nil)
-			if _, updateErr := dynClient.Resource(gvr).
-				Namespace(ns).
-				Update(ctx, item, metav1.UpdateOptions{}); updateErr != nil {
-				i.log.Debug(
-					"resource cleanup skipped",
-					"gvr",
-					gvr.String(),
-					"namespace",
-					ns,
-					"name",
-					name,
-					"error",
-					updateErr,
-				)
-				continue
-			}
-			i.log.Debug("cleared finalizers", "gvr", gvr.String(), "namespace", ns, "name", name)
+		g.Go(func() error {
+			i.deleteResourceItem(gCtx, dynClient, gvr, item)
+			return nil
+		})
+	}
+
+	// errgroup always returns nil here since goroutines always return nil.
+	_ = g.Wait()
+}
+
+// deleteResourceItem clears finalizers (if any) and deletes a single resource
+// item. Errors are logged at Debug level and swallowed — individual item
+// failures must not block cleanup of remaining resources.
+func (i *Instance) deleteResourceItem(
+	ctx context.Context,
+	dynClient *dynamic.DynamicClient,
+	gvr schema.GroupVersionResource,
+	item *unstructured.Unstructured,
+) {
+	ns := item.GetNamespace()
+	name := item.GetName()
+
+	// Clear finalizers if present so the resource can be deleted.
+	if len(item.GetFinalizers()) > 0 {
+		item.SetFinalizers(nil)
+		if _, updateErr := dynClient.Resource(gvr).
+			Namespace(ns).
+			Update(ctx, item, metav1.UpdateOptions{}); updateErr != nil {
+			i.log.Debug(
+				"resource cleanup skipped",
+				"gvr",
+				gvr.String(),
+				"namespace",
+				ns,
+				"name",
+				name,
+				"error",
+				updateErr,
+			)
+			return
 		}
+		i.log.Debug("cleared finalizers", "gvr", gvr.String(), "namespace", ns, "name", name)
+	}
 
-		if delErr := dynClient.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{}); delErr != nil {
-			if !apierrors.IsNotFound(delErr) {
-				i.log.Debug(
-					"resource cleanup skipped",
-					"gvr",
-					gvr.String(),
-					"namespace",
-					ns,
-					"name",
-					name,
-					"error",
-					delErr,
-				)
-			}
+	if delErr := dynClient.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{}); delErr != nil {
+		if !apierrors.IsNotFound(delErr) {
+			i.log.Debug(
+				"resource cleanup skipped",
+				"gvr",
+				gvr.String(),
+				"namespace",
+				ns,
+				"name",
+				name,
+				"error",
+				delErr,
+			)
 		}
 	}
 }
