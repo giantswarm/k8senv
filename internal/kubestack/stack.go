@@ -132,6 +132,12 @@ func StartWithRetry(
 	maxRetries int,
 	stopTimeout time.Duration,
 ) (*Stack, error) {
+	if procCtx == nil {
+		return nil, errors.New("procCtx must not be nil")
+	}
+	if readyCtx == nil {
+		return nil, errors.New("readyCtx must not be nil")
+	}
 	if maxRetries < 1 {
 		return nil, fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
 	}
