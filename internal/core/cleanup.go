@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -234,18 +235,14 @@ func (i *Instance) cleanNamespacedResources(ctx context.Context, userNamespaces 
 		userNSSet[ns] = struct{}{}
 	}
 
-	g, gCtx := errgroup.WithContext(ctx)
-	g.SetLimit(10)
-
+	var wg sync.WaitGroup
 	for _, gvr := range gvrs {
-		g.Go(func() error {
-			i.deleteResourcesForGVR(gCtx, dynClient, gvr, userNSSet)
-			return nil
+		wg.Go(func() {
+			i.deleteResourcesForGVR(ctx, dynClient, gvr, userNSSet)
 		})
 	}
+	wg.Wait()
 
-	// errgroup always returns nil here since goroutines always return nil.
-	_ = g.Wait()
 	return nil
 }
 
