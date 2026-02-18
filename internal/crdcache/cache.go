@@ -383,7 +383,7 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 		}
 
 		if logger.Enabled(ctx, slog.LevelDebug) {
-			logger.DebugContext(ctx, "waiting for CRD establishment", "pending_crds", slices.Clone(pendingCRDs))
+			logger.Debug("waiting for CRD establishment", "pending_crds", slices.Clone(pendingCRDs))
 		}
 
 		select {
