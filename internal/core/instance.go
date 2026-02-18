@@ -503,6 +503,18 @@ func (i *Instance) effectiveStopTimeout(ctx context.Context) time.Duration {
 	return timeout
 }
 
+// failRelease wraps err with msg, records it on the instance, and marks the
+// instance as permanently failed in the pool. It returns the wrapped error.
+// This consolidates the repeated error-handling pattern in Release where
+// cleanup or stop failures must be recorded and the instance removed from
+// the pool before returning.
+func (i *Instance) failRelease(token uint64, msg string, err error) error {
+	wrapped := fmt.Errorf("%s: %w", msg, err)
+	i.setErr(wrapped)
+	i.releaser.ReleaseFailed(i, token)
+	return wrapped
+}
+
 // Release marks the Instance as free and returns it to the pool.
 //
 // The behavior depends on the ReleaseStrategy configured on the Manager:
@@ -578,27 +590,16 @@ func (i *Instance) Release(token uint64) error {
 			// no resources were created at all.
 			userNS, err := i.listUserNamespaces(cleanCtx)
 			if err != nil {
-				cleanupErr := fmt.Errorf("user namespace check during release: %w", err)
-				i.setErr(cleanupErr)
-				i.releaser.ReleaseFailed(i, token)
-				return cleanupErr
+				return i.failRelease(token, "user namespace check during release", err)
 			}
 
 			if len(userNS) > 0 {
-				err = i.cleanNamespacedResources(cleanCtx, userNS)
-				if err != nil {
-					cleanupErr := fmt.Errorf("resource cleanup during release: %w", err)
-					i.setErr(cleanupErr)
-					i.releaser.ReleaseFailed(i, token)
-					return cleanupErr
+				if err = i.cleanNamespacedResources(cleanCtx, userNS); err != nil {
+					return i.failRelease(token, "resource cleanup during release", err)
 				}
 
-				err = i.cleanNamespaces(cleanCtx)
-				if err != nil {
-					cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
-					i.setErr(cleanupErr)
-					i.releaser.ReleaseFailed(i, token)
-					return cleanupErr
+				if err = i.cleanNamespaces(cleanCtx); err != nil {
+					return i.failRelease(token, "namespace cleanup during release", err)
 				}
 			}
 		}
@@ -610,10 +611,7 @@ func (i *Instance) Release(token uint64) error {
 		ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
 		defer cancel()
 		if err := i.Stop(ctx); err != nil {
-			stopErr := fmt.Errorf("stop during release: %w", err)
-			i.setErr(stopErr)
-			i.releaser.ReleaseFailed(i, token)
-			return stopErr
+			return i.failRelease(token, "stop during release", err)
 		}
 
 	default:
