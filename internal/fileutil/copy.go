@@ -8,6 +8,12 @@ import (
 	"path/filepath"
 )
 
+// ErrEmptySrc is returned when a source path is empty.
+var ErrEmptySrc = errors.New("source path must not be empty")
+
+// ErrEmptyDst is returned when a destination path is empty.
+var ErrEmptyDst = errors.New("destination path must not be empty")
+
 // CopyFileOptions configures file copy behavior.
 type CopyFileOptions struct {
 	Mode   *os.FileMode // Optional: set specific permissions after copy (ignored on Windows)
@@ -28,15 +34,15 @@ type CopyFileOptions struct {
 // preventing concurrent readers from observing a partially-written file.
 func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	if src == "" {
-		return errors.New("source path must not be empty")
+		return ErrEmptySrc
 	}
 	if dst == "" {
-		return errors.New("destination path must not be empty")
+		return ErrEmptyDst
 	}
 
-	// Ensure parent directory exists
+	// Ensure parent directory exists.
 	if err := EnsureDirForFile(dst); err != nil {
-		return fmt.Errorf("create directory: %w", err)
+		return fmt.Errorf("prepare destination: %w", err)
 	}
 
 	srcFile, err := os.Open(src)

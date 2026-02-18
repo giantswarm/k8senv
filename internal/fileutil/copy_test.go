@@ -1,6 +1,7 @@
 package fileutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,9 +35,8 @@ func TestCopyFile_EmptySourcePath(t *testing.T) {
 		t.Fatal("expected error for empty source path, got nil")
 	}
 
-	const want = "source path must not be empty"
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err.Error(), want)
+	if !errors.Is(err, ErrEmptySrc) {
+		t.Errorf("error = %v, want %v", err, ErrEmptySrc)
 	}
 }
 
@@ -50,9 +50,8 @@ func TestCopyFile_EmptyDestinationPath(t *testing.T) {
 		t.Fatal("expected error for empty destination path, got nil")
 	}
 
-	const want = "destination path must not be empty"
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err.Error(), want)
+	if !errors.Is(err, ErrEmptyDst) {
+		t.Errorf("error = %v, want %v", err, ErrEmptyDst)
 	}
 }
 
@@ -65,9 +64,8 @@ func TestCopyFile_BothPathsEmpty(t *testing.T) {
 	}
 
 	// Source is validated first, so its error takes precedence.
-	const want = "source path must not be empty"
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err.Error(), want)
+	if !errors.Is(err, ErrEmptySrc) {
+		t.Errorf("error = %v, want %v", err, ErrEmptySrc)
 	}
 }
 
