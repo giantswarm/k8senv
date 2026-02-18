@@ -89,13 +89,16 @@ func TestIDUniqueness(t *testing.T) {
 
 	// Acquire all instances
 	ids := make(map[string]struct{})
-	instances := make([]k8senv.Instance, 0, 3)
 	for i := range 3 {
 		inst, err := sharedManager.Acquire(ctx)
 		if err != nil {
 			t.Fatalf("Failed to acquire instance %d: %v", i, err)
 		}
-		instances = append(instances, inst)
+		t.Cleanup(func() {
+			if err := inst.Release(); err != nil {
+				t.Logf("release error: %v", err)
+			}
+		})
 
 		id := inst.ID()
 		if _, exists := ids[id]; exists {
@@ -106,13 +109,6 @@ func TestIDUniqueness(t *testing.T) {
 		// IDs should be non-empty and unique (format: inst-N-XXXXXXXX)
 		if id == "" {
 			t.Error("Instance ID should not be empty")
-		}
-	}
-
-	// Release all
-	for _, inst := range instances {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
 		}
 	}
 }

@@ -129,25 +129,28 @@ func TestPoolBoundedInstanceReuse(t *testing.T) {
 			t.Fatalf("Acquire %d failed: %v", i, acqErr)
 		}
 
+		// Track whether the instance was released on the happy path.
+		// The cleanup guard ensures release on any failure path without
+		// risking a double-release panic on the happy path.
+		released := false
+		t.Cleanup(func() {
+			if !released {
+				if relErr := inst.Release(); relErr != nil {
+					t.Logf("release error: %v", relErr)
+				}
+			}
+		})
+
 		// Verify the instance works.
 		cfg, cfgErr := inst.Config()
 		if cfgErr != nil {
-			if relErr := inst.Release(); relErr != nil {
-				t.Logf("release error: %v", relErr)
-			}
 			t.Fatalf("Config %d failed: %v", i, cfgErr)
 		}
 		client, clientErr := kubernetes.NewForConfig(cfg)
 		if clientErr != nil {
-			if relErr := inst.Release(); relErr != nil {
-				t.Logf("release error: %v", relErr)
-			}
 			t.Fatalf("NewForConfig %d failed: %v", i, clientErr)
 		}
 		if _, listErr := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{}); listErr != nil {
-			if relErr := inst.Release(); relErr != nil {
-				t.Logf("release error: %v", relErr)
-			}
 			t.Fatalf("List namespaces %d failed: %v", i, listErr)
 		}
 
@@ -155,6 +158,7 @@ func TestPoolBoundedInstanceReuse(t *testing.T) {
 		if relErr := inst.Release(); relErr != nil {
 			t.Logf("release error: %v", relErr)
 		}
+		released = true
 	}
 
 	if len(seen) > 2 {
