@@ -101,9 +101,9 @@ func NewPool(factory InstanceFactory, maxSize int) *Pool {
 // Instances returns a copy of the slice of all instances ever created by this Pool.
 func (p *Pool) Instances() []*Instance {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	cp := make([]*Instance, len(p.all))
 	copy(cp, p.all)
-	p.mu.Unlock()
 	return cp
 }
 

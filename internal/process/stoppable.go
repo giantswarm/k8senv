@@ -46,8 +46,5 @@ func StopCloseAndNil[P interface {
 		(*p).Close()
 		*p = nil
 	}()
-	if err := (*p).Stop(timeout); err != nil {
-		return err
-	}
-	return nil
+	return (*p).Stop(timeout)
 }

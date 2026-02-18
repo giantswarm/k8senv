@@ -363,7 +363,7 @@ func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 // defensive guards against programmer error (e.g., calling Config after
 // Release), not as concurrency-safe guarantees.
 func (i *Instance) Config() (*rest.Config, error) {
-	if i.gen.Load()%2 == 0 {
+	if !i.IsBusy() {
 		return nil, ErrInstanceReleased
 	}
 	if !i.started.Load() {
