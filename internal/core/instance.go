@@ -588,6 +588,8 @@ func (i *Instance) Release(token uint64) error {
 	// Atomically check shutdown state and release to pool. This eliminates
 	// the TOCTOU race where Shutdown could start between checking
 	// IsShuttingDown and calling pool.Release.
-	i.releaser.ReleaseToPool(i, token)
+	if !i.releaser.ReleaseToPool(i, token) {
+		i.log.Debug("instance stopped during release: manager shutting down")
+	}
 	return nil
 }
