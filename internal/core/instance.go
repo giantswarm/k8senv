@@ -497,10 +497,14 @@ func (i *Instance) Release(token uint64) error {
 		// Resources must be deleted before namespaces because k8senv runs in
 		// API-only mode (no kube-controller-manager), so namespace deletion
 		// does not cascade-delete contained resources.
+		//
+		// A single timeout covers the entire cleanup sequence so worst-case
+		// duration is bounded to one CleanupTimeout, not two.
 		if i.started.Load() {
 			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
+			defer cleanCancel()
+
 			err := i.cleanNamespacedResources(cleanCtx)
-			cleanCancel()
 			if err != nil {
 				cleanupErr := fmt.Errorf("resource cleanup during release: %w", err)
 				i.setErr(cleanupErr)
@@ -508,9 +512,7 @@ func (i *Instance) Release(token uint64) error {
 				return cleanupErr
 			}
 
-			cleanCtx, cleanCancel = context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
 			err = i.cleanNamespaces(cleanCtx)
-			cleanCancel()
 			if err != nil {
 				cleanupErr := fmt.Errorf("namespace cleanup during release: %w", err)
 				i.setErr(cleanupErr)
