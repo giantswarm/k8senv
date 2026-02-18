@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/giantswarm/k8senv/internal/sentinel"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -48,7 +49,19 @@ const (
 	// applyYAMLFiles will process. This guards against misconfigured
 	// directories containing an unreasonable number of files.
 	maxYAMLFiles = 1000
+
+	// crdApplyConcurrency is the maximum number of CRD documents applied
+	// in parallel during phase 1. CRDs use the pre-registered
+	// apiextensions.k8s.io/v1 mapping, so concurrent RESTMapping calls
+	// are safe reads on an immutable mapper.
+	crdApplyConcurrency = 10
 )
+
+// parsedDoc holds a decoded YAML document ready for API server creation.
+type parsedDoc struct {
+	obj  *unstructured.Unstructured
+	file string // relative file path for error messages
+}
 
 // discoveryMapper caches a RESTMapper built from live API server discovery,
 // avoiding redundant GetAPIGroupResources round-trips when multiple YAML
@@ -81,8 +94,15 @@ func (dm *discoveryMapper) refresh() error {
 	return nil
 }
 
-// applyYAMLFiles applies pre-read YAML files to the cluster.
-// Files are processed in the order provided. Multi-document YAML files are supported.
+// applyYAMLFiles applies pre-read YAML files to the cluster using a two-phase
+// approach: CRD documents (apiextensions.k8s.io/v1) are applied in parallel,
+// then non-CRD documents are applied sequentially.
+//
+// CRDs can be applied concurrently because the apiextensions.k8s.io/v1 mapping
+// is pre-registered in the REST mapper, so RESTMapping calls are safe concurrent
+// reads on immutable data. Non-CRD documents may trigger mapper refresh (via the
+// NoKindMatch retry path), so they must be applied sequentially.
+//
 // The files slice must be pre-populated by the caller (typically from computeDirHash),
 // which reads file contents during hashing to avoid redundant disk reads.
 func applyYAMLFiles(
@@ -128,92 +148,119 @@ func applyYAMLFiles(
 		return fmt.Errorf("build rest mapper: %w", err)
 	}
 
-	// Apply each file
+	// Parse all documents from all files upfront.
+	var crdDocs, otherDocs []parsedDoc
 	for _, f := range files {
 		relPath, relErr := filepath.Rel(dirPath, f.path)
 		if relErr != nil {
-			// Fall back to absolute path if relative path cannot be computed
 			relPath = f.path
 		}
-		logger.Debug("applying file", "file", relPath)
-		if applyErr := applyFileContent(ctx, logger, dynClient, dm, f.content); applyErr != nil {
-			return fmt.Errorf("apply %s: %w", relPath, applyErr)
+		logger.Debug("parsing file", "file", relPath)
+		docs, parseErr := parseFileDocuments(f.content, relPath)
+		if parseErr != nil {
+			return fmt.Errorf("parse %s: %w", relPath, parseErr)
+		}
+		for idx := range docs {
+			if isCRDDocument(docs[idx].obj) {
+				crdDocs = append(crdDocs, docs[idx])
+			} else {
+				otherDocs = append(otherDocs, docs[idx])
+			}
+		}
+	}
+
+	// Phase 1: Apply CRD documents in parallel.
+	// apiextensions.k8s.io/v1 is pre-registered in the REST mapper, so
+	// RESTMapping resolves without refresh — concurrent reads are safe.
+	if len(crdDocs) > 0 {
+		g, gCtx := errgroup.WithContext(ctx)
+		g.SetLimit(crdApplyConcurrency)
+		for _, doc := range crdDocs {
+			g.Go(func() error {
+				return applyParsedDocument(gCtx, logger, dynClient, dm, doc)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+	}
+
+	// Phase 2: Apply non-CRD documents sequentially.
+	// These may depend on freshly applied CRDs, so the mapper may need
+	// a refresh via the NoKindMatch → refresh → retry path.
+	for _, doc := range otherDocs {
+		if err := applyParsedDocument(ctx, logger, dynClient, dm, doc); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// applyFileContent applies the content of a single YAML file (may contain multiple documents).
-// The content is provided directly to avoid redundant disk reads, since it was already
-// read during hash computation.
-func applyFileContent(
-	ctx context.Context,
-	logger *slog.Logger,
-	dynClient dynamic.Interface,
-	dm *discoveryMapper,
-	content []byte,
-) error {
-	// Split multi-document YAML
+// parseFileDocuments decodes all YAML documents in a file's content into
+// unstructured objects. It handles multi-document YAML and skips empty
+// documents.
+func parseFileDocuments(content []byte, file string) ([]parsedDoc, error) {
 	reader := yamlutil.NewYAMLReader(bufio.NewReader(bytes.NewReader(content)))
+	var docs []parsedDoc
 
 	docNum := 0
 	for {
 		docNum++
-		doc, err := reader.Read()
+		raw, err := reader.Read()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("read yaml doc %d: %w", docNum, err)
+			return nil, fmt.Errorf("read yaml doc %d: %w", docNum, err)
 		}
-
-		// Skip empty documents
-		if len(bytes.TrimSpace(doc)) == 0 {
+		if len(bytes.TrimSpace(raw)) == 0 {
 			continue
 		}
 
-		if err := applyDocument(ctx, logger, dynClient, dm, doc); err != nil {
-			return fmt.Errorf("doc %d: %w", docNum, err)
+		obj := &unstructured.Unstructured{}
+		dec := yamlutil.NewYAMLOrJSONDecoder(bytes.NewReader(raw), yamlDecoderBufferSize)
+		if err := dec.Decode(obj); err != nil {
+			if isMissingKindDecodeError(err) {
+				return nil, fmt.Errorf("doc %d: decode yaml: %w", docNum, ErrMissingKind)
+			}
+			return nil, fmt.Errorf("doc %d: decode yaml: %w", docNum, err)
 		}
-	}
+		if obj.GroupVersionKind().Kind == "" {
+			return nil, fmt.Errorf("doc %d: %w", docNum, ErrMissingKind)
+		}
 
-	return nil
+		docs = append(docs, parsedDoc{obj: obj, file: file})
+	}
+	return docs, nil
 }
 
-// applyDocument applies a single YAML document to the cluster.
-func applyDocument(
+// isCRDDocument reports whether the given unstructured object is a
+// CustomResourceDefinition from the apiextensions.k8s.io group.
+func isCRDDocument(obj *unstructured.Unstructured) bool {
+	gvk := obj.GroupVersionKind()
+	return gvk.Group == "apiextensions.k8s.io" && gvk.Kind == "CustomResourceDefinition"
+}
+
+// applyParsedDocument resolves the REST mapping for a pre-parsed document and
+// creates it on the API server.
+func applyParsedDocument(
 	ctx context.Context,
 	logger *slog.Logger,
 	dynClient dynamic.Interface,
 	dm *discoveryMapper,
-	doc []byte,
+	doc parsedDoc,
 ) error {
-	// Decode to unstructured
-	obj := &unstructured.Unstructured{}
-	dec := yamlutil.NewYAMLOrJSONDecoder(bytes.NewReader(doc), yamlDecoderBufferSize)
-	if err := dec.Decode(obj); err != nil {
-		if isMissingKindDecodeError(err) {
-			return fmt.Errorf("decode yaml: %w", ErrMissingKind)
-		}
-		return fmt.Errorf("decode yaml: %w", err)
-	}
+	gvk := doc.obj.GroupVersionKind()
 
-	gvk := obj.GroupVersionKind()
-	if gvk.Kind == "" {
-		return ErrMissingKind
-	}
-
-	// Resolve REST mapping using cached mapper; refreshes on NoKindMatch.
 	mapping, err := discoverRESTMapping(ctx, logger, dm, gvk)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", doc.file, err)
 	}
 
-	// Determine if namespaced or cluster-scoped
 	var dr dynamic.ResourceInterface
 	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		ns := obj.GetNamespace()
+		ns := doc.obj.GetNamespace()
 		if ns == "" {
 			ns = "default"
 		}
@@ -222,13 +269,11 @@ func applyDocument(
 		dr = dynClient.Resource(mapping.Resource)
 	}
 
-	// Create the resource
-	_, err = dr.Create(ctx, obj, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("create %s/%s: %w", gvk.Kind, obj.GetName(), err)
+	if _, err := dr.Create(ctx, doc.obj, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("%s: create %s/%s: %w", doc.file, gvk.Kind, doc.obj.GetName(), err)
 	}
 
-	logger.Debug("created resource", "kind", gvk.Kind, "name", obj.GetName())
+	logger.Debug("created resource", "kind", gvk.Kind, "name", doc.obj.GetName())
 	return nil
 }
 
