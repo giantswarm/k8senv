@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 
 	"github.com/giantswarm/k8senv/internal/core"
 	"k8s.io/client-go/rest"
@@ -16,7 +15,6 @@ import (
 var (
 	singletonMgr  Manager
 	singletonOnce sync.Once
-	mgrCallCount  atomic.Int64
 )
 
 // Compile-time interface satisfaction checks.
@@ -97,7 +95,6 @@ func (w *instanceWrapper) ID() string {
 func resetForTesting() {
 	singletonMgr = nil
 	singletonOnce = sync.Once{}
-	mgrCallCount.Store(0)
 }
 
 // NewManager returns the process-level singleton Manager.
@@ -115,7 +112,7 @@ func resetForTesting() {
 //
 //nolint:ireturn // Returns Manager interface by design for testability (mockable)
 func NewManager(opts ...ManagerOption) Manager {
-	callNum := mgrCallCount.Add(1)
+	created := false
 	singletonOnce.Do(func() {
 		cfg := managerConfig{core.ManagerConfig{
 			PoolSize:             DefaultPoolSize,
@@ -134,8 +131,9 @@ func NewManager(opts ...ManagerOption) Manager {
 			opt(&cfg)
 		}
 		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.toCoreConfig())}
+		created = true
 	})
-	if callNum > 1 {
+	if !created {
 		core.Logger().Warn("NewManager called more than once; returning existing singleton (options ignored)")
 	}
 	return singletonMgr
