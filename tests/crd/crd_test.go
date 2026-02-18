@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicClient "k8s.io/client-go/dynamic"
+	dynamicclient "k8s.io/client-go/dynamic"
 )
 
 // TestCRDDirCaching verifies that CRDs from a directory are applied and cached.
@@ -151,7 +151,7 @@ func TestCRDDirWithYmlExtension(t *testing.T) {
 	t.Log("CRD from .yml extension file applied successfully")
 }
 
-// TestReleaseCleanupCRDResources verifies that Release(false) removes CRD
+// TestReleaseCleanupCRDResources verifies that Release() removes CRD
 // instances in non-system namespaces. This exercises the dynamic-client
 // resource cleanup path for custom resource types that are not known at
 // compile time.
@@ -180,7 +180,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	dynClient, err := dynamicClient.NewForConfig(cfg)
+	dynClient, err := dynamicclient.NewForConfig(cfg)
 	if err != nil {
 		t.Fatalf("create dynamic client: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 
 	// Release and re-acquire.
 	if err := inst.Release(); err != nil {
-		t.Fatalf("Release(false) failed: %v", err)
+		t.Fatalf("Release() failed: %v", err)
 	}
 	released = true
 
@@ -233,7 +233,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config after re-acquire: %v", err)
 	}
-	dynClient2, err := dynamicClient.NewForConfig(cfg2)
+	dynClient2, err := dynamicclient.NewForConfig(cfg2)
 	if err != nil {
 		t.Fatalf("create dynamic client after re-acquire: %v", err)
 	}

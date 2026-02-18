@@ -192,7 +192,7 @@ func TestReleaseCleanupWithNoUserNamespaces(t *testing.T) {
 	}
 }
 
-// TestReleaseCleanupNamespacedResources verifies that Release(false) removes
+// TestReleaseCleanupNamespacedResources verifies that Release() removes
 // all user-created resources inside non-system namespaces.
 func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	t.Parallel()
@@ -229,7 +229,7 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 
 	// Release and re-acquire.
 	if err := inst.Release(); err != nil {
-		t.Fatalf("Release(false) failed: %v", err)
+		t.Fatalf("Release() failed: %v", err)
 	}
 	released = true
 
@@ -279,7 +279,7 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	}
 }
 
-// TestReleaseCleanupResourcesWithFinalizers verifies that Release(false) clears
+// TestReleaseCleanupResourcesWithFinalizers verifies that Release() clears
 // finalizers and deletes resources that have finalizers set.
 func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 	t.Parallel()
@@ -312,7 +312,7 @@ func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 
 	// Release and re-acquire.
 	if err := inst.Release(); err != nil {
-		t.Fatalf("Release(false) failed: %v", err)
+		t.Fatalf("Release() failed: %v", err)
 	}
 	released = true
 
@@ -371,7 +371,7 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	createNamespace(ctx, t, client, userNS)
 
 	if err := inst.Release(); err != nil {
-		t.Fatalf("Release(false) failed: %v", err)
+		t.Fatalf("Release() failed: %v", err)
 	}
 	released = true
 
