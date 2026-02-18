@@ -95,9 +95,9 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 	// Release — cleanup runs (ReleaseClean strategy), instance returns to pool.
 	release()
 
-	// Re-acquire. The pool is LIFO, so we expect the same instance back
-	// (no other test should be using this specific instance since we just
-	// released it and immediately re-acquire).
+	// Re-acquire. We may get the same instance back or a different one
+	// depending on pool scheduling; the assertion below is valid either way
+	// because every instance should have only system namespaces after cleanup.
 	inst2, client2 := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
 		if err := inst2.Release(); err != nil {
@@ -105,13 +105,10 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 		}
 	}()
 
-	// If we got the same instance back, verify namespaces are clean.
-	// If we got a different one, the test is still valid — the new instance
-	// should have only system namespaces.
 	if inst2.ID() == instID {
-		t.Log("got same instance back (LIFO)")
+		t.Log("got same instance back")
 	} else {
-		t.Log("got different instance (pool concurrency)")
+		t.Log("got different instance")
 	}
 
 	nsList2, err := client2.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
@@ -223,9 +220,9 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	}()
 
 	if inst2.ID() == instID {
-		t.Log("got same instance back (LIFO)")
+		t.Log("got same instance back")
 	} else {
-		t.Log("got different instance (pool concurrency)")
+		t.Log("got different instance")
 	}
 
 	// Verify namespace is gone.
@@ -297,9 +294,9 @@ func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 	}()
 
 	if inst2.ID() == instID {
-		t.Log("got same instance back (LIFO)")
+		t.Log("got same instance back")
 	} else {
-		t.Log("got different instance (pool concurrency)")
+		t.Log("got different instance")
 	}
 
 	// Verify the finalized resource is gone.
