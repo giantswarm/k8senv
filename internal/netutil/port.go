@@ -61,10 +61,7 @@ func (r *PortRegistry) Release(port int) {
 // port is also registered in the registry; the caller must call [PortRegistry.Release]
 // separately to free it from the registry.
 func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, 0, fmt.Errorf("resolve tcp address: %w", err)
-	}
+	addr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 
 	for range maxPortRetries {
 		l, err := net.ListenTCP("tcp", addr)
