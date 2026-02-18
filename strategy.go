@@ -5,6 +5,15 @@ import "github.com/giantswarm/k8senv/internal/core"
 // ReleaseStrategy controls what happens when an Instance is released back to
 // the pool. See the individual constant documentation for details on each
 // strategy's behavior and trade-offs.
+//
+// ReleaseStrategy is a type alias (not a named type) so that the underlying
+// [core.ReleaseStrategy] methods are part of the public API:
+//
+//   - IsValid reports whether the value is a recognized strategy.
+//   - String returns the strategy name (implements [fmt.Stringer]).
+//
+// This is intentional: callers can validate and print strategy values without
+// the public package needing to redeclare these methods.
 type ReleaseStrategy = core.ReleaseStrategy
 
 const (
