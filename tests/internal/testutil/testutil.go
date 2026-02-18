@@ -200,21 +200,27 @@ func RequireBinariesOrExit() {
 // then performs cleanup (shutdown + temp dir removal). Returns the exit code.
 func RunTestMain(m *testing.M, mgr k8senv.Manager, tmpDir string) int {
 	sigCh := make(chan os.Signal, 1)
+	done := make(chan struct{})
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		sig := <-sigCh
-		signal.Stop(sigCh) // Restore default handler so a second signal force-kills
-		fmt.Fprintf(os.Stderr, "\nReceived %s, shutting down...\n", sig)
-		if err := mgr.Shutdown(); err != nil {
-			fmt.Fprintf(os.Stderr, "Shutdown error: %v\n", err)
+		select {
+		case sig := <-sigCh:
+			signal.Stop(sigCh) // Restore default handler so a second signal force-kills
+			fmt.Fprintf(os.Stderr, "\nReceived %s, shutting down...\n", sig)
+			if err := mgr.Shutdown(); err != nil {
+				fmt.Fprintf(os.Stderr, "Shutdown error: %v\n", err)
+			}
+			_ = os.RemoveAll(tmpDir)
+			os.Exit(1)
+		case <-done:
+			return
 		}
-		_ = os.RemoveAll(tmpDir)
-		os.Exit(1)
 	}()
 
 	code := m.Run()
 
 	signal.Stop(sigCh)
+	close(done)
 	if err := mgr.Shutdown(); err != nil {
 		fmt.Fprintf(os.Stderr, "Shutdown error: %v\n", err)
 	}
