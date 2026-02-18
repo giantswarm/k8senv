@@ -275,7 +275,8 @@ func (p *Pool) returnSlot() {
 		closed := p.closed
 		p.mu.Unlock()
 		if !closed {
-			Logger().Error("returnSlot: semaphore full during normal operation, possible extra release")
+			panic("k8senv: returnSlot: semaphore full during normal operation — more releases than acquires")
 		}
+		Logger().Debug("returnSlot: semaphore full after pool close, token dropped (expected)")
 	}
 }
