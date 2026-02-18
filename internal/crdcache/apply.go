@@ -96,8 +96,16 @@ func applyYAMLFiles(
 		return fmt.Errorf("%w: found %d files (max %d)", ErrTooManyYAMLFiles, len(files), maxYAMLFiles)
 	}
 
+	// Disable client-side rate limiting for the local, ephemeral
+	// kube-apiserver used during cache creation. The default client-go
+	// limits (QPS=5, Burst=10) throttle CRD apply against a localhost
+	// server that has no shared-infrastructure risk. Copy the config
+	// to avoid mutating the caller's rest.Config.
+	applyCfg := rest.CopyConfig(restCfg)
+	applyCfg.QPS = -1
+
 	// Create dynamic client
-	dynClient, err := dynamic.NewForConfig(restCfg)
+	dynClient, err := dynamic.NewForConfig(applyCfg)
 	if err != nil {
 		return fmt.Errorf("create dynamic client: %w", err)
 	}
@@ -105,7 +113,7 @@ func applyYAMLFiles(
 	// Create a non-caching discovery client for REST mapping. A non-caching
 	// client is required so that discoveryMapper.refresh can observe freshly
 	// registered CRDs on each retry attempt via live API server requests.
-	discClient, err := discovery.NewDiscoveryClientForConfig(restCfg)
+	discClient, err := discovery.NewDiscoveryClientForConfig(applyCfg)
 	if err != nil {
 		return fmt.Errorf("create discovery client: %w", err)
 	}
