@@ -90,6 +90,16 @@ func (w *instanceWrapper) ID() string {
 	return w.inst.ID()
 }
 
+// resetForTesting resets the singleton state so that the next call to
+// NewManager creates a fresh manager. This follows the Go stdlib pattern
+// (e.g., net/http/internal) for enabling test isolation within a single
+// binary. It must only be called from tests.
+func resetForTesting() {
+	singletonMgr = nil
+	singletonOnce = sync.Once{}
+	mgrCallCount.Store(0)
+}
+
 // NewManager returns the process-level singleton Manager.
 //
 // The first call creates the manager with the given options and stores it.
