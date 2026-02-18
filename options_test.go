@@ -54,35 +54,45 @@ func TestWithAcquireTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"zero",
-			true,
-			"k8senv: acquire timeout must be greater than 0, got 0s",
-			func() { k8senv.WithAcquireTimeout(0) },
+			name:     "zero",
+			panics:   true,
+			panicMsg: "k8senv: acquire timeout must be greater than 0, got 0s",
+			fn:       func() { k8senv.WithAcquireTimeout(0) },
 		},
 		{
-			"negative",
-			true,
-			"k8senv: acquire timeout must be greater than 0, got -1s",
-			func() { k8senv.WithAcquireTimeout(-1 * time.Second) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: acquire timeout must be greater than 0, got -1s",
+			fn:       func() { k8senv.WithAcquireTimeout(-1 * time.Second) },
 		},
-		{"valid", false, "", func() { k8senv.WithAcquireTimeout(1 * time.Second) }},
+		{name: "valid", fn: func() { k8senv.WithAcquireTimeout(1 * time.Second) }},
 	})
 }
 
 func TestWithKineBinaryPanicsOnEmpty(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
-		{"empty", true, "k8senv: kine binary path must not be empty", func() { k8senv.WithKineBinary("") }},
-		{"valid", false, "", func() { k8senv.WithKineBinary("/usr/local/bin/kine") }},
+		{
+			name:     "empty",
+			panics:   true,
+			panicMsg: "k8senv: kine binary path must not be empty",
+			fn:       func() { k8senv.WithKineBinary("") },
+		},
+		{name: "valid", fn: func() { k8senv.WithKineBinary("/usr/local/bin/kine") }},
 	})
 }
 
 func TestWithPoolSizePanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
-		{"negative", true, "k8senv: pool size must not be negative, got -1", func() { k8senv.WithPoolSize(-1) }},
-		{"zero_unlimited", false, "", func() { k8senv.WithPoolSize(0) }},
-		{"valid", false, "", func() { k8senv.WithPoolSize(5) }},
+		{
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: pool size must not be negative, got -1",
+			fn:       func() { k8senv.WithPoolSize(-1) },
+		},
+		{name: "zero_unlimited", fn: func() { k8senv.WithPoolSize(0) }},
+		{name: "valid", fn: func() { k8senv.WithPoolSize(5) }},
 	})
 }
 
@@ -90,12 +100,12 @@ func TestWithKubeAPIServerBinaryPanicsOnEmpty(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"empty",
-			true,
-			"k8senv: kube-apiserver binary path must not be empty",
-			func() { k8senv.WithKubeAPIServerBinary("") },
+			name:     "empty",
+			panics:   true,
+			panicMsg: "k8senv: kube-apiserver binary path must not be empty",
+			fn:       func() { k8senv.WithKubeAPIServerBinary("") },
 		},
-		{"valid", false, "", func() { k8senv.WithKubeAPIServerBinary("/usr/local/bin/kube-apiserver") }},
+		{name: "valid", fn: func() { k8senv.WithKubeAPIServerBinary("/usr/local/bin/kube-apiserver") }},
 	})
 }
 
@@ -103,20 +113,20 @@ func TestWithReleaseStrategyPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"negative",
-			true,
-			"k8senv: invalid release strategy: ReleaseStrategy(-1)",
-			func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(-1)) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: invalid release strategy: ReleaseStrategy(-1)",
+			fn:       func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(-1)) },
 		},
 		{
-			"out_of_range",
-			true,
-			"k8senv: invalid release strategy: ReleaseStrategy(99)",
-			func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(99)) },
+			name:     "out_of_range",
+			panics:   true,
+			panicMsg: "k8senv: invalid release strategy: ReleaseStrategy(99)",
+			fn:       func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(99)) },
 		},
-		{"restart", false, "", func() { k8senv.WithReleaseStrategy(k8senv.ReleaseRestart) }},
-		{"clean", false, "", func() { k8senv.WithReleaseStrategy(k8senv.ReleaseClean) }},
-		{"none", false, "", func() { k8senv.WithReleaseStrategy(k8senv.ReleaseNone) }},
+		{name: "restart", fn: func() { k8senv.WithReleaseStrategy(k8senv.ReleaseRestart) }},
+		{name: "clean", fn: func() { k8senv.WithReleaseStrategy(k8senv.ReleaseClean) }},
+		{name: "none", fn: func() { k8senv.WithReleaseStrategy(k8senv.ReleaseNone) }},
 	})
 }
 
@@ -124,18 +134,18 @@ func TestWithCleanupTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"zero",
-			true,
-			"k8senv: cleanup timeout must be greater than 0, got 0s",
-			func() { k8senv.WithCleanupTimeout(0) },
+			name:     "zero",
+			panics:   true,
+			panicMsg: "k8senv: cleanup timeout must be greater than 0, got 0s",
+			fn:       func() { k8senv.WithCleanupTimeout(0) },
 		},
 		{
-			"negative",
-			true,
-			"k8senv: cleanup timeout must be greater than 0, got -1s",
-			func() { k8senv.WithCleanupTimeout(-1 * time.Second) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: cleanup timeout must be greater than 0, got -1s",
+			fn:       func() { k8senv.WithCleanupTimeout(-1 * time.Second) },
 		},
-		{"valid", false, "", func() { k8senv.WithCleanupTimeout(30 * time.Second) }},
+		{name: "valid", fn: func() { k8senv.WithCleanupTimeout(30 * time.Second) }},
 	})
 }
 
@@ -143,18 +153,18 @@ func TestWithShutdownDrainTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"zero",
-			true,
-			"k8senv: shutdown drain timeout must be greater than 0, got 0s",
-			func() { k8senv.WithShutdownDrainTimeout(0) },
+			name:     "zero",
+			panics:   true,
+			panicMsg: "k8senv: shutdown drain timeout must be greater than 0, got 0s",
+			fn:       func() { k8senv.WithShutdownDrainTimeout(0) },
 		},
 		{
-			"negative",
-			true,
-			"k8senv: shutdown drain timeout must be greater than 0, got -1s",
-			func() { k8senv.WithShutdownDrainTimeout(-1 * time.Second) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: shutdown drain timeout must be greater than 0, got -1s",
+			fn:       func() { k8senv.WithShutdownDrainTimeout(-1 * time.Second) },
 		},
-		{"valid", false, "", func() { k8senv.WithShutdownDrainTimeout(1 * time.Minute) }},
+		{name: "valid", fn: func() { k8senv.WithShutdownDrainTimeout(1 * time.Minute) }},
 	})
 }
 
@@ -162,18 +172,18 @@ func TestWithInstanceStartTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"zero",
-			true,
-			"k8senv: instance start timeout must be greater than 0, got 0s",
-			func() { k8senv.WithInstanceStartTimeout(0) },
+			name:     "zero",
+			panics:   true,
+			panicMsg: "k8senv: instance start timeout must be greater than 0, got 0s",
+			fn:       func() { k8senv.WithInstanceStartTimeout(0) },
 		},
 		{
-			"negative",
-			true,
-			"k8senv: instance start timeout must be greater than 0, got -1s",
-			func() { k8senv.WithInstanceStartTimeout(-1 * time.Second) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: instance start timeout must be greater than 0, got -1s",
+			fn:       func() { k8senv.WithInstanceStartTimeout(-1 * time.Second) },
 		},
-		{"valid", false, "", func() { k8senv.WithInstanceStartTimeout(5 * time.Minute) }},
+		{name: "valid", fn: func() { k8senv.WithInstanceStartTimeout(5 * time.Minute) }},
 	})
 }
 
@@ -181,18 +191,18 @@ func TestWithInstanceStopTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"zero",
-			true,
-			"k8senv: instance stop timeout must be greater than 0, got 0s",
-			func() { k8senv.WithInstanceStopTimeout(0) },
+			name:     "zero",
+			panics:   true,
+			panicMsg: "k8senv: instance stop timeout must be greater than 0, got 0s",
+			fn:       func() { k8senv.WithInstanceStopTimeout(0) },
 		},
 		{
-			"negative",
-			true,
-			"k8senv: instance stop timeout must be greater than 0, got -1s",
-			func() { k8senv.WithInstanceStopTimeout(-1 * time.Second) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: instance stop timeout must be greater than 0, got -1s",
+			fn:       func() { k8senv.WithInstanceStopTimeout(-1 * time.Second) },
 		},
-		{"valid", false, "", func() { k8senv.WithInstanceStopTimeout(10 * time.Second) }},
+		{name: "valid", fn: func() { k8senv.WithInstanceStopTimeout(10 * time.Second) }},
 	})
 }
 
@@ -200,18 +210,18 @@ func TestWithCRDCacheTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"zero",
-			true,
-			"k8senv: CRD cache timeout must be greater than 0, got 0s",
-			func() { k8senv.WithCRDCacheTimeout(0) },
+			name:     "zero",
+			panics:   true,
+			panicMsg: "k8senv: CRD cache timeout must be greater than 0, got 0s",
+			fn:       func() { k8senv.WithCRDCacheTimeout(0) },
 		},
 		{
-			"negative",
-			true,
-			"k8senv: CRD cache timeout must be greater than 0, got -1s",
-			func() { k8senv.WithCRDCacheTimeout(-1 * time.Second) },
+			name:     "negative",
+			panics:   true,
+			panicMsg: "k8senv: CRD cache timeout must be greater than 0, got -1s",
+			fn:       func() { k8senv.WithCRDCacheTimeout(-1 * time.Second) },
 		},
-		{"valid", false, "", func() { k8senv.WithCRDCacheTimeout(10 * time.Minute) }},
+		{name: "valid", fn: func() { k8senv.WithCRDCacheTimeout(10 * time.Minute) }},
 	})
 }
 
@@ -219,13 +229,23 @@ func TestWithEmptyStringOptionsPanic(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			"prepopulateDB",
-			true,
-			"k8senv: prepopulate DB path must not be empty",
-			func() { k8senv.WithPrepopulateDB("") },
+			name:     "prepopulateDB",
+			panics:   true,
+			panicMsg: "k8senv: prepopulate DB path must not be empty",
+			fn:       func() { k8senv.WithPrepopulateDB("") },
 		},
-		{"crdDir", true, "k8senv: CRD directory path must not be empty", func() { k8senv.WithCRDDir("") }},
-		{"baseDataDir", true, "k8senv: base data directory must not be empty", func() { k8senv.WithBaseDataDir("") }},
+		{
+			name:     "crdDir",
+			panics:   true,
+			panicMsg: "k8senv: CRD directory path must not be empty",
+			fn:       func() { k8senv.WithCRDDir("") },
+		},
+		{
+			name:     "baseDataDir",
+			panics:   true,
+			panicMsg: "k8senv: base data directory must not be empty",
+			fn:       func() { k8senv.WithBaseDataDir("") },
+		},
 	})
 }
 
