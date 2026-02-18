@@ -18,8 +18,8 @@ mgr := k8senv.NewManager(
 | Option | Default | Description |
 |--------|---------|-------------|
 | `WithPoolSize(size)` | 4 | Max instances in pool; 0 = unlimited. Acquire blocks when all in use |
-| `WithReleaseStrategy(s)` | `ReleaseRestart` | Strategy for `Release()`: `ReleaseRestart`, `ReleaseClean`, or `ReleaseNone` |
-| `WithCleanupTimeout(d)` | 30s | Timeout for namespace cleanup during release (used with `ReleaseClean`) |
+| `WithReleaseStrategy(s)` | `ReleaseRestart` | Strategy for `Release()`: `ReleaseRestart`, `ReleaseClean`, `ReleasePurge`, or `ReleaseNone` |
+| `WithCleanupTimeout(d)` | 30s | Timeout for namespace cleanup during release (used with `ReleaseClean` and `ReleasePurge`) |
 | `WithAcquireTimeout(d)` | 30s | Timeout for instance startup during Acquire |
 | `WithKineBinary(path)` | `"kine"` | Path to kine binary |
 | `WithKubeAPIServerBinary(path)` | `"kube-apiserver"` | Path to kube-apiserver binary |
@@ -29,6 +29,7 @@ mgr := k8senv.NewManager(
 | `WithCRDCacheTimeout(d)` | 5m | Timeout for CRD cache creation (spin up temp stack, apply CRDs, copy DB) |
 | `WithInstanceStartTimeout(d)` | 5m | Max time for kine + kube-apiserver to start and become ready |
 | `WithInstanceStopTimeout(d)` | 10s | Max time per-process for graceful shutdown |
+| `WithShutdownDrainTimeout(d)` | 30s | Max time `Shutdown()` waits for in-flight releases to complete |
 
 ### Option Details
 
@@ -37,19 +38,21 @@ mgr := k8senv.NewManager(
 Configures the behavior of `Instance.Release()` for all instances managed by this manager:
 
 - **`ReleaseRestart`** (default) — Stops the instance on release. Next `Acquire()` starts a fresh instance with the DB restored from template. Provides full isolation between tests.
-- **`ReleaseClean`** — Deletes non-system namespaces but keeps the instance running. Faster reuse at the cost of shared state in system namespaces.
-- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Fastest, but tests must manage their own isolation.
+- **`ReleaseClean`** — Deletes non-system namespaces via the Kubernetes API but keeps the instance running. Faster reuse at the cost of shared state in system namespaces.
+- **`ReleasePurge`** — Deletes non-system namespaces via direct SQLite queries, bypassing the Kubernetes API entirely. Fastest cleanup strategy; keeps the instance running. Bypasses finalizers.
+- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Tests must manage their own isolation.
 
 ```go
-k8senv.WithReleaseStrategy(k8senv.ReleaseClean)  // Keep running, clean namespaces
-k8senv.WithReleaseStrategy(k8senv.ReleaseNone)    // No cleanup
+k8senv.WithReleaseStrategy(k8senv.ReleaseClean)   // Keep running, clean namespaces via API
+k8senv.WithReleaseStrategy(k8senv.ReleasePurge)    // Keep running, clean namespaces via SQL
+k8senv.WithReleaseStrategy(k8senv.ReleaseNone)     // No cleanup
 ```
 
 Panics if strategy is invalid.
 
 #### WithCleanupTimeout
 
-Sets the timeout for namespace cleanup during release. Only used when the release strategy is `ReleaseClean`.
+Sets the timeout for namespace cleanup during release. Used when the release strategy is `ReleaseClean` or `ReleasePurge`.
 
 ```go
 k8senv.WithCleanupTimeout(60*time.Second)
@@ -145,6 +148,16 @@ k8senv.WithInstanceStopTimeout(30*time.Second)
 
 Panics if duration <= 0.
 
+#### WithShutdownDrainTimeout
+
+Sets the maximum time `Shutdown()` waits for in-flight `Release()` calls to complete before forcibly closing the pool. This prevents shutdown from hanging if a release is stuck.
+
+```go
+k8senv.WithShutdownDrainTimeout(2*time.Minute)
+```
+
+Panics if duration <= 0.
+
 ## Instance Internals
 
 Instances use internal defaults that are not configurable through the public API:
@@ -226,6 +239,7 @@ func TestWithFullConfig(t *testing.T) {
         k8senv.WithCleanupTimeout(60*time.Second),                // Default: 30s (ReleaseClean only)
         k8senv.WithInstanceStartTimeout(3*time.Minute),
         k8senv.WithInstanceStopTimeout(30*time.Second),
+        k8senv.WithShutdownDrainTimeout(2*time.Minute),         // Default: 30s
 
         // Binary paths (optional if in $PATH)
         k8senv.WithKineBinary("/usr/local/bin/kine"),

@@ -65,7 +65,7 @@ Ensure the binary matches your system architecture (amd64 vs arm64).
 
 **Solution**:
 
-1. k8senv automatically retries with new ports (3 attempts by default)
+1. k8senv automatically retries with new ports (5 attempts by default)
 
 2. Check for orphaned processes:
    ```bash

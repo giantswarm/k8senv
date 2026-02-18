@@ -528,6 +528,10 @@ func (i *Instance) failRelease(token uint64, msg string, err error) error {
 //     because k8senv runs in API-only mode (no kube-controller-manager),
 //     so namespace deletion does not cascade-delete contained resources.
 //     Faster than ReleaseRestart but relies on cleanup correctness.
+//   - ReleasePurge: deletes non-system namespace data directly from kine's
+//     SQLite database, bypassing the Kubernetes API. Both kine and
+//     kube-apiserver stay running. Fastest cleanup strategy — a few SQL
+//     DELETEs instead of ~20+ API round trips.
 //   - ReleaseNone: returns the instance to the pool immediately with no
 //     cleanup. Use only when tests use unique namespaces.
 //
@@ -536,6 +540,8 @@ func (i *Instance) failRelease(token uint64, msg string, err error) error {
 //   - ReleaseClean returns nil on success. If namespace cleanup fails, the
 //     instance is marked as permanently failed via ReleaseFailed and the
 //     error is returned. Using defer inst.Release() is safe.
+//   - ReleasePurge returns nil on success. If SQLite cleanup fails, the
+//     instance is marked as permanently failed via ReleaseFailed.
 //   - ReleaseRestart returns nil on success. If Stop fails, the instance
 //     is marked as permanently failed via ReleaseFailed. The error is
 //     informational: no corrective action is required.
@@ -601,6 +607,22 @@ func (i *Instance) Release(token uint64) error {
 				if err = i.cleanNamespaces(cleanCtx); err != nil {
 					return i.failRelease(token, "namespace cleanup during release", err)
 				}
+			}
+		}
+
+	case ReleasePurge:
+		// Purge user data directly from kine's SQLite database. Both kine
+		// and kube-apiserver stay running. Because --watch-cache=false,
+		// subsequent API calls see the cleaned state immediately.
+		//
+		// Unlike ReleaseClean, we do NOT clear the client cache: the
+		// kube-apiserver port and TLS certs are unchanged, so cached
+		// clients and GVR discovery remain valid.
+		if i.started.Load() {
+			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
+			defer cleanCancel()
+			if err := purgeViaSQL(cleanCtx, i.sqlitePath, i.log); err != nil {
+				return i.failRelease(token, "SQLite purge during release", err)
 			}
 		}
 

@@ -181,7 +181,7 @@ Benefits:
 
 ### Tests
 
-Tests are organized across the root package (unit tests) and seven integration test packages under `tests/`. Integration tests share a singleton manager created in `TestMain` and require kine and kube-apiserver binaries. Different test packages use different `ReleaseStrategy` configurations to test specific behaviors.
+Tests are organized across the root package (unit tests) and nine integration test packages under `tests/`. Integration tests share a singleton manager created in `TestMain` and require kine and kube-apiserver binaries. Different test packages use different `ReleaseStrategy` configurations to test specific behaviors.
 
 **Root package (`options_test.go`)** — Unit tests (no binaries required):
 - `TestWithAcquireTimeoutPanicsOnInvalid` - Panics on invalid timeout
@@ -190,6 +190,15 @@ Tests are organized across the root package (unit tests) and seven integration t
 - `TestWithKubeAPIServerBinaryPanicsOnEmpty` - Panics on empty kube-apiserver binary path
 - `TestWithReleaseStrategyPanicsOnInvalid` - Panics on invalid release strategy
 - `TestWithEmptyStringOptionsPanic` - Empty string options panic
+- `TestWithCleanupTimeoutPanicsOnInvalid` - Panics on invalid cleanup timeout
+- `TestWithShutdownDrainTimeoutPanicsOnInvalid` - Panics on invalid shutdown drain timeout
+- `TestWithInstanceStartTimeoutPanicsOnInvalid` - Panics on invalid instance start timeout
+- `TestWithInstanceStopTimeoutPanicsOnInvalid` - Panics on invalid instance stop timeout
+- `TestWithCRDCacheTimeoutPanicsOnInvalid` - Panics on invalid CRD cache timeout
+- `TestOptionApplicationDefaults` - Default config values are correct
+- `TestOptionApplicationOverrides` - Options override defaults
+- `TestOptionApplicationMultipleOptions` - Multiple options compose correctly
+- `TestOptionApplicationLastWriteWins` - Last option wins on conflict
 
 **`tests/` (package `k8senv_test`)** — Core integration tests:
 
@@ -229,8 +238,19 @@ Tests are organized across the root package (unit tests) and seven integration t
 **`tests/stress/` (package `k8senv_stress_test`)** — Stress tests (separate package, run sequentially after other tests):
 - `TestStress` - Spawns parallel subtests that verify instance cleanliness and create random resources (configurable via `K8SENV_STRESS_SUBTESTS`)
 
+**`tests/purge/` (package `k8senv_purge_test`)** — SQLite purge tests (separate package with `ReleasePurge` strategy):
+- `TestReleasePurgeNamespaces` - Release() with ReleasePurge removes user namespaces via direct SQL
+- `TestReleasePurgePreservesSystemNamespaces` - System namespaces survive purge
+- `TestReleasePurgeWithNoUserNamespaces` - Fast path when no user namespaces exist
+- `TestReleasePurgeNamespacedResources` - ConfigMaps/Secrets in user namespaces are deleted
+- `TestReleasePurgeResourcesWithFinalizers` - Finalized resources are purged (SQL bypasses finalizers)
+- `TestReleasePurgePreservesSystemNamespaceResources` - Resources in kube-system survive
+
 **`tests/stressclean/` (package `k8senv_stressclean_test`)** — Stress tests with `ReleaseClean` strategy (separate package, run sequentially after other tests):
 - `TestStressClean` - Stress test verifying ReleaseClean under high concurrency (configurable via `K8SENV_STRESS_SUBTESTS`)
+
+**`tests/stresspurge/` (package `k8senv_stresspurge_test`)** — Stress tests with `ReleasePurge` strategy (separate package, run sequentially after other tests):
+- `TestStressPurge` - Stress test verifying ReleasePurge under high concurrency (configurable via `K8SENV_STRESS_SUBTESTS`)
 
 **`tests/restart/` (package `k8senv_restart_test`)** — Restart strategy tests (separate package with default `ReleaseRestart` strategy):
 - `TestReleaseRestart` - Release() stops instance, next Acquire starts fresh
@@ -253,7 +273,7 @@ Applied when creating a manager:
 ```go
 mgr := k8senv.NewManager(
     k8senv.WithPoolSize(2),                                  // Default: 4 (0 = unlimited)
-    k8senv.WithReleaseStrategy(k8senv.ReleaseClean),        // Default: ReleaseRestart
+    k8senv.WithReleaseStrategy(k8senv.ReleaseClean),        // Default: ReleaseRestart (also: ReleasePurge, ReleaseNone)
     k8senv.WithKineBinary("/usr/local/bin/kine"),           // Default: "kine"
     k8senv.WithKubeAPIServerBinary("/usr/local/bin/kube-apiserver"), // Default: "kube-apiserver"
     k8senv.WithAcquireTimeout(2*time.Minute),               // Default: 30 seconds
@@ -354,7 +374,7 @@ Run with: `go test -parallel=10 -tags=integration`
 
 - **Always** use `defer inst.Release()` in tests to return instances to the pool. The behavior is determined by the Manager's `ReleaseStrategy` (default: `ReleaseRestart`). On error the instance is removed from the pool; safe to ignore in defer.
 - **Never** share resources between parallel tests without namespace isolation
-- **Configure** the release strategy once in `TestMain` via `WithReleaseStrategy`. Available strategies: `ReleaseRestart` (default, stops instance), `ReleaseClean` (cleans namespaces, keeps running), `ReleaseNone` (no cleanup)
+- **Configure** the release strategy once in `TestMain` via `WithReleaseStrategy`. Available strategies: `ReleaseRestart` (default, stops instance), `ReleaseClean` (cleans namespaces via API, keeps running), `ReleasePurge` (cleans via direct SQLite deletion, fastest, keeps running), `ReleaseNone` (no cleanup)
 - **Check** that kine and kube-apiserver are installed before running integration tests:
   - `which kine` (install: `go install github.com/k3s-io/kine/cmd/kine@latest`)
   - `which kube-apiserver` (download from https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver or use `make install-tools`)

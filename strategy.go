@@ -31,4 +31,10 @@ const (
 	// ReleaseNone performs no cleanup. The instance is returned to the pool
 	// as-is. Use only when tests use unique namespaces and never share state.
 	ReleaseNone = core.ReleaseNone
+
+	// ReleasePurge cleans non-system data by directly deleting rows from
+	// kine's SQLite database, bypassing the Kubernetes API entirely. Both
+	// kine and kube-apiserver stay running; the next Acquire reuses the
+	// same warm instance with zero startup delay. Fastest cleanup strategy.
+	ReleasePurge = core.ReleasePurge
 )

@@ -49,6 +49,9 @@ sequenceDiagram
     else ReleaseClean
         Instance->>Instance: cleanNamespaces()
         Instance->>Pool: Return (running)
+    else ReleasePurge
+        Instance->>Instance: purgeViaSQL()
+        Instance->>Pool: Return (running)
     else ReleaseNone
         Instance->>Pool: Return (as-is)
     end
@@ -119,6 +122,7 @@ stateDiagram-v2
         Strategy determines cleanup:
         Restart → Stop()
         Clean → cleanNamespaces()
+        Purge → purgeViaSQL()
         None → no-op
     end note
 ```
@@ -128,7 +132,8 @@ The pool manages instances with a bounded capacity (default: 4):
 - **Acquire**: Returns a previously released instance if available, or creates a new one (up to the pool size limit). Blocks if all instances are in use. Returns a token for double-release detection.
 - **Release()**: Behavior depends on the manager's `ReleaseStrategy`:
   - `ReleaseRestart` (default) — Stops instance. Next acquire starts fresh.
-  - `ReleaseClean` — Deletes non-system namespaces, keeps running.
+  - `ReleaseClean` — Deletes non-system namespaces via Kubernetes API, keeps running.
+  - `ReleasePurge` — Deletes non-system namespaces via direct SQLite queries, keeps running. Fastest cleanup.
   - `ReleaseNone` — No cleanup, returns as-is.
 - **Failed**: Instance release or startup failed; instance is removed from the pool.
 

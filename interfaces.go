@@ -62,7 +62,10 @@ type Instance interface {
 	//
 	//   - ReleaseRestart (default): stops the instance. The next Acquire
 	//     starts fresh with the database restored from the cached template.
-	//   - ReleaseClean: deletes all non-system namespaces, keeps running.
+	//   - ReleaseClean: deletes all non-system namespaces via the Kubernetes
+	//     API, keeps running.
+	//   - ReleasePurge: deletes all non-system namespaces via direct SQLite
+	//     queries, bypassing the API and finalizers. Fastest cleanup.
 	//   - ReleaseNone: returns immediately with no cleanup.
 	//
 	// On success, returns nil. Using defer inst.Release() is safe.

@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
     Root["k8senv/"] --> Public["Public API\n(root package)"]
-    Root --> Tests["tests/\n+ cleanup/ + restart/\n+ stress/ + stressclean/\n+ crd/ + poolsize/"]
+    Root --> Tests["tests/\n+ cleanup/ + restart/ + purge/\n+ stress/ + stressclean/ + stresspurge/\n+ crd/ + poolsize/"]
     Root --> Internal["internal/"]
     Root --> Docs["docs/"]
     Root --> CRDs["crds/"]
@@ -41,7 +41,7 @@ flowchart TD
 | `interfaces.go` | `Manager` and `Instance` interfaces |
 | `k8senv.go` | `NewManager()` factory function, adapter wrappers |
 | `options.go` | Functional options: `WithReleaseStrategy`, `WithCRDDir`, `WithAcquireTimeout`, etc. |
-| `strategy.go` | `ReleaseStrategy` type alias + constants (`ReleaseRestart`, `ReleaseClean`, `ReleaseNone`) |
+| `strategy.go` | `ReleaseStrategy` type alias + constants (`ReleaseRestart`, `ReleaseClean`, `ReleasePurge`, `ReleaseNone`) |
 | `defaults.go` | Exported default constants (timeouts, binary names, strategy) |
 | `errors.go` | Sentinel error re-exports from internal/core |
 | `config.go` | Unexported `managerConfig` struct + conversion to `core.ManagerConfig` |
@@ -54,7 +54,8 @@ flowchart TD
 | `manager.go` | Manager implementation: pool lifecycle, two-phase init, Acquire returns token |
 | `pool.go` | Bounded instance pool (default 4), token-based double-release detection |
 | `instance.go` | Instance lifecycle: strategy-based Release(), start, stop, port conflict retry |
-| `cleanup.go` | Namespace cleanup: parallel deletion, finalizer removal |
+| `cleanup.go` | Namespace cleanup via Kubernetes API: parallel deletion, finalizer removal |
+| `purge.go` | Namespace cleanup via direct SQLite queries: bypasses API and finalizers |
 | `config.go` | `ManagerConfig`, `InstanceConfig`, `ReleaseStrategy` type with `Validate()` |
 | `log.go` | Package-level slog logger with atomic pointers |
 
@@ -122,7 +123,7 @@ flowchart TD
 | `instance_test.go` | Instance usage, reuse, ID uniqueness, double-release, API server mode |
 | `pool_test.go` | Pool acquire/release semantics and concurrent access |
 | `lifecycle_test.go` | Initialize idempotency and concurrency tests |
-| `coverage_test.go` | Context cancel coverage |
+| `context_test.go` | Context cancel coverage |
 
 ### tests/cleanup/ — Namespace Cleanup Tests (package `k8senv_cleanup_test`)
 
@@ -145,12 +146,26 @@ flowchart TD
 | `main_test.go` | `TestMain`: singleton with default strategy |
 | `stress_test.go` | 100+ parallel subtests with random resource creation |
 
+### tests/purge/ — SQLite Purge Tests (package `k8senv_purge_test`)
+
+| File | Purpose |
+|------|---------|
+| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleasePurge)` |
+| `purge_test.go` | Purge namespaces, preserve system NS, namespaced resources, finalizer bypass |
+
 ### tests/stressclean/ — Stress Tests with ReleaseClean (package `k8senv_stressclean_test`)
 
 | File | Purpose |
 |------|---------|
 | `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleaseClean)` |
 | `stress_test.go` | Stress + verify clean instances on acquire |
+
+### tests/stresspurge/ — Stress Tests with ReleasePurge (package `k8senv_stresspurge_test`)
+
+| File | Purpose |
+|------|---------|
+| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleasePurge)` |
+| `stress_test.go` | Stress + verify purged instances on acquire |
 
 ### tests/crd/ — CRD Tests (package `k8senv_crd_test`)
 

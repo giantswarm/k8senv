@@ -34,12 +34,32 @@ const (
 	// Use unique namespaces (e.g., with test name or UUID prefix) to
 	// ensure isolation.
 	ReleaseNone
+
+	// ReleasePurge cleans non-system data by directly deleting rows from
+	// kine's SQLite database, bypassing the Kubernetes API entirely. Both
+	// kine and kube-apiserver stay running; the next Acquire reuses the
+	// same warm instance with zero startup delay.
+	//
+	// This is the fastest cleanup strategy: a few SQL DELETEs replace the
+	// ~20+ HTTP round trips of ReleaseClean. It works because
+	// --watch-cache=false ensures kube-apiserver reads go directly through
+	// kine to SQLite, so database changes are immediately visible to
+	// subsequent API calls. Between Release and the next Acquire there are
+	// no active watchers or API consumers, making direct database
+	// modification safe.
+	//
+	// Safety: system namespaces (default, kube-system, kube-public,
+	// kube-node-lease), cluster-scoped resources (CRDs, APIServices,
+	// ClusterRoles), and resources within system namespaces are preserved.
+	// Finalizers are bypassed — SQL deletion does not go through the
+	// Kubernetes admission chain.
+	ReleasePurge
 )
 
 // IsValid reports whether s is a recognized ReleaseStrategy value.
 func (s ReleaseStrategy) IsValid() bool {
 	switch s {
-	case ReleaseRestart, ReleaseClean, ReleaseNone:
+	case ReleaseRestart, ReleaseClean, ReleaseNone, ReleasePurge:
 		return true
 	default:
 		return false
@@ -55,6 +75,8 @@ func (s ReleaseStrategy) String() string {
 		return "ReleaseClean"
 	case ReleaseNone:
 		return "ReleaseNone"
+	case ReleasePurge:
+		return "ReleasePurge"
 	default:
 		return fmt.Sprintf("ReleaseStrategy(%d)", int(s))
 	}

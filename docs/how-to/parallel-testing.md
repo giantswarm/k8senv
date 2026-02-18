@@ -253,7 +253,7 @@ Each instance consumes:
 - 2 file descriptors for processes
 - ~10-20MB disk for SQLite database
 
-With the default pool size of 4, at most 4 instances run concurrently. The default `ReleaseRestart` strategy stops instances on release; use `WithReleaseStrategy(k8senv.ReleaseClean)` to keep instances running and reuse them with namespace cleanup. Adjust `WithPoolSize()` to match your resource budget.
+With the default pool size of 4, at most 4 instances run concurrently. The default `ReleaseRestart` strategy stops instances on release. For faster reuse, use `WithReleaseStrategy(k8senv.ReleasePurge)` (cleans namespaces via direct SQLite, fastest) or `WithReleaseStrategy(k8senv.ReleaseClean)` (cleans namespaces via Kubernetes API). Adjust `WithPoolSize()` to match your resource budget.
 
 ## Complete Example: 10 Parallel Tests
 

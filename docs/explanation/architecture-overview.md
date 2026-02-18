@@ -81,7 +81,7 @@ Instance management safe for concurrent use by multiple goroutines, with on-dema
 
 ### Instance
 
-Manages the lifecycle of a kine + kube-apiserver pair. Supports lazy start (first `Acquire()` triggers startup), port conflict retry, and strategy-based release (restart, namespace cleanup, or no-op).
+Manages the lifecycle of a kine + kube-apiserver pair. Supports lazy start (first `Acquire()` triggers startup), port conflict retry, and strategy-based release (restart, API-based cleanup, SQL-based purge, or no-op).
 
 ### KubeStack
 
@@ -113,8 +113,9 @@ Scheduler and controller-manager are not run. Pods remain Pending and controller
 Release behavior is configured once at the manager level via `WithReleaseStrategy()`, not per-call:
 
 - **`ReleaseRestart`** (default) — Stops the instance on release. Next `Acquire()` starts a fresh instance with the DB restored from template. Provides full isolation between tests.
-- **`ReleaseClean`** — Deletes non-system namespaces but keeps the instance running. Faster reuse (~100ms vs ~5-15s restart), but shared state in system namespaces persists.
-- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Fastest, but tests must manage their own isolation.
+- **`ReleaseClean`** — Deletes non-system namespaces via the Kubernetes API but keeps the instance running. Faster reuse (~100ms vs ~5-15s restart), but shared state in system namespaces persists.
+- **`ReleasePurge`** — Deletes non-system namespaces via direct SQLite queries, bypassing the Kubernetes API and finalizers entirely. Fastest cleanup strategy; keeps the instance running.
+- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Tests must manage their own isolation.
 
 ### Lazy Initialization
 
