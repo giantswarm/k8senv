@@ -131,13 +131,14 @@ func applyYAMLFiles(
 		return fmt.Errorf("%w: found %d files (max %d)", ErrTooManyYAMLFiles, len(files), maxYAMLFiles)
 	}
 
-	// Disable client-side rate limiting for the local, ephemeral
+	// Effectively disable client-side rate limiting for the local, ephemeral
 	// kube-apiserver used during cache creation. The default client-go
 	// limits (QPS=5, Burst=10) throttle CRD apply against a localhost
 	// server that has no shared-infrastructure risk. Copy the config
 	// to avoid mutating the caller's rest.Config.
 	applyCfg := rest.CopyConfig(restCfg)
-	applyCfg.QPS = -1
+	applyCfg.QPS = 10_000
+	applyCfg.Burst = 10_000
 
 	// Create dynamic client
 	dynClient, err := dynamic.NewForConfig(applyCfg)

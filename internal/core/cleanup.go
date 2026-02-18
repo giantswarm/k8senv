@@ -445,9 +445,9 @@ func (i *Instance) deleteResourceItem(
 }
 
 // getOrBuildCleanupClient returns the cached cleanup client or creates one.
-// It disables client-side rate limiting (QPS=-1) because the client only
-// targets a local, ephemeral kube-apiserver — no shared infrastructure can
-// be overwhelmed.
+// It effectively disables client-side rate limiting (QPS=10000, Burst=10000)
+// because the client only targets a local, ephemeral kube-apiserver — no
+// shared infrastructure can be overwhelmed.
 //
 //nolint:dupl // Each client builder returns a different concrete type; deduplication would require generics that harm clarity.
 func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
@@ -458,7 +458,8 @@ func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build config for cleanup client: %w", err)
 	}
-	cfg.QPS = -1
+	cfg.QPS = 10_000
+	cfg.Burst = 10_000
 
 	c, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
@@ -482,7 +483,8 @@ func (i *Instance) getOrBuildDiscoveryClient() (*discovery.DiscoveryClient, erro
 	if err != nil {
 		return nil, fmt.Errorf("build config for discovery client: %w", err)
 	}
-	cfg.QPS = -1
+	cfg.QPS = 10_000
+	cfg.Burst = 10_000
 
 	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
 	if err != nil {
@@ -506,7 +508,8 @@ func (i *Instance) getOrBuildDynamicClient() (*dynamic.DynamicClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build config for dynamic client: %w", err)
 	}
-	cfg.QPS = -1
+	cfg.QPS = 10_000
+	cfg.Burst = 10_000
 
 	dc, err := dynamic.NewForConfig(cfg)
 	if err != nil {
