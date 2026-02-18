@@ -503,6 +503,20 @@ func (m *Manager) Shutdown() error {
 		return nil
 	}
 
+	// Close the pool before stopping instances to provide defense in depth.
+	// After the inflight drain above, no new tryReleaseToPool call can reach
+	// pool.Release (they all see managerShuttingDown and return false). Closing
+	// the pool here adds a second guard: even if a Release somehow reached the
+	// pool, pool.Release checks p.closed and stops the instance instead of
+	// returning it to the free stack. Closing early also unblocks any
+	// pool.Acquire calls stuck on the bounded-pool semaphore (via closeCh).
+	//
+	// This is safe because:
+	//   - pool.Instances() reads p.all regardless of p.closed.
+	//   - Instance.Stop is idempotent, so double-stops are harmless.
+	//   - pool.Close itself is idempotent.
+	pool.Close()
+
 	// Stop all instances concurrently. Each instance is independent, so
 	// parallel stops reduce worst-case latency from N*StopTimeout to
 	// 1*StopTimeout.
@@ -535,10 +549,6 @@ func (m *Manager) Shutdown() error {
 			errs = append(errs, err)
 		}
 	}
-
-	// Mark the pool as closed to prevent new acquisitions and ensure any
-	// in-flight Release calls stop instances instead of returning them.
-	pool.Close()
 
 	return errors.Join(errs...)
 }
