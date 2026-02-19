@@ -53,9 +53,10 @@ const cleanupConfirmDelay = 10 * time.Millisecond
 // which is ACID-compliant — reads are immediately consistent after writes.
 const cleanupConfirmations = 1
 
-// cleanupQPS is the client-side QPS limit for cleanup clients. Set high to
-// effectively disable throttling — the target is a local, ephemeral
-// kube-apiserver so there is no shared infrastructure to overwhelm.
+// cleanupQPS is the client-side QPS limit for cleanup clients. Set higher
+// than instance.go's user-facing QPS (1000) because cleanup issues many
+// small deletions in rapid succession and benefits from zero throttling.
+// The target is a local, ephemeral kube-apiserver with no external consumers.
 const cleanupQPS = 10_000
 
 // cleanupBurst is the client-side burst limit for cleanup clients, matching
