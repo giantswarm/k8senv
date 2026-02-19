@@ -219,7 +219,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 		StopTimeout:           cfg.stopTimeout(),
 		PortRegistry:          cfg.PortRegistry,
 		Logger:                logger,
-	}, maxPortRetries)
+	}, maxKubestackStartRetries)
 	if err != nil {
 		return fmt.Errorf("start kubestack for CRD cache: %w", err)
 	}
@@ -295,9 +295,9 @@ func applyCRDs(ctx context.Context, logger *slog.Logger, kubeconfigPath, crdDir 
 	return nil
 }
 
-// maxPortRetries is the number of startup retries for transient failures
+// maxKubestackStartRetries is the number of startup retries for transient failures
 // such as port conflicts when starting a temporary kubestack for CRD caching.
-const maxPortRetries = 3
+const maxKubestackStartRetries = 3
 
 // crdEstablishmentPollInterval is the interval between consecutive checks
 // for CRD establishment status.
