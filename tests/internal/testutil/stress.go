@@ -95,15 +95,6 @@ func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.
 	}
 }
 
-// StressDeleteNamespace deletes a namespace, logging a warning on error.
-func StressDeleteNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
-	t.Helper()
-
-	if err := client.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-		t.Logf("Warning: failed to delete namespace %s: %v", name, err)
-	}
-}
-
 // StressCreateRandomResource creates a random Kubernetes resource in the given namespace.
 func StressCreateRandomResource(
 	ctx context.Context,
@@ -286,21 +277,15 @@ func StressWorker(ctx context.Context, t *testing.T, mgr k8senv.Manager, workerI
 	StressVerifyCleanInstance(ctx, t, client)
 
 	nsCount := rng.IntN(StressMaxNS) + 1
-	namespaces := make([]string, 0, nsCount)
 
 	for n := range nsCount {
 		nsName := UniqueName(nsPrefix)
 		StressCreateNamespace(ctx, t, client, nsName)
-		namespaces = append(namespaces, nsName)
 
 		resCount := rng.IntN(StressMaxRes) + 1
 		for r := range resCount {
 			idx := n*StressMaxRes + r
 			StressCreateRandomResource(ctx, t, client, nsName, idx, rng)
 		}
-	}
-
-	for _, ns := range namespaces {
-		StressDeleteNamespace(ctx, t, client, ns)
 	}
 }
