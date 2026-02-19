@@ -299,12 +299,14 @@ func TestOptionApplicationDefaults(t *testing.T) {
 func TestOptionApplicationOverrides(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
+	tests := []struct {
+		name   string
 		opt    k8senv.ManagerOption
 		verify func(t *testing.T, snap k8senv.ConfigSnapshot)
 	}{
-		"WithPoolSize": {
-			opt: k8senv.WithPoolSize(8),
+		{
+			name: "WithPoolSize",
+			opt:  k8senv.WithPoolSize(8),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.PoolSize != 8 {
@@ -312,8 +314,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithPoolSize_zero_unlimited": {
-			opt: k8senv.WithPoolSize(0),
+		{
+			name: "WithPoolSize_zero_unlimited",
+			opt:  k8senv.WithPoolSize(0),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.PoolSize != 0 {
@@ -321,8 +324,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithReleaseStrategy_clean": {
-			opt: k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
+		{
+			name: "WithReleaseStrategy_clean",
+			opt:  k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.ReleaseStrategy != k8senv.ReleaseClean {
@@ -330,8 +334,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithReleaseStrategy_none": {
-			opt: k8senv.WithReleaseStrategy(k8senv.ReleaseNone),
+		{
+			name: "WithReleaseStrategy_none",
+			opt:  k8senv.WithReleaseStrategy(k8senv.ReleaseNone),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.ReleaseStrategy != k8senv.ReleaseNone {
@@ -339,8 +344,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithKineBinary": {
-			opt: k8senv.WithKineBinary("/custom/kine"),
+		{
+			name: "WithKineBinary",
+			opt:  k8senv.WithKineBinary("/custom/kine"),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.KineBinary != "/custom/kine" {
@@ -348,8 +354,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithKubeAPIServerBinary": {
-			opt: k8senv.WithKubeAPIServerBinary("/custom/kube-apiserver"),
+		{
+			name: "WithKubeAPIServerBinary",
+			opt:  k8senv.WithKubeAPIServerBinary("/custom/kube-apiserver"),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.KubeAPIServerBinary != "/custom/kube-apiserver" {
@@ -357,8 +364,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithAcquireTimeout": {
-			opt: k8senv.WithAcquireTimeout(2 * time.Minute),
+		{
+			name: "WithAcquireTimeout",
+			opt:  k8senv.WithAcquireTimeout(2 * time.Minute),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.AcquireTimeout != 2*time.Minute {
@@ -366,8 +374,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithPrepopulateDB": {
-			opt: k8senv.WithPrepopulateDB("/data/crds.db"),
+		{
+			name: "WithPrepopulateDB",
+			opt:  k8senv.WithPrepopulateDB("/data/crds.db"),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.DefaultDBPath != "/data/crds.db" {
@@ -375,8 +384,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithCRDDir": {
-			opt: k8senv.WithCRDDir("/testdata/crds"),
+		{
+			name: "WithCRDDir",
+			opt:  k8senv.WithCRDDir("/testdata/crds"),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.CRDDir != "/testdata/crds" {
@@ -384,8 +394,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithBaseDataDir": {
-			opt: k8senv.WithBaseDataDir("/custom/data"),
+		{
+			name: "WithBaseDataDir",
+			opt:  k8senv.WithBaseDataDir("/custom/data"),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.BaseDataDir != "/custom/data" {
@@ -393,8 +404,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithCRDCacheTimeout": {
-			opt: k8senv.WithCRDCacheTimeout(10 * time.Minute),
+		{
+			name: "WithCRDCacheTimeout",
+			opt:  k8senv.WithCRDCacheTimeout(10 * time.Minute),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.CRDCacheTimeout != 10*time.Minute {
@@ -402,8 +414,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithInstanceStartTimeout": {
-			opt: k8senv.WithInstanceStartTimeout(3 * time.Minute),
+		{
+			name: "WithInstanceStartTimeout",
+			opt:  k8senv.WithInstanceStartTimeout(3 * time.Minute),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.InstanceStartTimeout != 3*time.Minute {
@@ -411,8 +424,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithInstanceStopTimeout": {
-			opt: k8senv.WithInstanceStopTimeout(30 * time.Second),
+		{
+			name: "WithInstanceStopTimeout",
+			opt:  k8senv.WithInstanceStopTimeout(30 * time.Second),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.InstanceStopTimeout != 30*time.Second {
@@ -420,8 +434,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithCleanupTimeout": {
-			opt: k8senv.WithCleanupTimeout(1 * time.Minute),
+		{
+			name: "WithCleanupTimeout",
+			opt:  k8senv.WithCleanupTimeout(1 * time.Minute),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.CleanupTimeout != 1*time.Minute {
@@ -429,8 +444,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 				}
 			},
 		},
-		"WithShutdownDrainTimeout": {
-			opt: k8senv.WithShutdownDrainTimeout(2 * time.Minute),
+		{
+			name: "WithShutdownDrainTimeout",
+			opt:  k8senv.WithShutdownDrainTimeout(2 * time.Minute),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
 				if snap.ShutdownDrainTimeout != 2*time.Minute {
@@ -440,8 +456,8 @@ func TestOptionApplicationOverrides(t *testing.T) {
 		},
 	}
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			snap := k8senv.ApplyOptionsForTesting(tc.opt)
 			tc.verify(t, snap)
