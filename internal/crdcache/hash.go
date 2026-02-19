@@ -40,7 +40,7 @@ func computeDirHash(dirPath string) (string, []hashedFile, error) {
 	files := make([]hashedFile, 0, len(paths))
 
 	for _, p := range paths {
-		content, readErr := os.ReadFile(p)
+		content, readErr := os.ReadFile(p) //nolint:gosec // G304: paths are from controlled directory walking
 		if readErr != nil {
 			return "", nil, fmt.Errorf("read %s: %w", p, readErr)
 		}

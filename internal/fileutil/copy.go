@@ -46,7 +46,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return fmt.Errorf("prepare destination: %w", err)
 	}
 
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) //nolint:gosec // G304: paths are from controlled sources
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
@@ -135,7 +135,11 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, e
 		return tmpFile, writePath, nil
 	}
 
-	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	f, err := os.OpenFile( //nolint:gosec // G304: paths are from controlled sources
+		dst,
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
+		mode,
+	)
 	if err != nil {
 		return nil, "", fmt.Errorf("create destination: %w", err)
 	}

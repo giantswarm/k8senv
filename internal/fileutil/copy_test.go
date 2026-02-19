@@ -18,7 +18,7 @@ func createTestFile(t *testing.T, dir, name, content string) string {
 
 func readDst(t *testing.T, path string) string {
 	t.Helper()
-	got, err := os.ReadFile(path)
+	got, err := os.ReadFile(path) //nolint:gosec // G304: path is test-controlled
 	if err != nil {
 		t.Fatalf("read destination: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestCopyFile_LargeContent(t *testing.T) {
 		t.Fatalf("CopyFile() error: %v", err)
 	}
 
-	got, err := os.ReadFile(dst)
+	got, err := os.ReadFile(dst) //nolint:gosec // G304: path is test-controlled
 	if err != nil {
 		t.Fatalf("read destination: %v", err)
 	}

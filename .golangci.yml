@@ -266,11 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # G304: Allow file path from variable for file operations
-      - linters:
-          - gosec
-        text: G304
-
       # G301: Allow 0755 directory permissions
       - linters:
           - gosec
