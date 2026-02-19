@@ -172,8 +172,11 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		t.Fatalf("Failed to create namespace: %v", err)
 	}
 	t.Cleanup(func() {
-		// Use context.Background because the test's ctx may be canceled by the time cleanup runs.
-		_ = client.CoreV1().Namespaces().Delete(context.Background(), nsName, metav1.DeleteOptions{})
+		// Use a fresh context with timeout because the test's ctx may be canceled
+		// by the time cleanup runs, and we must not block indefinitely.
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = client.CoreV1().Namespaces().Delete(cleanupCtx, nsName, metav1.DeleteOptions{})
 	})
 
 	t.Run("NamespaceOperations", func(t *testing.T) {
