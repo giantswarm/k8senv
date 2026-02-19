@@ -129,7 +129,7 @@ func EnsureCache(ctx context.Context, cfg Config) (*Result, error) {
 		logger.Info("using existing CRD cache (created while waiting)", "cache_path", cachePath, "hash", hash)
 		return &Result{CachePath: cachePath, Hash: hash, Created: false}, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("stat cache file %s: %w", cachePath, err)
+		return nil, fmt.Errorf("stat cache file %s after lock acquisition: %w", cachePath, err)
 	}
 
 	// Create cache
