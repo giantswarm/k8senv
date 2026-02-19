@@ -200,7 +200,7 @@ func (h *purgeHandle) deleteNamespaceData(ctx context.Context, namespaces []stri
 		// Pattern matches any key with /<ns>/ as a path segment, catching
 		// both core resources (/registry/configmaps/<ns>/foo) and group
 		// resources (/registry/deployments/apps/<ns>/foo).
-		b.WriteString("name = ? OR name LIKE ? ESCAPE '\\'")
+		b.WriteString("(name = ? OR name LIKE ? ESCAPE '\\')")
 		args = append(args, "/registry/namespaces/"+ns, "%/"+escapeLIKE(ns)+"/%")
 	}
 
