@@ -1,19 +1,20 @@
 package fileutil
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/giantswarm/k8senv/internal/sentinel"
 )
 
 // ErrEmptySrc is returned when a source path is empty.
-var ErrEmptySrc = errors.New("source path must not be empty")
+const ErrEmptySrc = sentinel.Error("source path must not be empty")
 
 // ErrEmptyDst is returned when a destination path is empty.
-var ErrEmptyDst = errors.New("destination path must not be empty")
+const ErrEmptyDst = sentinel.Error("destination path must not be empty")
 
 // CopyFileOptions configures file copy behavior.
 type CopyFileOptions struct {
