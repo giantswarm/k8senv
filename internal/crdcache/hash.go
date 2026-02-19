@@ -57,5 +57,10 @@ func computeDirHash(dirPath string) (string, []hashedFile, error) {
 		files = append(files, hashedFile{path: p, content: content})
 	}
 
+	// Truncate the SHA-256 hex digest to 16 characters (64 bits). This is used
+	// as a suffix in cache filenames (e.g., "cached-<hash>.db"), so brevity aids
+	// readability in logs and on disk. 64 bits gives a birthday-bound collision
+	// probability of ~1 in 2^32 (~4 billion), which is negligible for the small
+	// number of distinct CRD directories a project will realistically have.
 	return hex.EncodeToString(h.Sum(nil))[:16], files, nil
 }
