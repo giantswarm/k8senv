@@ -266,12 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # forbidigo: Allow log package in existing code (grandfather clause)
-      - linters:
-          - forbidigo
-        path: internal/(apiserver|kine)/process\.go
-        text: use of `log.*` forbidden
-
       # G204: Allow subprocess with variable args for kine and kube-apiserver
       - linters:
           - gosec
