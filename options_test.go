@@ -275,159 +275,116 @@ func TestOptionApplicationOverrides(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		opt    k8senv.ManagerOption
-		verify func(t *testing.T, snap k8senv.ConfigSnapshot)
+		name  string
+		opt   k8senv.ManagerOption
+		field string
+		got   func(k8senv.ConfigSnapshot) any
+		want  any
 	}{
 		{
-			name: "WithPoolSize",
-			opt:  k8senv.WithPoolSize(8),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.PoolSize != 8 {
-					t.Errorf("PoolSize = %d, want 8", snap.PoolSize)
-				}
-			},
+			name:  "WithPoolSize",
+			opt:   k8senv.WithPoolSize(8),
+			field: "PoolSize",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.PoolSize },
+			want:  8,
 		},
 		{
-			name: "WithPoolSize_zero_unlimited",
-			opt:  k8senv.WithPoolSize(0),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.PoolSize != 0 {
-					t.Errorf("PoolSize = %d, want 0", snap.PoolSize)
-				}
-			},
+			name:  "WithPoolSize_zero_unlimited",
+			opt:   k8senv.WithPoolSize(0),
+			field: "PoolSize",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.PoolSize },
+			want:  0,
 		},
 		{
-			name: "WithReleaseStrategy_clean",
-			opt:  k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.ReleaseStrategy != k8senv.ReleaseClean {
-					t.Errorf("ReleaseStrategy = %v, want ReleaseClean", snap.ReleaseStrategy)
-				}
-			},
+			name:  "WithReleaseStrategy_clean",
+			opt:   k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
+			field: "ReleaseStrategy",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.ReleaseStrategy },
+			want:  k8senv.ReleaseClean,
 		},
 		{
-			name: "WithReleaseStrategy_none",
-			opt:  k8senv.WithReleaseStrategy(k8senv.ReleaseNone),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.ReleaseStrategy != k8senv.ReleaseNone {
-					t.Errorf("ReleaseStrategy = %v, want ReleaseNone", snap.ReleaseStrategy)
-				}
-			},
+			name:  "WithReleaseStrategy_none",
+			opt:   k8senv.WithReleaseStrategy(k8senv.ReleaseNone),
+			field: "ReleaseStrategy",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.ReleaseStrategy },
+			want:  k8senv.ReleaseNone,
 		},
 		{
-			name: "WithKineBinary",
-			opt:  k8senv.WithKineBinary("/custom/kine"),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.KineBinary != "/custom/kine" {
-					t.Errorf("KineBinary = %q, want %q", snap.KineBinary, "/custom/kine")
-				}
-			},
+			name:  "WithKineBinary",
+			opt:   k8senv.WithKineBinary("/custom/kine"),
+			field: "KineBinary",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.KineBinary },
+			want:  "/custom/kine",
 		},
 		{
-			name: "WithKubeAPIServerBinary",
-			opt:  k8senv.WithKubeAPIServerBinary("/custom/kube-apiserver"),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.KubeAPIServerBinary != "/custom/kube-apiserver" {
-					t.Errorf("KubeAPIServerBinary = %q, want %q", snap.KubeAPIServerBinary, "/custom/kube-apiserver")
-				}
-			},
+			name:  "WithKubeAPIServerBinary",
+			opt:   k8senv.WithKubeAPIServerBinary("/custom/kube-apiserver"),
+			field: "KubeAPIServerBinary",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.KubeAPIServerBinary },
+			want:  "/custom/kube-apiserver",
 		},
 		{
-			name: "WithAcquireTimeout",
-			opt:  k8senv.WithAcquireTimeout(2 * time.Minute),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.AcquireTimeout != 2*time.Minute {
-					t.Errorf("AcquireTimeout = %v, want 2m", snap.AcquireTimeout)
-				}
-			},
+			name:  "WithAcquireTimeout",
+			opt:   k8senv.WithAcquireTimeout(2 * time.Minute),
+			field: "AcquireTimeout",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.AcquireTimeout },
+			want:  2 * time.Minute,
 		},
 		{
-			name: "WithPrepopulateDB",
-			opt:  k8senv.WithPrepopulateDB("/data/crds.db"),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.PrepopulateDBPath != "/data/crds.db" {
-					t.Errorf("PrepopulateDBPath = %q, want %q", snap.PrepopulateDBPath, "/data/crds.db")
-				}
-			},
+			name:  "WithPrepopulateDB",
+			opt:   k8senv.WithPrepopulateDB("/data/crds.db"),
+			field: "PrepopulateDBPath",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.PrepopulateDBPath },
+			want:  "/data/crds.db",
 		},
 		{
-			name: "WithCRDDir",
-			opt:  k8senv.WithCRDDir("/testdata/crds"),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.CRDDir != "/testdata/crds" {
-					t.Errorf("CRDDir = %q, want %q", snap.CRDDir, "/testdata/crds")
-				}
-			},
+			name:  "WithCRDDir",
+			opt:   k8senv.WithCRDDir("/testdata/crds"),
+			field: "CRDDir",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.CRDDir },
+			want:  "/testdata/crds",
 		},
 		{
-			name: "WithBaseDataDir",
-			opt:  k8senv.WithBaseDataDir("/custom/data"),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.BaseDataDir != "/custom/data" {
-					t.Errorf("BaseDataDir = %q, want %q", snap.BaseDataDir, "/custom/data")
-				}
-			},
+			name:  "WithBaseDataDir",
+			opt:   k8senv.WithBaseDataDir("/custom/data"),
+			field: "BaseDataDir",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.BaseDataDir },
+			want:  "/custom/data",
 		},
 		{
-			name: "WithCRDCacheTimeout",
-			opt:  k8senv.WithCRDCacheTimeout(10 * time.Minute),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.CRDCacheTimeout != 10*time.Minute {
-					t.Errorf("CRDCacheTimeout = %v, want 10m", snap.CRDCacheTimeout)
-				}
-			},
+			name:  "WithCRDCacheTimeout",
+			opt:   k8senv.WithCRDCacheTimeout(10 * time.Minute),
+			field: "CRDCacheTimeout",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.CRDCacheTimeout },
+			want:  10 * time.Minute,
 		},
 		{
-			name: "WithInstanceStartTimeout",
-			opt:  k8senv.WithInstanceStartTimeout(3 * time.Minute),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.InstanceStartTimeout != 3*time.Minute {
-					t.Errorf("InstanceStartTimeout = %v, want 3m", snap.InstanceStartTimeout)
-				}
-			},
+			name:  "WithInstanceStartTimeout",
+			opt:   k8senv.WithInstanceStartTimeout(3 * time.Minute),
+			field: "InstanceStartTimeout",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.InstanceStartTimeout },
+			want:  3 * time.Minute,
 		},
 		{
-			name: "WithInstanceStopTimeout",
-			opt:  k8senv.WithInstanceStopTimeout(30 * time.Second),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.InstanceStopTimeout != 30*time.Second {
-					t.Errorf("InstanceStopTimeout = %v, want 30s", snap.InstanceStopTimeout)
-				}
-			},
+			name:  "WithInstanceStopTimeout",
+			opt:   k8senv.WithInstanceStopTimeout(30 * time.Second),
+			field: "InstanceStopTimeout",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.InstanceStopTimeout },
+			want:  30 * time.Second,
 		},
 		{
-			name: "WithCleanupTimeout",
-			opt:  k8senv.WithCleanupTimeout(1 * time.Minute),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.CleanupTimeout != 1*time.Minute {
-					t.Errorf("CleanupTimeout = %v, want 1m", snap.CleanupTimeout)
-				}
-			},
+			name:  "WithCleanupTimeout",
+			opt:   k8senv.WithCleanupTimeout(1 * time.Minute),
+			field: "CleanupTimeout",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.CleanupTimeout },
+			want:  1 * time.Minute,
 		},
 		{
-			name: "WithShutdownDrainTimeout",
-			opt:  k8senv.WithShutdownDrainTimeout(2 * time.Minute),
-			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
-				t.Helper()
-				if snap.ShutdownDrainTimeout != 2*time.Minute {
-					t.Errorf("ShutdownDrainTimeout = %v, want 2m", snap.ShutdownDrainTimeout)
-				}
-			},
+			name:  "WithShutdownDrainTimeout",
+			opt:   k8senv.WithShutdownDrainTimeout(2 * time.Minute),
+			field: "ShutdownDrainTimeout",
+			got:   func(s k8senv.ConfigSnapshot) any { return s.ShutdownDrainTimeout },
+			want:  2 * time.Minute,
 		},
 	}
 
@@ -435,7 +392,9 @@ func TestOptionApplicationOverrides(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			snap := k8senv.ApplyOptionsForTesting(tc.opt)
-			tc.verify(t, snap)
+			if got := tc.got(snap); got != tc.want {
+				t.Errorf("%s = %v, want %v", tc.field, got, tc.want)
+			}
 		})
 	}
 }

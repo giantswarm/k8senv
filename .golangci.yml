@@ -266,21 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # Exclude some linters from running on test files and test helpers
-      - linters:
-          - dupl
-          - forcetypeassert
-          - gocognit
-          - goconst
-          - gocyclo
-          - unparam
-        path: (_test\.go|^tests/)
-
-      # TestParallelAcquisition is intentionally complex (parallel test orchestration)
-      - linters:
-          - gocognit
-        text: TestParallelAcquisition
-
       # Allow more complexity in process management code
       - linters:
           - gocognit
@@ -336,10 +321,6 @@ linters:
           - gosec
         text: G306
 
-      # goconst: Ignore in test files
-      - linters:
-          - goconst
-        path: (.+)_test\.go
 
     paths:
       - third_party$

@@ -173,10 +173,12 @@ func stressCreateWithRetry[T named](
 func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
+	data := map[string]string{"key": fmt.Sprintf("value-%d", idx)}
+
 	stressCreateWithRetry(t, "ConfigMap", ns, "stress-cm", idx, func(name string) (*v1.ConfigMap, error) {
 		return client.CoreV1().ConfigMaps(ns).Create(ctx, &v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Data:       map[string]string{"key": fmt.Sprintf("value-%d", idx)},
+			Data:       data,
 		}, metav1.CreateOptions{})
 	})
 }

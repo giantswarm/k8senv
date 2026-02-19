@@ -5,6 +5,7 @@ package k8senv_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -168,15 +169,9 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to list namespaces: %v", err)
 		}
-		found := false
-		for _, item := range nsList.Items {
-			if item.Name == nsName {
-				found = true
-
-				break
-			}
-		}
-		if !found {
+		if !slices.ContainsFunc(nsList.Items, func(item v1.Namespace) bool {
+			return item.Name == nsName
+		}) {
 			t.Fatalf("expected namespace %s in list, but not found", nsName)
 		}
 	})
