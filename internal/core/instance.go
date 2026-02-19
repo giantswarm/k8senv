@@ -592,6 +592,10 @@ func (i *Instance) effectiveStopTimeout(ctx context.Context) time.Duration {
 	// Ensure a non-negative timeout; a zero or negative value would cause
 	// immediate expiry in the underlying stop sequence.
 	if timeout <= 0 {
+		i.log.Warn("context already expired, clamping stop timeout to 1ms",
+			"configured_timeout", i.cfg.StopTimeout,
+			"context_err", ctx.Err(),
+		)
 		timeout = time.Millisecond
 	}
 	return timeout
