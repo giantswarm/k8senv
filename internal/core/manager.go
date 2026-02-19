@@ -121,7 +121,7 @@ func NewManagerWithConfig(cfg ManagerConfig) *Manager {
 	}
 	return &Manager{
 		cfg:          cfg,
-		cachedDBPath: cfg.DefaultDBPath,
+		cachedDBPath: cfg.PrepopulateDBPath,
 		ports:        netutil.NewPortRegistry(nil),
 		inflightDone: make(chan struct{}),
 	}
@@ -192,7 +192,7 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		m.pool.Store(nil)
 		// Reset cachedDBPath so a retry doesn't use a stale path
 		// pointing to a cache that may have been cleaned up.
-		m.cachedDBPath = m.cfg.DefaultDBPath
+		m.cachedDBPath = m.cfg.PrepopulateDBPath
 		m.storeState(managerCreated)
 		return fmt.Errorf("initialize: %w", err)
 	}

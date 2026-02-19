@@ -93,7 +93,7 @@ type ManagerConfig struct {
 	KineBinary          string
 	KubeAPIServerBinary string
 	AcquireTimeout      time.Duration
-	DefaultDBPath       string // initial DB path from WithPrepopulateDB
+	PrepopulateDBPath   string // initial DB path from WithPrepopulateDB
 	BaseDataDir         string
 	CRDDir              string
 

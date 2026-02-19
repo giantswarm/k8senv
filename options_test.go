@@ -288,8 +288,8 @@ func TestOptionApplicationDefaults(t *testing.T) {
 	if snap.ShutdownDrainTimeout != k8senv.DefaultShutdownDrainTimeout {
 		t.Errorf("ShutdownDrainTimeout = %v, want %v", snap.ShutdownDrainTimeout, k8senv.DefaultShutdownDrainTimeout)
 	}
-	if snap.DefaultDBPath != "" {
-		t.Errorf("DefaultDBPath = %q, want empty", snap.DefaultDBPath)
+	if snap.PrepopulateDBPath != "" {
+		t.Errorf("PrepopulateDBPath = %q, want empty", snap.PrepopulateDBPath)
 	}
 	if snap.CRDDir != "" {
 		t.Errorf("CRDDir = %q, want empty", snap.CRDDir)
@@ -379,8 +379,8 @@ func TestOptionApplicationOverrides(t *testing.T) {
 			opt:  k8senv.WithPrepopulateDB("/data/crds.db"),
 			verify: func(t *testing.T, snap k8senv.ConfigSnapshot) {
 				t.Helper()
-				if snap.DefaultDBPath != "/data/crds.db" {
-					t.Errorf("DefaultDBPath = %q, want %q", snap.DefaultDBPath, "/data/crds.db")
+				if snap.PrepopulateDBPath != "/data/crds.db" {
+					t.Errorf("PrepopulateDBPath = %q, want %q", snap.PrepopulateDBPath, "/data/crds.db")
 				}
 			},
 		},

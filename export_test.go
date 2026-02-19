@@ -16,7 +16,7 @@ type ConfigSnapshot struct {
 	KineBinary           string
 	KubeAPIServerBinary  string
 	AcquireTimeout       time.Duration
-	DefaultDBPath        string
+	PrepopulateDBPath    string
 	CRDDir               string
 	BaseDataDir          string
 	CRDCacheTimeout      time.Duration
@@ -41,7 +41,7 @@ func ApplyOptionsForTesting(opts ...ManagerOption) ConfigSnapshot {
 		KineBinary:           cfg.KineBinary,
 		KubeAPIServerBinary:  cfg.KubeAPIServerBinary,
 		AcquireTimeout:       cfg.AcquireTimeout,
-		DefaultDBPath:        cfg.DefaultDBPath,
+		PrepopulateDBPath:    cfg.PrepopulateDBPath,
 		CRDDir:               cfg.CRDDir,
 		BaseDataDir:          cfg.BaseDataDir,
 		CRDCacheTimeout:      cfg.CRDCacheTimeout,

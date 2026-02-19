@@ -89,7 +89,7 @@ func WithAcquireTimeout(d time.Duration) ManagerOption {
 func WithPrepopulateDB(dbPath string) ManagerOption {
 	requireNonEmpty("prepopulate DB path", dbPath)
 	return func(c *managerConfig) {
-		c.DefaultDBPath = dbPath
+		c.PrepopulateDBPath = dbPath
 	}
 }
 
