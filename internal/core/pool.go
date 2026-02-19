@@ -275,7 +275,7 @@ func (p *Pool) returnSlot() {
 		case <-p.closeCh:
 			Logger().Debug("returnSlot: semaphore full after pool close, token dropped (expected)")
 		default:
-			panic("k8senv: returnSlot: semaphore full during normal operation — more releases than acquires")
+			panic(fmt.Sprintf("k8senv: returnSlot: semaphore full during normal operation (maxSize=%d)", p.maxSize))
 		}
 	}
 }
