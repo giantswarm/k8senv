@@ -97,10 +97,10 @@ func New(cfg Config) (*Process, error) {
 // Each field is written by exactly one goroutine, making data ownership
 // explicit and preventing accidental races if new preparation steps are added.
 type startFiles struct {
-	tokenFilePath  string
-	certDir        string
-	saKeyPath      string
-	authConfigPath string
+	tokenFilePath  string // Written by the writeTokenFile goroutine.
+	certDir        string // Written by the setupCertsAndKeys goroutine.
+	saKeyPath      string // Written by the setupCertsAndKeys goroutine.
+	authConfigPath string // Written by the writeAuthConfig goroutine.
 }
 
 // Start launches the kube-apiserver process. It prepares token, certificate,
