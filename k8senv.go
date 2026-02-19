@@ -99,7 +99,9 @@ func (w *instanceWrapper) Config() (*rest.Config, error) {
 // After Release returns, any subsequent call to Config on this wrapper returns
 // ErrInstanceReleased.
 func (w *instanceWrapper) Release() error {
-	w.released.Store(true)
+	if !w.released.CompareAndSwap(false, true) {
+		panic("k8senv: double-release of instance " + w.inst.ID())
+	}
 	return w.inst.Release(w.token)
 }
 

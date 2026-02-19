@@ -72,6 +72,8 @@ type Instance interface {
 	// On error (cleanup or stop failure), the instance is marked as
 	// permanently failed and removed from the pool. The error is
 	// informational: no corrective action is required.
+	//
+	// Panics if called more than once on the same acquisition.
 	Release() error
 
 	// ID returns a unique identifier for this instance.
