@@ -49,8 +49,6 @@ func (w *managerWrapper) Initialize(ctx context.Context) error {
 }
 
 // Acquire implements Manager.Acquire, returning Instance interface.
-//
-//nolint:ireturn // Returns interface by design for testability.
 func (w *managerWrapper) Acquire(ctx context.Context) (Instance, error) {
 	inst, token, err := w.mgr.Acquire(ctx)
 	if err != nil {
@@ -189,8 +187,6 @@ func resetForTesting() error {
 //
 // Panics if any option receives an invalid value. See individual With*
 // functions for constraints.
-//
-//nolint:ireturn // Returns interface by design for testability.
 func NewManager(opts ...ManagerOption) Manager {
 	singletonMu.Lock()
 	defer singletonMu.Unlock()

@@ -260,6 +260,8 @@ linters:
         - empty
         - stdlib
         - generic
+        - github.com/giantswarm/k8senv.Manager
+        - github.com/giantswarm/k8senv.Instance
 
   exclusions:
     generated: lax
