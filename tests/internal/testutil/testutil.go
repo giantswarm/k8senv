@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -144,25 +145,17 @@ func AcquireWithGuardedRelease(
 
 	inst, client := AcquireWithClient(ctx, t, mgr)
 
-	released := false
-	t.Cleanup(func() {
-		if !released {
-			inst.Release() //nolint:errcheck,gosec // safety net on test failure
+	var releaseOnce sync.Once
+	doRelease := func() {
+		if err := inst.Release(); err != nil {
+			t.Errorf("Release() failed: %v", err)
 		}
-	})
+	}
+	t.Cleanup(func() { releaseOnce.Do(doRelease) })
 
 	release := func() {
 		t.Helper()
-
-		if released {
-			return
-		}
-
-		if err := inst.Release(); err != nil {
-			t.Fatalf("Release() failed: %v", err)
-		}
-
-		released = true
+		releaseOnce.Do(doRelease)
 	}
 
 	return inst, client, release
