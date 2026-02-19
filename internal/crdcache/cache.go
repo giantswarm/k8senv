@@ -332,18 +332,27 @@ const crdEstablishmentBurst = 100
 const longWaitThreshold = 10 * time.Second
 
 // ErrCRDEstablishTimeout is returned when CRDs do not reach the Established
-// condition within the maximum number of polling iterations.
+// condition before the context deadline expires.
 const ErrCRDEstablishTimeout = sentinel.Error("crd establishment timeout")
 
-// maxEstablishmentPolls is the maximum number of polling iterations in
-// waitForCRDsEstablished. It acts as a safety net against unbounded looping
-// when the context has a very long (or no) deadline. At the default
-// crdEstablishmentPollInterval of 100ms this allows up to 30 seconds of
-// polling (300 * 100ms).
-const maxEstablishmentPolls = 300
+// defaultEstablishmentTimeout is the fallback timeout for
+// waitForCRDsEstablished when the context has no deadline. This preserves
+// the previous behavior of capping polling at ~30 seconds.
+const defaultEstablishmentTimeout = 30 * time.Second
 
-// waitForCRDsEstablished polls until all CRDs in the cluster have the Established condition.
+// waitForCRDsEstablished polls until all CRDs in the cluster have the
+// Established condition. The polling loop is driven by the context deadline.
+// If the context has no deadline, a fallback timeout of defaultEstablishmentTimeout
+// is applied to prevent unbounded polling.
 func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *rest.Config) error {
+	// Ensure the polling loop is bounded. If the caller's context has no
+	// deadline, apply a fallback timeout to prevent unbounded looping.
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultEstablishmentTimeout)
+		defer cancel()
+	}
+
 	clientCfg := rest.CopyConfig(restCfg)
 	// Override client-go rate limits for the local, ephemeral cache-building
 	// phase. See constant docs for the relationship between QPS, Burst, and
@@ -363,18 +372,8 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 	defer ticker.Stop()
 
 	var pendingCRDs []string
-	polls := 0
 
 	for {
-		if polls >= maxEstablishmentPolls {
-			return fmt.Errorf(
-				"crd establishment did not complete after %d polls: pending CRDs: %v: %w",
-				polls,
-				pendingCRDs,
-				ErrCRDEstablishTimeout,
-			)
-		}
-		polls++
 		crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("list CRDs: %w", err)
@@ -423,7 +422,12 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("waiting for CRDs to be established: %w", context.Cause(ctx))
+			return fmt.Errorf(
+				"crd establishment did not complete after %s: pending CRDs: %v: %w",
+				time.Since(startTime).Round(time.Millisecond),
+				pendingCRDs,
+				ErrCRDEstablishTimeout,
+			)
 		case <-ticker.C:
 		}
 	}
