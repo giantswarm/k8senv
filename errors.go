@@ -3,7 +3,12 @@ package k8senv
 import "github.com/giantswarm/k8senv/internal/core"
 
 // Sentinel errors for error inspection with errors.Is.
-// These are immutable constants safe for use in wrapped error chain comparison.
+//
+// These use the sentinel.Error const pattern instead of errors.New vars.
+// sentinel.Error is a string type implementing error, allowing errors to be
+// declared as const. This prevents accidental reassignment and enables
+// compile-time immutability, while remaining compatible with errors.Is
+// through Go's default == comparison on comparable types.
 const (
 	// ErrShuttingDown is returned by Acquire when the manager is shutting down.
 	ErrShuttingDown = core.ErrShuttingDown
