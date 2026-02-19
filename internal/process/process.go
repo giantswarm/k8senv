@@ -120,6 +120,10 @@ func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
 //     the process exits first).
 //  3. Wait for process exit or total timeout.
 //
+// stopWithDone does not nil cmd or the done channel. The caller is responsible
+// for clearing these references after stopWithDone returns so that subsequent
+// calls (and IsStarted checks) see the process as stopped.
+//
 // Worst-case blocking duration is timeout + killDrainTimeout (currently 10s).
 // This occurs when the main timeout expires and the post-SIGKILL drain also
 // blocks for its full duration. Callers allocating time budgets should account

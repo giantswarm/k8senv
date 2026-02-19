@@ -64,6 +64,10 @@ func (b *BaseProcess) Stop(timeout time.Duration) error {
 // called first), Close logs a warning and stops the process automatically to
 // prevent resource leaks. Callers should always call Stop before Close; the
 // auto-stop is a safety net, not an intended code path.
+//
+// If the auto-stop fails, Close still closes log files. This means a process
+// that could not be stopped may continue running with its stdout/stderr file
+// handles closed, causing its subsequent writes to fail with EBADF.
 func (b *BaseProcess) Close() {
 	if b.cmd != nil {
 		b.log.Warn("process.Close called without Stop; stopping automatically",
