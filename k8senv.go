@@ -141,6 +141,9 @@ func NewManager(opts ...ManagerOption) Manager {
 	singletonMu.Lock()
 	defer singletonMu.Unlock()
 
+	// created is written inside the Do closure and read after Do returns.
+	// sync.Once guarantees the closure completes (happens-before) Do returns,
+	// so the write is visible here without additional synchronization.
 	created := false
 	singletonOnce.Do(func() {
 		cfg := defaultManagerConfig()
