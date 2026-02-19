@@ -64,6 +64,15 @@
 // This means pods remain Pending and controllers don't reconcile, but this is
 // ideal for API server testing (CRDs, RBAC, namespaces, ConfigMaps, Secrets).
 //
+// # Logging
+//
+// By default k8senv derives its logger from [slog.Default]. Call [SetLogger]
+// to direct k8senv log output to a custom [log/slog.Logger]:
+//
+//	k8senv.SetLogger(myLogger.With("component", "k8senv"))
+//
+// Pass nil to reset to the default behavior.
+//
 // # Error Handling
 //
 // The package exports sentinel errors for inspection with [errors.Is].
