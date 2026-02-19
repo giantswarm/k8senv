@@ -171,17 +171,9 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 		// redundant List call — listUserNamespaces already fetched this data.
 		// On subsequent iterations re-list to observe post-deletion state.
 		if iteration > 0 {
-			nsList, listErr := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-			if listErr != nil {
-				return fmt.Errorf("list namespaces for cleanup: %w", listErr)
-			}
-
-			userNamespaces = userNamespaces[:0]
-			for idx := range nsList.Items {
-				name := nsList.Items[idx].Name
-				if !isSystemNamespace(name) {
-					userNamespaces = append(userNamespaces, name)
-				}
+			userNamespaces, err = i.refreshUserNamespaces(ctx, client, userNamespaces)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -190,17 +182,8 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 			if consecutiveClean >= cleanupConfirmations {
 				return nil
 			}
-
-			// Short delay: only needs to exceed watch-cache propagation lag.
-			confirmTimer.Reset(cleanupConfirmDelay)
-			select {
-			case <-ctx.Done():
-				// Drain the timer to avoid leaking it after context cancellation.
-				if !confirmTimer.Stop() {
-					<-confirmTimer.C
-				}
-				return fmt.Errorf("context expired waiting for namespace cleanup: %w", ctx.Err())
-			case <-confirmTimer.C:
+			if err := waitForCleanupConfirmation(ctx, confirmTimer); err != nil {
+				return err
 			}
 			continue
 		}
@@ -211,19 +194,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 		consecutiveClean = 0
 		i.log.Debug("cleaning user namespaces", "count", len(userNamespaces))
 
-		g, gCtx := errgroup.WithContext(ctx)
-		g.SetLimit(gvrCleanupConcurrency)
-
-		for _, name := range userNamespaces {
-			g.Go(func() error {
-				if err := deleteAndFinalizeNamespace(gCtx, client, i.log, name); err != nil {
-					return fmt.Errorf("clean namespace %s: %w", name, err)
-				}
-				return nil
-			})
-		}
-
-		if err := g.Wait(); err != nil {
+		if err := i.deleteUserNamespaces(ctx, client, userNamespaces); err != nil {
 			return err
 		}
 	}
@@ -233,6 +204,64 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 		maxCleanupIterations,
 		len(userNamespaces),
 	)
+}
+
+// refreshUserNamespaces re-lists namespaces from the API server and returns
+// the names of non-system namespaces. It reuses the provided buf slice to
+// avoid allocation.
+func (i *Instance) refreshUserNamespaces(
+	ctx context.Context,
+	client *kubernetes.Clientset,
+	buf []string,
+) ([]string, error) {
+	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces for cleanup: %w", err)
+	}
+
+	buf = buf[:0]
+	for idx := range nsList.Items {
+		name := nsList.Items[idx].Name
+		if !isSystemNamespace(name) {
+			buf = append(buf, name)
+		}
+	}
+	return buf, nil
+}
+
+// waitForCleanupConfirmation waits for cleanupConfirmDelay or returns an error
+// if the context is canceled. The provided timer is reused across calls to
+// avoid per-iteration time.After leaks.
+func waitForCleanupConfirmation(ctx context.Context, timer *time.Timer) error {
+	timer.Reset(cleanupConfirmDelay)
+	select {
+	case <-ctx.Done():
+		// Drain the timer to avoid leaking it after context cancellation.
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return fmt.Errorf("context expired waiting for namespace cleanup: %w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
+}
+
+// deleteUserNamespaces deletes all given user namespaces concurrently using
+// an errgroup bounded by gvrCleanupConcurrency.
+func (i *Instance) deleteUserNamespaces(ctx context.Context, client kubernetes.Interface, namespaces []string) error {
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(gvrCleanupConcurrency)
+
+	for _, name := range namespaces {
+		g.Go(func() error {
+			if err := deleteAndFinalizeNamespace(gCtx, client, i.log, name); err != nil {
+				return fmt.Errorf("clean namespace %s: %w", name, err)
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
 }
 
 // cleanNamespacedResources discovers all namespaced resource types on the API

@@ -66,49 +66,37 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	if err != nil {
 		return err
 	}
-
-	// closeDst ensures dstFile.Close is called exactly once. The deferred
-	// call acts as a safety net for early returns; the explicit call in the
-	// normal path captures the close error for the caller.
-	var (
-		closed   bool
-		closeErr error
-	)
-	closeDst := func() {
-		if closed {
-			return
-		}
-		closed = true
-		closeErr = dstFile.Close()
-	}
 	defer func() {
-		closeDst()
-		if closeErr != nil && retErr == nil {
-			retErr = fmt.Errorf("close destination: %w", closeErr)
-		}
 		if retErr != nil {
 			_ = os.Remove(writePath)
 		}
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
+		_ = dstFile.Close()
 		return fmt.Errorf("copy: %w", err)
 	}
 
+	return finalizeCopy(dstFile, writePath, dst, o.Sync || o.Atomic)
+}
+
+// finalizeCopy syncs (if requested), closes, and renames the destination file.
+// On sync failure, dstFile is closed before returning the error.
+func finalizeCopy(dstFile *os.File, writePath, dst string, doSync bool) error {
 	// Sync data to disk when explicitly requested or when performing an
 	// atomic write. For atomic writes, fsync before rename ensures data
 	// durability — without it, a crash could leave the renamed file with
 	// incomplete contents.
-	if o.Sync || o.Atomic {
+	if doSync {
 		if err := dstFile.Sync(); err != nil {
+			_ = dstFile.Close()
 			return fmt.Errorf("sync: %w", err)
 		}
 	}
 
 	// Close explicitly before rename so the file content is flushed.
-	closeDst()
-	if closeErr != nil {
-		return fmt.Errorf("close destination: %w", closeErr)
+	if err := dstFile.Close(); err != nil {
+		return fmt.Errorf("close destination: %w", err)
 	}
 
 	// Atomic: rename temp file to final destination.

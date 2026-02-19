@@ -249,28 +249,33 @@ func TestApplyParseFileDocuments(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-
 			docs, err := parseFileDocuments([]byte(tc.content), "test.yaml")
-
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if len(docs) != tc.wantDocs {
-				t.Fatalf("got %d docs, want %d", len(docs), tc.wantDocs)
-			}
-			if tc.wantKind != "" && len(docs) > 0 {
-				got := docs[0].obj.GroupVersionKind().Kind
-				if got != tc.wantKind {
-					t.Errorf("first doc kind = %q, want %q", got, tc.wantKind)
-				}
-			}
+			assertParsedDocs(t, docs, err, tc.wantDocs, tc.wantErr, tc.wantKind)
 		})
+	}
+}
+
+// assertParsedDocs validates parseFileDocuments output against expected values.
+func assertParsedDocs(t *testing.T, docs []parsedDoc, err error, wantDocs int, wantErr bool, wantKind string) {
+	t.Helper()
+
+	if wantErr {
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(docs) != wantDocs {
+		t.Fatalf("got %d docs, want %d", len(docs), wantDocs)
+	}
+	if wantKind != "" && len(docs) > 0 {
+		got := docs[0].obj.GroupVersionKind().Kind
+		if got != wantKind {
+			t.Errorf("first doc kind = %q, want %q", got, wantKind)
+		}
 	}
 }
 

@@ -176,21 +176,8 @@ func StartWithRetry(
 	cfg Config,
 	maxRetries int,
 ) (*Stack, error) {
-	if procCtx == nil {
-		return nil, errors.New("procCtx must not be nil")
-	}
-	if readyCtx == nil {
-		return nil, errors.New("readyCtx must not be nil")
-	}
-	// Best-effort guard: catches the most common mistake of passing the same
-	// variable for both contexts. Cannot detect logically equivalent but
-	// distinct context values.
-	if procCtx == readyCtx {
-		return nil, errors.New("procCtx and readyCtx must be different contexts; " +
-			"procCtx governs process lifetime, readyCtx governs startup timeout")
-	}
-	if maxRetries < 1 {
-		return nil, fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
+	if err := validateStartWithRetryArgs(procCtx, readyCtx, maxRetries); err != nil {
+		return nil, err
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -207,8 +194,7 @@ func StartWithRetry(
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		select {
-		case <-readyCtx.Done():
+		if readyCtx.Err() != nil {
 			if lastErr != nil {
 				return nil, errors.Join(
 					fmt.Errorf("context canceled after %d attempts: %w", attempt-1, readyCtx.Err()),
@@ -216,21 +202,13 @@ func StartWithRetry(
 				)
 			}
 			return nil, readyCtx.Err()
-		default:
 		}
 
 		stack := newValidated(cfg)
 
 		if err := stack.Start(procCtx, readyCtx); err != nil {
 			lastErr = err
-			log.Warn("kubestack start attempt failed",
-				"attempt", attempt,
-				"max_retries", maxRetries,
-				"error", err,
-			)
-			if stopErr := stack.Stop(cfg.stopTimeout()); stopErr != nil {
-				log.Warn("cleanup partially-started kubestack", "error", stopErr)
-			}
+			logFailedStartAttempt(log, stack, cfg, err, attempt, maxRetries)
 			if isPermanentStartError(err) {
 				return nil, fmt.Errorf("permanent start failure (not retried): %w", err)
 			}
@@ -244,6 +222,41 @@ func StartWithRetry(
 	}
 
 	return nil, fmt.Errorf("start kubestack after %d attempts: %w", maxRetries, lastErr)
+}
+
+// validateStartWithRetryArgs validates the non-config arguments to
+// StartWithRetry. Config validation is performed separately.
+func validateStartWithRetryArgs(procCtx, readyCtx context.Context, maxRetries int) error {
+	if procCtx == nil {
+		return errors.New("procCtx must not be nil")
+	}
+	if readyCtx == nil {
+		return errors.New("readyCtx must not be nil")
+	}
+	// Best-effort guard: catches the most common mistake of passing the same
+	// variable for both contexts. Cannot detect logically equivalent but
+	// distinct context values.
+	if procCtx == readyCtx {
+		return errors.New("procCtx and readyCtx must be different contexts; " +
+			"procCtx governs process lifetime, readyCtx governs startup timeout")
+	}
+	if maxRetries < 1 {
+		return fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
+	}
+	return nil
+}
+
+// logFailedStartAttempt logs a warning for a failed start attempt and cleans
+// up the partially-started stack.
+func logFailedStartAttempt(log *slog.Logger, stack *Stack, cfg Config, err error, attempt, maxRetries int) {
+	log.Warn("kubestack start attempt failed",
+		"attempt", attempt,
+		"max_retries", maxRetries,
+		"error", err,
+	)
+	if stopErr := stack.Stop(cfg.stopTimeout()); stopErr != nil {
+		log.Warn("cleanup partially-started kubestack", "error", stopErr)
+	}
 }
 
 // permanentStartErrors lists errors that indicate a permanent failure during

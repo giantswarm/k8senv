@@ -340,6 +340,57 @@ const ErrCRDEstablishTimeout = sentinel.Error("crd establishment timeout")
 // the previous behavior of capping polling at ~30 seconds.
 const defaultEstablishmentTimeout = 30 * time.Second
 
+// isCRDEstablished reports whether a single CRD has the Established condition
+// set to True.
+func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
+	for _, cond := range crd.Status.Conditions {
+		if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// findPendingCRDs returns the names of CRDs that have not yet reached the
+// Established condition. Returns nil when all CRDs are established.
+func findPendingCRDs(crdList *apiextensionsv1.CustomResourceDefinitionList) []string {
+	var pending []string
+	for i := range crdList.Items {
+		if !isCRDEstablished(&crdList.Items[i]) {
+			pending = append(pending, crdList.Items[i].Name)
+		}
+	}
+	return pending
+}
+
+// logCRDEstablishmentProgress logs warnings and debug messages about pending
+// CRDs. It sets *warned to true after the first warning is emitted.
+func logCRDEstablishmentProgress(
+	ctx context.Context,
+	logger *slog.Logger,
+	pending []string,
+	startTime time.Time,
+	warned *bool,
+) {
+	if !*warned && time.Since(startTime) >= longWaitThreshold {
+		*warned = true
+		// Clone pending before passing to slog: the caller reuses the slice
+		// across loop iterations, so an async log handler could observe
+		// mutated contents without a defensive copy.
+		logger.Warn("CRD establishment is taking longer than expected",
+			"elapsed", time.Since(startTime).Round(time.Millisecond),
+			"pending_crds", slices.Clone(pending),
+		)
+	}
+
+	if logger.Enabled(ctx, slog.LevelDebug) {
+		// Clone: same reason as the Warn clone above.
+		logger.Debug("waiting for CRD establishment",
+			"pending_crds", slices.Clone(pending),
+		)
+	}
+}
+
 // waitForCRDsEstablished polls until all CRDs in the cluster have the
 // Established condition. The polling loop is driven by the context deadline.
 // If the context has no deadline, a fallback timeout of defaultEstablishmentTimeout
@@ -371,61 +422,28 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 	ticker := time.NewTicker(crdEstablishmentPollInterval)
 	defer ticker.Stop()
 
-	var pendingCRDs []string
-
 	for {
 		crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("list CRDs: %w", err)
 		}
 
-		allEstablished := true
-		pendingCRDs = pendingCRDs[:0]
-		for i := range crdList.Items {
-			established := false
-			for _, cond := range crdList.Items[i].Status.Conditions {
-				if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
-					established = true
-					break
-				}
-			}
-			if !established {
-				allEstablished = false
-				pendingCRDs = append(pendingCRDs, crdList.Items[i].Name)
-			}
-		}
-
-		if allEstablished {
+		pending := findPendingCRDs(crdList)
+		if len(pending) == 0 {
 			if len(crdList.Items) == 0 {
 				logger.Warn("zero CRDs found on API server; verify CRD directory contains valid CRD manifests")
 			}
 			return nil
 		}
 
-		if !warned && time.Since(startTime) >= longWaitThreshold {
-			warned = true
-			// Clone pendingCRDs before passing to slog: the slice is reused
-			// across loop iterations (reset via [:0] above), so an async log
-			// handler could observe mutated contents without a defensive copy.
-			logger.Warn("CRD establishment is taking longer than expected",
-				"elapsed", time.Since(startTime).Round(time.Millisecond),
-				"pending_crds", slices.Clone(pendingCRDs),
-			)
-		}
-
-		if logger.Enabled(ctx, slog.LevelDebug) {
-			// Clone: same reason as the Warn clone above.
-			logger.Debug("waiting for CRD establishment",
-				"pending_crds", slices.Clone(pendingCRDs),
-			)
-		}
+		logCRDEstablishmentProgress(ctx, logger, pending, startTime, &warned)
 
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf(
 				"crd establishment did not complete after %s: pending CRDs: %v: %w",
 				time.Since(startTime).Round(time.Millisecond),
-				pendingCRDs,
+				pending,
 				ErrCRDEstablishTimeout,
 			)
 		case <-ticker.C:

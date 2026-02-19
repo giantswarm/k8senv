@@ -266,18 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # Allow more complexity in process management code
-      - linters:
-          - gocognit
-          - gocyclo
-        path: internal/(apiserver|kine)/process\.go
-
-      # Allow complexity in internal packages (populateCache, cleanNamespaces, CopyFile, etc.)
-      - linters:
-          - gocognit
-          - gocyclo
-        path: internal/
-
       # Internal packages can have more leeway on exported checks
       - linters:
           - revive

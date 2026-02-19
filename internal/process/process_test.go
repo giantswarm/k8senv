@@ -283,21 +283,7 @@ func TestStopCloseAndNil(t *testing.T) {
 		f := &fakeStoppable{}
 		p := f
 		err := StopCloseAndNil(&p, 5*time.Second)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if p != nil {
-			t.Error("pointer should be nil after StopCloseAndNil")
-		}
-		if !f.stopped {
-			t.Error("Stop should have been called")
-		}
-		if !f.closed {
-			t.Error("Close should have been called")
-		}
-		if f.stopTimeout != 5*time.Second {
-			t.Errorf("Stop timeout = %v, want %v", f.stopTimeout, 5*time.Second)
-		}
+		assertStopCloseSuccess(t, f, p, err, 5*time.Second)
 	})
 
 	t.Run("close and nil on stop error", func(t *testing.T) {
@@ -305,19 +291,47 @@ func TestStopCloseAndNil(t *testing.T) {
 		f := &fakeStoppable{stopErr: errors.New("stop failed")}
 		p := f
 		err := StopCloseAndNil(&p, time.Second)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if err.Error() != "stop failed" {
-			t.Errorf("error = %q, want %q", err.Error(), "stop failed")
-		}
-		if p != nil {
-			t.Error("pointer should be nil even when Stop fails")
-		}
-		if !f.closed {
-			t.Error("Close should be called even when Stop fails")
-		}
+		assertStopCloseError(t, f, p, err, "stop failed")
 	})
+}
+
+// assertStopCloseSuccess verifies StopCloseAndNil behavior on the success path:
+// no error, pointer nilled, Stop and Close called with correct timeout.
+func assertStopCloseSuccess(t *testing.T, f *fakeStoppable, p *fakeStoppable, err error, wantTimeout time.Duration) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p != nil {
+		t.Error("pointer should be nil after StopCloseAndNil")
+	}
+	if !f.stopped {
+		t.Error("Stop should have been called")
+	}
+	if !f.closed {
+		t.Error("Close should have been called")
+	}
+	if f.stopTimeout != wantTimeout {
+		t.Errorf("Stop timeout = %v, want %v", f.stopTimeout, wantTimeout)
+	}
+}
+
+// assertStopCloseError verifies StopCloseAndNil behavior on the error path:
+// error returned with expected message, pointer nilled, Close still called.
+func assertStopCloseError(t *testing.T, f *fakeStoppable, p *fakeStoppable, err error, wantMsg string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != wantMsg {
+		t.Errorf("error = %q, want %q", err.Error(), wantMsg)
+	}
+	if p != nil {
+		t.Error("pointer should be nil even when Stop fails")
+	}
+	if !f.closed {
+		t.Error("Close should be called even when Stop fails")
+	}
 }
 
 // fakeStoppable is a test double for the Stoppable interface.
