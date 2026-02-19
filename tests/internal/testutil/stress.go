@@ -86,7 +86,7 @@ func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.
 	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		created, createErr := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 		if createErr != nil {
-			return createErr
+			return fmt.Errorf("create namespace %s: %w", name, createErr)
 		}
 		if created.Name != name {
 			// Return error instead of t.Fatalf: Fatalf calls runtime.Goexit, preventing retry.OnError from observing the result.
@@ -297,7 +297,10 @@ func StressCreateCanary(ctx context.Context, t *testing.T, client kubernetes.Int
 			ObjectMeta: metav1.ObjectMeta{Name: stressCanaryCM, Namespace: stressCanaryNS},
 			Data:       map[string]string{"canary": "true"},
 		}, metav1.CreateOptions{})
-		return createErr
+		if createErr != nil {
+			return fmt.Errorf("create canary configmap: %w", createErr)
+		}
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("failed to create canary ConfigMap %s/%s: %v", stressCanaryNS, stressCanaryCM, err)
@@ -312,7 +315,10 @@ func StressCreateCanary(ctx context.Context, t *testing.T, client kubernetes.Int
 				},
 			},
 		}, metav1.CreateOptions{})
-		return createErr
+		if createErr != nil {
+			return fmt.Errorf("create canary pod: %w", createErr)
+		}
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("failed to create canary Pod %s/%s: %v", stressCanaryNS, stressCanaryPod, err)

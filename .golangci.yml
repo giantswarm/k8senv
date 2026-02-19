@@ -266,11 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # wrapcheck: Allow unwrapped errors in internal packages
-      - linters:
-          - wrapcheck
-        path: internal/
-
       # exhaustive: Switch on errors doesn't need exhaustive checking
       - linters:
           - exhaustive

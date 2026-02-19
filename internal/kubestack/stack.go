@@ -201,7 +201,7 @@ func StartWithRetry(
 					fmt.Errorf("last attempt error: %w", lastErr),
 				)
 			}
-			return nil, readyCtx.Err()
+			return nil, fmt.Errorf("context canceled: %w", readyCtx.Err())
 		}
 
 		stack := newValidated(cfg)

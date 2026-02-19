@@ -261,7 +261,10 @@ func (i *Instance) deleteUserNamespaces(ctx context.Context, client kubernetes.I
 		})
 	}
 
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("delete user namespaces: %w", err)
+	}
+	return nil
 }
 
 // cleanNamespacedResources discovers all namespaced resource types on the API
@@ -305,7 +308,10 @@ func (i *Instance) cleanNamespacedResources(ctx context.Context, userNamespaces 
 
 	// Individual GVR failures are logged and swallowed inside
 	// deleteResourcesForGVR, so Wait never returns a non-nil error.
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("wait for resource cleanup: %w", err)
+	}
+	return nil
 }
 
 // discoverDeletableGVRs returns the set of namespaced resource types that

@@ -126,7 +126,11 @@ func (dm *discoveryMapper) RESTMapping(gk schema.GroupKind, versions ...string) 
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 
-	return dm.mapper.RESTMapping(gk, versions...)
+	mapping, err := dm.mapper.RESTMapping(gk, versions...)
+	if err != nil {
+		return nil, fmt.Errorf("rest mapping lookup: %w", err)
+	}
+	return mapping, nil
 }
 
 // refresh rebuilds the cached RESTMapper from live API server discovery.
@@ -154,7 +158,10 @@ func (dm *discoveryMapper) refresh() error {
 		return struct{}{}, nil
 	})
 
-	return err
+	if err != nil {
+		return fmt.Errorf("refresh discovery mapper: %w", err)
+	}
+	return nil
 }
 
 // applyYAMLFiles applies pre-read YAML files to the cluster using a two-phase
@@ -231,7 +238,7 @@ func applyYAMLFiles(
 			})
 		}
 		if err := g.Wait(); err != nil {
-			return err
+			return fmt.Errorf("apply CRD documents: %w", err)
 		}
 	}
 
