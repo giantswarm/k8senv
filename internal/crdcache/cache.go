@@ -330,6 +330,13 @@ const crdEstablishmentBurst = 100
 // catching genuinely stuck CRDs before the overall cache timeout expires.
 const longWaitThreshold = 10 * time.Second
 
+// maxEstablishmentPolls is the maximum number of polling iterations in
+// waitForCRDsEstablished. It acts as a safety net against unbounded looping
+// when the context has a very long (or no) deadline. At the default
+// crdEstablishmentPollInterval of 100ms this allows up to 30 seconds of
+// polling (300 * 100ms).
+const maxEstablishmentPolls = 300
+
 // waitForCRDsEstablished polls until all CRDs in the cluster have the Established condition.
 func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *rest.Config) error {
 	clientCfg := rest.CopyConfig(restCfg)
@@ -351,8 +358,13 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 	defer ticker.Stop()
 
 	var pendingCRDs []string
+	polls := 0
 
 	for {
+		if polls >= maxEstablishmentPolls {
+			return fmt.Errorf("CRD establishment did not complete after %d polls: pending CRDs: %v", polls, pendingCRDs)
+		}
+		polls++
 		crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("list CRDs: %w", err)
