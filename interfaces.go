@@ -52,9 +52,9 @@ type Instance interface {
 	// It must be called while the instance is acquired (between Acquire and Release).
 	// Returns ErrInstanceReleased if called after Release.
 	//
-	// Callers must not call Config concurrently with Release on the same instance.
-	// If Config and Release race on the same instance, the behavior is undefined:
-	// Config may return a valid config, ErrInstanceReleased, or a stale config.
+	// If Config and Release race on the same instance, Config reliably returns
+	// ErrInstanceReleased once Release has been called, because the released
+	// state is tracked with an atomic flag at the wrapper level.
 	Config() (*rest.Config, error)
 
 	// Release returns the instance to the pool. The behavior depends on the

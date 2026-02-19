@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/giantswarm/k8senv/internal/core"
 	"k8s.io/client-go/rest"
@@ -64,16 +65,28 @@ func (w *managerWrapper) Shutdown() error {
 // The core.Instance is stored as a named (unexported) field rather than embedded
 // to prevent callers from using type assertions to access internal methods
 // that are not part of the public Instance interface.
+//
+// released tracks whether Release has been called on this wrapper. It prevents
+// Config from returning stale data after Release, enforcing the contract that
+// Config must only be called between Acquire and Release. The underlying
+// core.Instance also checks its generation counter, but that check is tied to
+// pool-level state (the instance may be re-acquired by another consumer). The
+// wrapper-level flag provides a definitive per-acquisition guard.
 type instanceWrapper struct {
-	inst  *core.Instance
-	token uint64
+	inst     *core.Instance
+	token    uint64
+	released atomic.Bool
 }
 
 // Config returns *rest.Config for connecting to this instance's kube-apiserver.
 //
-// Must be called while the instance is acquired; see Instance.Config for the
-// concurrency contract and TOCTOU discussion.
+// Returns ErrInstanceReleased if called after Release. The check uses a
+// wrapper-level atomic flag that is set once by Release, providing a
+// definitive per-acquisition guard independent of pool-level state.
 func (w *instanceWrapper) Config() (*rest.Config, error) {
+	if w.released.Load() {
+		return nil, ErrInstanceReleased
+	}
 	return w.inst.Config()
 }
 
@@ -82,7 +95,11 @@ func (w *instanceWrapper) Config() (*rest.Config, error) {
 //
 // Returns nil on success; using defer inst.Release() is safe. On error the
 // instance is already removed from the pool, so no corrective action is needed.
+//
+// After Release returns, any subsequent call to Config on this wrapper returns
+// ErrInstanceReleased.
 func (w *instanceWrapper) Release() error {
+	w.released.Store(true)
 	return w.inst.Release(w.token)
 }
 
