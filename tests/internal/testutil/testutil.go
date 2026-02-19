@@ -98,7 +98,7 @@ func AcquireWithClient(ctx context.Context, t *testing.T, mgr k8senv.Manager) (k
 
 	inst, err := mgr.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire instance: %v", err)
+		t.Fatalf("failed to acquire instance: %v", err)
 	}
 
 	cfg, err := inst.Config()
@@ -106,7 +106,7 @@ func AcquireWithClient(ctx context.Context, t *testing.T, mgr k8senv.Manager) (k
 		if relErr := inst.Release(); relErr != nil {
 			t.Logf("release error: %v", relErr)
 		}
-		t.Fatalf("Failed to get config: %v", err)
+		t.Fatalf("failed to get config: %v", err)
 	}
 
 	client, err := kubernetes.NewForConfig(cfg)
@@ -114,7 +114,7 @@ func AcquireWithClient(ctx context.Context, t *testing.T, mgr k8senv.Manager) (k
 		if relErr := inst.Release(); relErr != nil {
 			t.Logf("release error: %v", relErr)
 		}
-		t.Fatalf("Failed to create client: %v", err)
+		t.Fatalf("failed to create client: %v", err)
 	}
 
 	return inst, client
@@ -140,7 +140,7 @@ func AcquireWithGuardedRelease(
 	var releaseOnce sync.Once
 	doRelease := func() {
 		if err := inst.Release(); err != nil {
-			t.Errorf("Release() failed: %v", err)
+			t.Errorf("release failed: %v", err)
 		}
 	}
 	t.Cleanup(func() { releaseOnce.Do(doRelease) })

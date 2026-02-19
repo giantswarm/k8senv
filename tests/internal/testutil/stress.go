@@ -91,7 +91,7 @@ func StressCreateNamespace(ctx context.Context, t *testing.T, client kubernetes.
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to create namespace %s: %v", name, err)
+		t.Fatalf("failed to create namespace %s: %v", name, err)
 	}
 }
 
@@ -161,7 +161,7 @@ func stressCreateWithRetry[T named](
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to create %s %s/%s: %v", resourceType, ns, name, err)
+		t.Fatalf("failed to create %s %s/%s: %v", resourceType, ns, name, err)
 	}
 }
 

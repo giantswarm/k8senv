@@ -77,7 +77,7 @@ func ReleasePreservesSystemNamespaces(t *testing.T, ctx context.Context, mgr k8s
 	CreateNamespace(ctx, t, client, UniqueName("preserve-"+label))
 
 	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() failed: %v", err)
+		t.Fatalf("release failed: %v", err)
 	}
 
 	// Re-acquire and verify system namespaces exist.
@@ -112,12 +112,12 @@ func ReleaseWithNoUserNamespaces(t *testing.T, ctx context.Context, mgr k8senv.M
 
 	inst, err := mgr.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Acquire failed: %v", err)
+		t.Fatalf("acquire failed: %v", err)
 	}
 
 	// Release immediately without creating any namespaces.
 	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() with no user namespaces should succeed: %v", err)
+		t.Fatalf("release with no user namespaces should succeed: %v", err)
 	}
 }
 
@@ -177,7 +177,7 @@ func ReleaseRemovesNamespacedResources(t *testing.T, ctx context.Context, mgr k8
 	}
 	for i := range cmList.Items {
 		if cmList.Items[i].Namespace == nsName {
-			t.Errorf("ConfigMap %s/%s should have been removed by %s",
+			t.Errorf("configMap %s/%s should have been removed by %s",
 				cmList.Items[i].Namespace, cmList.Items[i].Name, label)
 		}
 	}
@@ -328,9 +328,9 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 	// Verify the kube-system ConfigMap still exists.
 	got, err := client2.CoreV1().ConfigMaps("kube-system").Get(ctx, cmName, metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("ConfigMap in kube-system should survive %s: %v", label, err)
+		t.Fatalf("configMap in kube-system should survive %s: %v", label, err)
 	}
 	if got.Data["key"] != "preserved" {
-		t.Errorf("ConfigMap data mismatch: got %v", got.Data)
+		t.Errorf("configMap data mismatch: got %v", got.Data)
 	}
 }

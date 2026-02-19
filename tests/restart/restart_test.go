@@ -34,7 +34,7 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Cycle %d: Acquire failed: %v", cycle, err)
+		t.Fatalf("cycle %d: acquire failed: %v", cycle, err)
 	}
 
 	// released tracks whether the explicit Release (the behavior under test)
@@ -49,23 +49,23 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 	// Verify the instance works.
 	cfg, err := inst.Config()
 	if err != nil {
-		t.Fatalf("Cycle %d: Config failed: %v", cycle, err)
+		t.Fatalf("cycle %d: config failed: %v", cycle, err)
 	}
 
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		t.Fatalf("Cycle %d: Client creation failed: %v", cycle, err)
+		t.Fatalf("cycle %d: client creation failed: %v", cycle, err)
 	}
 
 	_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		t.Fatalf("Cycle %d: API call failed: %v", cycle, err)
+		t.Fatalf("cycle %d: API call failed: %v", cycle, err)
 	}
 
 	// Release — ReleaseRestart stops the instance.
 	// This is the core behavior under test; a failure here must fail the test.
 	if err := inst.Release(); err != nil {
-		t.Errorf("Cycle %d: release error: %v", cycle, err)
+		t.Errorf("cycle %d: release error: %v", cycle, err)
 	}
 
 	released = true

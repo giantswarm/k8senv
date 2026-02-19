@@ -24,7 +24,7 @@ func TestPoolTimeout(t *testing.T) {
 	// Acquire both instances (pool size = 2).
 	inst1, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire first instance: %v", err)
+		t.Fatalf("failed to acquire first instance: %v", err)
 	}
 	defer func() {
 		if relErr := inst1.Release(); relErr != nil {
@@ -34,7 +34,7 @@ func TestPoolTimeout(t *testing.T) {
 
 	inst2, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire second instance: %v", err)
+		t.Fatalf("failed to acquire second instance: %v", err)
 	}
 	defer func() {
 		if relErr := inst2.Release(); relErr != nil {
@@ -51,7 +51,7 @@ func TestPoolTimeout(t *testing.T) {
 		t.Fatal("Expected timeout error when pool exhausted")
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("Expected DeadlineExceeded, got %v", err)
+		t.Errorf("expected DeadlineExceeded, got %v", err)
 	}
 }
 
@@ -63,12 +63,12 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 	// Acquire both instances.
 	inst1, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire first instance: %v", err)
+		t.Fatalf("failed to acquire first instance: %v", err)
 	}
 
 	inst2, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire second instance: %v", err)
+		t.Fatalf("failed to acquire second instance: %v", err)
 	}
 
 	// Guard inst2 release with sync.Once so the t.Cleanup safety net and
@@ -104,7 +104,7 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 
 	inst3, err := sharedManager.Acquire(acquireCtx)
 	if err != nil {
-		t.Fatalf("Expected Acquire to succeed after release, got: %v", err)
+		t.Fatalf("expected Acquire to succeed after release, got: %v", err)
 	}
 	defer func() {
 		if relErr := inst3.Release(); relErr != nil {
@@ -136,7 +136,7 @@ func TestPoolBoundedInstanceReuse(t *testing.T) {
 
 		// Verify the instance works.
 		if _, listErr := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{}); listErr != nil {
-			t.Fatalf("List namespaces %d failed: %v", i, listErr)
+			t.Fatalf("list namespaces %d failed: %v", i, listErr)
 		}
 
 		seen[inst.ID()]++
@@ -144,6 +144,6 @@ func TestPoolBoundedInstanceReuse(t *testing.T) {
 	}
 
 	if len(seen) > 2 {
-		t.Errorf("Expected at most 2 unique instances, got %d: %v", len(seen), seen)
+		t.Errorf("expected at most 2 unique instances, got %d: %v", len(seen), seen)
 	}
 }

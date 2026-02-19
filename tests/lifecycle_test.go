@@ -17,13 +17,13 @@ func TestInitializeIdempotent(t *testing.T) {
 
 	// Initialize was already called in TestMain; calling again should be a no-op
 	if err := sharedManager.Initialize(ctx); err != nil {
-		t.Fatalf("Second Initialize failed: %v", err)
+		t.Fatalf("second Initialize failed: %v", err)
 	}
 
 	// Manager should still work
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Acquire after double Initialize failed: %v", err)
+		t.Fatalf("acquire after double Initialize failed: %v", err)
 	}
 	if err = inst.Release(); err != nil {
 		t.Errorf("release error: %v", err)
@@ -48,7 +48,7 @@ func TestInitializeConcurrent(t *testing.T) {
 	// Should be able to acquire after concurrent initializations
 	inst, err := sharedManager.Acquire(context.Background())
 	if err != nil {
-		t.Fatalf("Acquire failed: %v", err)
+		t.Fatalf("acquire failed: %v", err)
 	}
 	if err = inst.Release(); err != nil {
 		t.Errorf("release error: %v", err)

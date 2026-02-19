@@ -24,23 +24,23 @@ func TestPoolAcquireRelease(t *testing.T) {
 	// Acquire an instance
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire instance: %v", err)
+		t.Fatalf("failed to acquire instance: %v", err)
 	}
 
 	// Verify instance is usable
 	cfg, err := inst.Config()
 	if err != nil {
-		t.Fatalf("Failed to get config: %v", err)
+		t.Fatalf("failed to get config: %v", err)
 	}
 
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
+		t.Fatalf("failed to create client: %v", err)
 	}
 
 	_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		t.Fatalf("Failed to list namespaces: %v", err)
+		t.Fatalf("failed to list namespaces: %v", err)
 	}
 
 	// Release it back
@@ -51,7 +51,7 @@ func TestPoolAcquireRelease(t *testing.T) {
 	// Verify the instance can be re-acquired after release
 	inst2, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to re-acquire after release: %v", err)
+		t.Fatalf("failed to re-acquire after release: %v", err)
 	}
 	if err = inst2.Release(); err != nil {
 		t.Logf("release error: %v", err)
@@ -123,7 +123,7 @@ func TestParallelAcquisition(t *testing.T) {
 			// Acquire instance
 			inst, err := sharedManager.Acquire(ctx)
 			if err != nil {
-				t.Fatalf("Failed to acquire instance: %v", err)
+				t.Fatalf("failed to acquire instance: %v", err)
 			}
 			defer func() {
 				if err := inst.Release(); err != nil {
@@ -139,18 +139,18 @@ func TestParallelAcquisition(t *testing.T) {
 			// Get config and create client
 			cfg, err := inst.Config()
 			if err != nil {
-				t.Fatalf("Failed to get config: %v", err)
+				t.Fatalf("failed to get config: %v", err)
 			}
 
 			client, err := kubernetes.NewForConfig(cfg)
 			if err != nil {
-				t.Fatalf("Failed to create client: %v", err)
+				t.Fatalf("failed to create client: %v", err)
 			}
 
 			// Verify we can interact with the API
 			_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 			if err != nil {
-				t.Fatalf("Failed to list namespaces: %v", err)
+				t.Fatalf("failed to list namespaces: %v", err)
 			}
 
 			// Create a unique namespace for this test
@@ -162,7 +162,7 @@ func TestParallelAcquisition(t *testing.T) {
 			}
 			_, err = client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 			if err != nil {
-				t.Fatalf("Failed to create namespace: %v", err)
+				t.Fatalf("failed to create namespace: %v", err)
 			}
 			// t.Cleanup runs after the subtest function returns (and its defers
 			// have fired), so inst.Release() in the defer above completes before

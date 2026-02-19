@@ -16,7 +16,7 @@ func TestContextCancelDuringAcquire(t *testing.T) {
 	// Acquire an instance
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("First Acquire failed: %v", err)
+		t.Fatalf("first Acquire failed: %v", err)
 	}
 	defer func() {
 		if err := inst.Release(); err != nil {
@@ -33,6 +33,6 @@ func TestContextCancelDuringAcquire(t *testing.T) {
 		t.Fatal("Expected error from Acquire with canceled context")
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("Expected context.Canceled error, got: %v", err)
+		t.Errorf("expected context.Canceled error, got: %v", err)
 	}
 }

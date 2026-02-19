@@ -23,7 +23,7 @@ func TestCRDDirCaching(t *testing.T) {
 
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire instance: %v", err)
+		t.Fatalf("failed to acquire instance: %v", err)
 	}
 	defer func() {
 		if err := inst.Release(); err != nil {
@@ -41,7 +41,7 @@ func TestCRDDirWithMultipleCRDs(t *testing.T) {
 
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire instance: %v", err)
+		t.Fatalf("failed to acquire instance: %v", err)
 	}
 	defer func() {
 		if err := inst.Release(); err != nil {
@@ -69,25 +69,25 @@ func TestCRDDirWithEstablishedCondition(t *testing.T) {
 	nsName := testutil.UniqueName("test-widgets")
 	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
 	if _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("Failed to create namespace: %v", err)
+		t.Fatalf("failed to create namespace: %v", err)
 	}
 
 	// Verify the CRD API is available
 	cfg, err := inst.Config()
 	if err != nil {
-		t.Fatalf("Failed to get config: %v", err)
+		t.Fatalf("failed to get config: %v", err)
 	}
 
 	extClient, err := apiextensionsclient.NewForConfig(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create apiextensions client: %v", err)
+		t.Fatalf("failed to create apiextensions client: %v", err)
 	}
 
 	crd, err := extClient.ApiextensionsV1().
 		CustomResourceDefinitions().
 		Get(ctx, "widgets.example.com", metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("CRD not found: %v", err)
+		t.Fatalf("crd not found: %v", err)
 	}
 
 	// Verify CRD has Established condition (should already be set in the cached DB)
@@ -99,7 +99,7 @@ func TestCRDDirWithEstablishedCondition(t *testing.T) {
 		}
 	}
 	if !established {
-		t.Errorf("CRD not yet established (conditions: %v)", crd.Status.Conditions)
+		t.Errorf("crd not yet established (conditions: %v)", crd.Status.Conditions)
 	}
 }
 
@@ -121,10 +121,10 @@ func TestCRDDirWithMultiDocumentYAML(t *testing.T) {
 	// Verify the ConfigMap was applied in the default namespace
 	cm, err := client.CoreV1().ConfigMaps("default").Get(ctx, "test-config", metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("ConfigMap not found: %v", err)
+		t.Fatalf("configMap not found: %v", err)
 	}
 	if cm.Data["key"] != "value" {
-		t.Errorf("ConfigMap data mismatch: got %v", cm.Data)
+		t.Errorf("configMap data mismatch: got %v", cm.Data)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestCRDDirWithYmlExtension(t *testing.T) {
 
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Acquire failed: %v", err)
+		t.Fatalf("acquire failed: %v", err)
 	}
 	defer func() {
 		if err := inst.Release(); err != nil {
@@ -203,7 +203,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 
 	inst2, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to re-acquire instance: %v", err)
+		t.Fatalf("failed to re-acquire instance: %v", err)
 	}
 	defer func() {
 		if err := inst2.Release(); err != nil {
@@ -228,7 +228,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	}
 	for _, item := range widgetList.Items {
 		if item.GetNamespace() == nsName {
-			t.Errorf("Widget %s/%s should have been cleaned up", item.GetNamespace(), item.GetName())
+			t.Errorf("widget %s/%s should have been cleaned up", item.GetNamespace(), item.GetName())
 		}
 	}
 }

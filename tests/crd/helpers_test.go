@@ -17,16 +17,16 @@ func verifyCRDExists(ctx context.Context, t *testing.T, inst k8senv.Instance, cr
 
 	cfg, err := inst.Config()
 	if err != nil {
-		t.Fatalf("Failed to get config: %v", err)
+		t.Fatalf("failed to get config: %v", err)
 	}
 
 	extClient, err := apiextensionsclient.NewForConfig(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create apiextensions client: %v", err)
+		t.Fatalf("failed to create apiextensions client: %v", err)
 	}
 
 	_, err = extClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdName, metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("CRD %s not found: %v", crdName, err)
+		t.Fatalf("crd %s not found: %v", crdName, err)
 	}
 }

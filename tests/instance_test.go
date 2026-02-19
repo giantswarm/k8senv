@@ -29,7 +29,7 @@ func TestBasicUsage(t *testing.T) {
 
 	_, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		t.Fatalf("Failed to list namespaces: %v", err)
+		t.Fatalf("failed to list namespaces: %v", err)
 	}
 }
 
@@ -46,7 +46,7 @@ func TestInstanceReuse(t *testing.T) {
 
 	_, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		t.Fatalf("Failed to list namespaces: %v", err)
+		t.Fatalf("failed to list namespaces: %v", err)
 	}
 
 	// Release instance — behavior determined by manager's release strategy
@@ -65,7 +65,7 @@ func TestInstanceReuse(t *testing.T) {
 	// Verify acquired instance works
 	_, err = client2.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		t.Fatalf("Failed to list namespaces from second instance: %v", err)
+		t.Fatalf("failed to list namespaces from second instance: %v", err)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestIDUniqueness(t *testing.T) {
 	for i := range 3 {
 		inst, err := sharedManager.Acquire(ctx)
 		if err != nil {
-			t.Fatalf("Failed to acquire instance %d: %v", i, err)
+			t.Fatalf("failed to acquire instance %d: %v", i, err)
 		}
 		t.Cleanup(func() {
 			if err := inst.Release(); err != nil {
@@ -94,7 +94,7 @@ func TestIDUniqueness(t *testing.T) {
 			t.Error("Instance ID should not be empty")
 		}
 		if _, exists := ids[id]; exists {
-			t.Errorf("Duplicate ID: %s", id)
+			t.Errorf("duplicate ID: %s", id)
 		}
 		ids[id] = struct{}{}
 	}
@@ -107,12 +107,12 @@ func TestDoubleReleaseReturnsError(t *testing.T) {
 
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Acquire failed: %v", err)
+		t.Fatalf("acquire failed: %v", err)
 	}
 
 	// First release should succeed
 	if err = inst.Release(); err != nil {
-		t.Fatalf("First release should not error: %v", err)
+		t.Fatalf("first release should not error: %v", err)
 	}
 
 	// Second release should return ErrDoubleRelease
@@ -121,7 +121,7 @@ func TestDoubleReleaseReturnsError(t *testing.T) {
 		t.Fatal("Expected error on double-release but got nil")
 	}
 	if !errors.Is(err, k8senv.ErrDoubleRelease) {
-		t.Errorf("Expected ErrDoubleRelease, got %v", err)
+		t.Errorf("expected ErrDoubleRelease, got %v", err)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestAPIServerOnlyMode(t *testing.T) {
 	}
 	_, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 	if err != nil {
-		t.Fatalf("Failed to create namespace: %v", err)
+		t.Fatalf("failed to create namespace: %v", err)
 	}
 	t.Cleanup(func() {
 		// Use a fresh context with timeout because the test's ctx may be canceled
@@ -166,7 +166,7 @@ func TestAPIServerOnlyMode(t *testing.T) {
 	t.Run("NamespaceOperations", func(t *testing.T) {
 		nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			t.Fatalf("Failed to list namespaces: %v", err)
+			t.Fatalf("failed to list namespaces: %v", err)
 		}
 		found := false
 		for _, item := range nsList.Items {
@@ -177,7 +177,7 @@ func TestAPIServerOnlyMode(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatalf("Expected namespace %s in list, but not found", nsName)
+			t.Fatalf("expected namespace %s in list, but not found", nsName)
 		}
 	})
 
@@ -193,7 +193,7 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		}
 		_, err := client.CoreV1().ConfigMaps(nsName).Create(ctx, cm, metav1.CreateOptions{})
 		if err != nil {
-			t.Fatalf("Failed to create ConfigMap: %v", err)
+			t.Fatalf("failed to create ConfigMap: %v", err)
 		}
 	})
 
@@ -214,15 +214,15 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		}
 		_, err := client.CoreV1().Pods(nsName).Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
-			t.Fatalf("Failed to create Pod: %v", err)
+			t.Fatalf("failed to create Pod: %v", err)
 		}
 
 		retrievedPod, err := client.CoreV1().Pods(nsName).Get(ctx, "test-pod", metav1.GetOptions{})
 		if err != nil {
-			t.Fatalf("Failed to get Pod: %v", err)
+			t.Fatalf("failed to get Pod: %v", err)
 		}
 		if retrievedPod.Status.Phase != v1.PodPending && retrievedPod.Status.Phase != "" {
-			t.Errorf("Expected pod phase Pending or empty without scheduler, got %s", retrievedPod.Status.Phase)
+			t.Errorf("expected pod phase Pending or empty without scheduler, got %s", retrievedPod.Status.Phase)
 		}
 	})
 }
@@ -236,7 +236,7 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 	// Acquire first instance
 	inst1, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire first instance: %v", err)
+		t.Fatalf("failed to acquire first instance: %v", err)
 	}
 	defer func() {
 		if err := inst1.Release(); err != nil {
@@ -247,7 +247,7 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 	// Acquire second instance - this would fail without API-only mode
 	inst2, err := sharedManager.Acquire(ctx)
 	if err != nil {
-		t.Fatalf("Failed to acquire second instance (port conflict?): %v", err)
+		t.Fatalf("failed to acquire second instance (port conflict?): %v", err)
 	}
 	defer func() {
 		if err := inst2.Release(); err != nil {
@@ -264,18 +264,18 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 	for i, inst := range []k8senv.Instance{inst1, inst2} {
 		cfg, err := inst.Config()
 		if err != nil {
-			t.Fatalf("Failed to get config from instance %d: %v", i+1, err)
+			t.Fatalf("failed to get config from instance %d: %v", i+1, err)
 		}
 
 		client, err := kubernetes.NewForConfig(cfg)
 		if err != nil {
-			t.Fatalf("Failed to create client for instance %d: %v", i+1, err)
+			t.Fatalf("failed to create client for instance %d: %v", i+1, err)
 		}
 
 		// Test API operations
 		_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			t.Fatalf("Failed to list namespaces from instance %d: %v", i+1, err)
+			t.Fatalf("failed to list namespaces from instance %d: %v", i+1, err)
 		}
 	}
 }
