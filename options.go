@@ -54,6 +54,9 @@ func WithPoolSize(size int) ManagerOption {
 }
 
 // WithKineBinary sets the path to the kine binary.
+//
+// Default: "kine" (looked up in $PATH).
+//
 // Panics if binPath is empty.
 func WithKineBinary(binPath string) ManagerOption {
 	requireNonEmpty("kine binary path", binPath)
@@ -63,6 +66,9 @@ func WithKineBinary(binPath string) ManagerOption {
 }
 
 // WithKubeAPIServerBinary sets the path to the kube-apiserver binary.
+//
+// Default: "kube-apiserver" (looked up in $PATH).
+//
 // Panics if binPath is empty.
 func WithKubeAPIServerBinary(binPath string) ManagerOption {
 	requireNonEmpty("kube-apiserver binary path", binPath)
@@ -85,6 +91,9 @@ func WithAcquireTimeout(d time.Duration) ManagerOption {
 }
 
 // WithPrepopulateDB sets a default DB file to prepopulate all instances with.
+//
+// Default: unset (no prepopulation).
+//
 // Panics if dbPath is empty.
 func WithPrepopulateDB(dbPath string) ManagerOption {
 	requireNonEmpty("prepopulate DB path", dbPath)
@@ -161,6 +170,9 @@ func WithCleanupTimeout(d time.Duration) ManagerOption {
 // a cached database that all pool instances share.
 // The cache is keyed by a hash of the directory contents, so changes to the YAML files
 // will automatically trigger a new cache.
+//
+// Default: unset (no CRD pre-loading).
+//
 // Panics if dirPath is empty.
 func WithCRDDir(dirPath string) ManagerOption {
 	requireNonEmpty("CRD directory path", dirPath)
@@ -204,7 +216,9 @@ func WithShutdownDrainTimeout(d time.Duration) ManagerOption {
 // WithBaseDataDir sets the base directory for instance data.
 // Useful in CI environments where multiple projects may use k8senv simultaneously
 // and need isolated data directories to prevent conflicts.
-// If not set, defaults to "/tmp/k8senv".
+//
+// Default: "/tmp/k8senv".
+//
 // Panics if dir is empty.
 func WithBaseDataDir(dir string) ManagerOption {
 	requireNonEmpty("base data directory", dir)
