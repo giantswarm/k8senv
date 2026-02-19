@@ -15,10 +15,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// =============================================================================
-// Instance Behavior Tests
-// =============================================================================
-
 // TestBasicUsage shows a simple example of using k8senv.
 func TestBasicUsage(t *testing.T) {
 	t.Parallel()

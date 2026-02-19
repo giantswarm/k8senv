@@ -9,10 +9,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// =============================================================================
-// Manager Lifecycle Tests
-// =============================================================================
-
 // TestInitializeIdempotent verifies that calling Initialize multiple times on
 // the shared manager is safe and returns nil (no-op after first success).
 func TestInitializeIdempotent(t *testing.T) {

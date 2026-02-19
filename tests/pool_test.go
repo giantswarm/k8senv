@@ -15,10 +15,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// =============================================================================
-// Pool Behavior Tests
-// =============================================================================
-
 // TestPoolAcquireRelease tests that an instance can be acquired, used, released, and re-acquired.
 func TestPoolAcquireRelease(t *testing.T) {
 	t.Parallel()
