@@ -166,15 +166,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 	// burning the full timeout budget in a tight loop.
 	const maxCleanupIterations = 100
 
-	for iteration := 0; ; iteration++ {
-		if iteration >= maxCleanupIterations {
-			return fmt.Errorf(
-				"namespace cleanup did not converge after %d iterations (%d user namespaces remaining)",
-				maxCleanupIterations,
-				len(userNamespaces),
-			)
-		}
-
+	for iteration := range maxCleanupIterations {
 		// On the first iteration use the caller-supplied list to avoid a
 		// redundant List call — listUserNamespaces already fetched this data.
 		// On subsequent iterations re-list to observe post-deletion state.
@@ -235,6 +227,12 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 			return err
 		}
 	}
+
+	return fmt.Errorf(
+		"namespace cleanup did not converge after %d iterations (%d user namespaces remaining)",
+		maxCleanupIterations,
+		len(userNamespaces),
+	)
 }
 
 // cleanNamespacedResources discovers all namespaced resource types on the API
