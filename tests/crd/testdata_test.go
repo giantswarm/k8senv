@@ -8,10 +8,8 @@ import (
 	"path/filepath"
 )
 
-// =============================================================================
-// CRD YAML constants -- each file in the shared CRD dir uses a unique CRD name
+// CRD YAML constants: each file in the shared CRD dir uses a unique CRD name
 // to avoid "already exists" conflicts when applied by a single manager.
-// =============================================================================
 
 // sampleCRDWidget is the Widget CRD (widgets.example.com), loaded from widget-crd.yaml.
 const sampleCRDWidget = `apiVersion: apiextensions.k8s.io/v1
