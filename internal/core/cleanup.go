@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -50,6 +49,11 @@ const cleanupConfirmDelay = 10 * time.Millisecond
 // (--watch-cache=false) and all reads go directly through kine to SQLite,
 // which is ACID-compliant — reads are immediately consistent after writes.
 const cleanupConfirmations = 1
+
+// gvrCleanupConcurrency is the maximum number of GVR types cleaned
+// concurrently by cleanNamespacedResources. Matches the limit used by
+// cleanNamespaces (errgroup.SetLimit(10)) and crdApplyConcurrency.
+const gvrCleanupConcurrency = 10
 
 // nsReadinessPollInterval is the polling interval for waitForSystemNamespaces.
 const nsReadinessPollInterval = 10 * time.Millisecond
@@ -235,15 +239,19 @@ func (i *Instance) cleanNamespacedResources(ctx context.Context, userNamespaces 
 		userNSSet[ns] = struct{}{}
 	}
 
-	var wg sync.WaitGroup
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(gvrCleanupConcurrency)
+
 	for _, gvr := range gvrs {
-		wg.Go(func() {
-			i.deleteResourcesForGVR(ctx, dynClient, gvr, userNSSet)
+		g.Go(func() error {
+			i.deleteResourcesForGVR(gCtx, dynClient, gvr, userNSSet)
+			return nil
 		})
 	}
-	wg.Wait()
 
-	return nil
+	// Individual GVR failures are logged and swallowed inside
+	// deleteResourcesForGVR, so Wait never returns a non-nil error.
+	return g.Wait()
 }
 
 // discoverDeletableGVRs returns the set of namespaced resource types that
