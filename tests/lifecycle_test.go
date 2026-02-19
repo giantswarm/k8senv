@@ -4,8 +4,9 @@ package k8senv_test
 
 import (
 	"context"
-	"sync"
 	"testing"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // =============================================================================
@@ -38,19 +39,14 @@ func TestInitializeIdempotent(t *testing.T) {
 func TestInitializeConcurrent(t *testing.T) {
 	t.Parallel()
 
-	errs := make([]error, 10)
-	var wg sync.WaitGroup
-	for i := range 10 {
-		wg.Go(func() {
-			errs[i] = sharedManager.Initialize(context.Background())
+	var g errgroup.Group
+	for range 10 {
+		g.Go(func() error {
+			return sharedManager.Initialize(context.Background())
 		})
 	}
-	wg.Wait()
-
-	for i, err := range errs {
-		if err != nil {
-			t.Errorf("concurrent Initialize call %d failed: %v", i, err)
-		}
+	if err := g.Wait(); err != nil {
+		t.Fatalf("concurrent Initialize failed: %v", err)
 	}
 
 	// Should be able to acquire after concurrent initializations
