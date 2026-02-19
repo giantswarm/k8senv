@@ -262,6 +262,71 @@ func TestInstanceConfig_Validate(t *testing.T) {
 	})
 }
 
+func TestReleaseStrategy_String(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		strategy ReleaseStrategy
+		want     string
+	}{
+		"ReleaseRestart": {strategy: ReleaseRestart, want: "ReleaseRestart"},
+		"ReleaseClean":   {strategy: ReleaseClean, want: "ReleaseClean"},
+		"ReleaseNone":    {strategy: ReleaseNone, want: "ReleaseNone"},
+		"ReleasePurge":   {strategy: ReleasePurge, want: "ReleasePurge"},
+		"unknown positive": {
+			strategy: ReleaseStrategy(99),
+			want:     "ReleaseStrategy(99)",
+		},
+		"unknown negative": {
+			strategy: ReleaseStrategy(-1),
+			want:     "ReleaseStrategy(-1)",
+		},
+		"boundary just above valid range": {
+			strategy: ReleaseStrategy(4),
+			want:     "ReleaseStrategy(4)",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tc.strategy.String()
+			if got != tc.want {
+				t.Errorf("ReleaseStrategy(%d).String() = %q, want %q", int(tc.strategy), got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReleaseStrategy_IsValid(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		strategy ReleaseStrategy
+		want     bool
+	}{
+		"ReleaseRestart":                  {strategy: ReleaseRestart, want: true},
+		"ReleaseClean":                    {strategy: ReleaseClean, want: true},
+		"ReleaseNone":                     {strategy: ReleaseNone, want: true},
+		"ReleasePurge":                    {strategy: ReleasePurge, want: true},
+		"negative value":                  {strategy: ReleaseStrategy(-1), want: false},
+		"boundary just above valid range": {strategy: ReleaseStrategy(4), want: false},
+		"large positive value":            {strategy: ReleaseStrategy(99), want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tc.strategy.IsValid()
+			if got != tc.want {
+				t.Errorf("ReleaseStrategy(%d).IsValid() = %v, want %v", int(tc.strategy), got, tc.want)
+			}
+		})
+	}
+}
+
 // TestManagerConfigFieldCount is a canary test that detects when fields are
 // added to ManagerConfig without updating the public API in the root package.
 //
