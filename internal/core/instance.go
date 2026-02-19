@@ -382,14 +382,14 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 	return true, nil
 }
 
-// teardownFailedAttempt cleans up after a failed namespace wait: cancels the
-// process context, stops the stack, and clears cached clients that reference
-// the now-defunct API server ports.
+// teardownFailedAttempt cleans up after a failed namespace wait: stops the
+// stack gracefully via SIGTERM, cancels the process context, and clears
+// cached clients that reference the now-defunct API server ports.
 func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubestack.Stack, attempt int, err error) {
-	cancel()
 	if stopErr := stack.Stop(i.cfg.StopTimeout); stopErr != nil {
 		i.log.Warn("cleanup stack after namespace wait failure", "error", stopErr)
 	}
+	cancel()
 	// Clear stale state from the failed attempt — the old apiserver
 	// ports are gone, so cached configs and clients are invalid.
 	i.clients.Store(nil)
@@ -533,16 +533,28 @@ func (i *Instance) Stop(ctx context.Context) error {
 
 	i.startMu.Unlock()
 
+	if stack == nil {
+		if cancel != nil {
+			cancel()
+		}
+		return nil
+	}
+
+	// Stop the stack before canceling processCtx. Both kine and
+	// kube-apiserver were started with exec.CommandContext(processCtx),
+	// which sends SIGKILL when the context is canceled. Calling cancel()
+	// first would bypass the graceful SIGTERM shutdown in stopWithDone.
+	timeout := i.effectiveStopTimeout(ctx)
+	err := stack.Stop(timeout)
+
+	// Cancel processCtx after Stop to release context resources. If Stop
+	// already terminated the processes, this is a no-op. If Stop failed,
+	// cancellation sends SIGKILL as a last resort.
 	if cancel != nil {
 		cancel()
 	}
 
-	if stack == nil {
-		return nil
-	}
-
-	timeout := i.effectiveStopTimeout(ctx)
-	if err := stack.Stop(timeout); err != nil {
+	if err != nil {
 		return fmt.Errorf("stop kubestack: %w", err)
 	}
 	return nil
