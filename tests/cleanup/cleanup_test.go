@@ -9,7 +9,6 @@ import (
 	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // TestSystemNamespacesMatchAPIServer verifies that testutil.SystemNamespaces()
@@ -79,7 +78,7 @@ func TestReleaseCleanupNamespaces(t *testing.T) {
 		testutil.UniqueName("cleanup-c"),
 	}
 	for _, name := range userNS {
-		createNamespace(ctx, t, client, name)
+		testutil.CreateNamespace(ctx, t, client, name)
 	}
 
 	// Verify namespaces exist before release.
@@ -132,7 +131,7 @@ func TestReleasePreservesSystemNamespaces(t *testing.T) {
 
 	// Create a user namespace so cleanup actually runs (not just the fast path).
 	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
-	createNamespace(ctx, t, client, testutil.UniqueName("preserve-test"))
+	testutil.CreateNamespace(ctx, t, client, testutil.UniqueName("preserve-test"))
 
 	if err := inst.Release(); err != nil {
 		t.Fatalf("Release() failed: %v", err)
@@ -190,7 +189,7 @@ func TestReleaseCleanupNamespacedResources(t *testing.T) {
 	instID := inst.ID()
 
 	nsName := testutil.UniqueName("res-cleanup")
-	createNamespace(ctx, t, client, nsName)
+	testutil.CreateNamespace(ctx, t, client, nsName)
 
 	// Create resources in the namespace.
 	cm := &v1.ConfigMap{
@@ -268,7 +267,7 @@ func TestReleaseCleanupResourcesWithFinalizers(t *testing.T) {
 	instID := inst.ID()
 
 	nsName := testutil.UniqueName("finalizer-cleanup")
-	createNamespace(ctx, t, client, nsName)
+	testutil.CreateNamespace(ctx, t, client, nsName)
 
 	// Create a ConfigMap and add a finalizer to it.
 	cm := &v1.ConfigMap{
@@ -332,7 +331,7 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 
 	// Also create a user namespace so cleanup actually runs.
 	userNS := testutil.UniqueName("trigger-cleanup")
-	createNamespace(ctx, t, client, userNS)
+	testutil.CreateNamespace(ctx, t, client, userNS)
 
 	release()
 
@@ -359,17 +358,5 @@ func TestReleaseCleanupPreservesSystemNamespaceResources(t *testing.T) {
 	}
 	if got.Data["key"] != "preserved" {
 		t.Errorf("ConfigMap data mismatch: got %v", got.Data)
-	}
-}
-
-// createNamespace is a test helper that creates a namespace and fails the test on error.
-func createNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
-	t.Helper()
-
-	ns := &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-	}
-	if _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("create namespace %s: %v", name, err)
 	}
 }

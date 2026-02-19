@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/giantswarm/k8senv"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -54,6 +56,18 @@ var nameCounter atomic.Int64
 // Use it for any Kubernetes resource name: namespaces, ConfigMaps, etc.
 func UniqueName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, nameCounter.Add(1))
+}
+
+// CreateNamespace creates a namespace with the given name and fails the test on error.
+func CreateNamespace(ctx context.Context, t *testing.T, client kubernetes.Interface, name string) {
+	t.Helper()
+
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
+	if _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create namespace %s: %v", name, err)
+	}
 }
 
 // TestParallel returns the effective -test.parallel value for the current test
