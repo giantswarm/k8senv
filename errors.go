@@ -24,6 +24,11 @@ const (
 	// have not been launched yet.
 	ErrNotStarted = core.ErrNotStarted
 
+	// ErrDoubleRelease is returned by Instance.Release when called more than once
+	// on the same acquisition. After the first Release returns the instance to the
+	// pool, subsequent calls return this error instead of performing any action.
+	ErrDoubleRelease = core.ErrDoubleRelease
+
 	// ErrNoYAMLFiles is returned by Initialize when the CRD directory contains no YAML files.
 	ErrNoYAMLFiles = core.ErrNoYAMLFiles
 

@@ -4,7 +4,7 @@ package k8senv_test
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"testing"
 	"time"
 
@@ -110,8 +110,8 @@ func TestIDUniqueness(t *testing.T) {
 	}
 }
 
-// TestDoubleReleasePanics verifies that releasing an instance twice panics with a descriptive message.
-func TestDoubleReleasePanics(t *testing.T) {
+// TestDoubleReleaseReturnsError verifies that releasing an instance twice returns ErrDoubleRelease.
+func TestDoubleReleaseReturnsError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -125,23 +125,14 @@ func TestDoubleReleasePanics(t *testing.T) {
 		t.Fatalf("First release should not error: %v", err)
 	}
 
-	// Second release should panic
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("Expected panic on double-release but didn't get one")
-		}
-		msg, ok := r.(string)
-		if !ok {
-			t.Fatalf("Expected string panic, got %T: %v", r, r)
-		}
-		expectedPrefix := "k8senv: double-release of instance "
-		if !strings.HasPrefix(msg, expectedPrefix) {
-			t.Errorf("Panic message should start with %q, got %q", expectedPrefix, msg)
-		}
-	}()
-
-	_ = inst.Release() // error return unreachable due to panic
+	// Second release should return ErrDoubleRelease
+	err = inst.Release()
+	if err == nil {
+		t.Fatal("Expected error on double-release but got nil")
+	}
+	if !errors.Is(err, k8senv.ErrDoubleRelease) {
+		t.Errorf("Expected ErrDoubleRelease, got %v", err)
+	}
 }
 
 // TestAPIServerOnlyMode verifies that instances can run with scheduler and

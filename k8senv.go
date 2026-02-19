@@ -96,11 +96,13 @@ func (w *instanceWrapper) Config() (*rest.Config, error) {
 // Returns nil on success; using defer inst.Release() is safe. On error the
 // instance is already removed from the pool, so no corrective action is needed.
 //
+// Returns ErrDoubleRelease if called more than once on the same acquisition.
+//
 // After Release returns, any subsequent call to Config on this wrapper returns
 // ErrInstanceReleased.
 func (w *instanceWrapper) Release() error {
 	if !w.released.CompareAndSwap(false, true) {
-		panic("k8senv: double-release of instance " + w.inst.ID())
+		return ErrDoubleRelease
 	}
 	return w.inst.Release(w.token)
 }

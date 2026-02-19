@@ -73,7 +73,7 @@ type Instance interface {
 	// permanently failed and removed from the pool. The error is
 	// informational: no corrective action is required.
 	//
-	// Panics if called more than once on the same acquisition.
+	// Returns ErrDoubleRelease if called more than once on the same acquisition.
 	Release() error
 
 	// ID returns a unique identifier for this instance.

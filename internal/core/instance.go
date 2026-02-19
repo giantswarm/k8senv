@@ -43,6 +43,11 @@ const ErrInstanceReleased = sentinel.Error("instance has been released")
 // error where Config is called before the instance has been started by the pool.
 const ErrNotStarted = sentinel.Error("instance not started")
 
+// ErrDoubleRelease is returned by Release when called more than once on the
+// same acquisition. After the first Release returns the instance to the pool,
+// subsequent calls return this error instead of performing any action.
+const ErrDoubleRelease = sentinel.Error("instance already released")
+
 // InstanceReleaser handles returning an instance to the pool or marking it
 // as failed. It breaks the dependency from Instance back to Manager/Pool,
 // allowing Instance to release itself without knowing the concrete types.

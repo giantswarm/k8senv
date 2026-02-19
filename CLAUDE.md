@@ -215,7 +215,7 @@ Tests are organized across the root package (unit tests) and nine integration te
 - `TestBasicUsage` - Simple acquire, use, release
 - `TestInstanceReuse` - Explicit reuse demonstration
 - `TestIDUniqueness` - Instance IDs are unique
-- `TestDoubleReleasePanics` - Double release is detected
+- `TestDoubleReleaseReturnsError` - Double release returns ErrDoubleRelease
 
 **API server mode:**
 - `TestAPIServerOnlyMode` - API server testing (namespaces, ConfigMaps)
