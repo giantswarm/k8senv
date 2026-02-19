@@ -106,8 +106,8 @@ func TestParallelAcquisition(t *testing.T) {
 		}
 
 		if totalUses != 10 {
-			t.Logf(
-				"Expected 10 total acquisitions, got %d (may be lower if subtests failed before tracking)",
+			t.Errorf(
+				"expected 10 total acquisitions, got %d",
 				totalUses,
 			)
 		}
