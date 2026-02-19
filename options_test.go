@@ -442,7 +442,7 @@ func TestOptionApplicationOverrides(t *testing.T) {
 func TestOptionApplicationMultipleOptions(t *testing.T) {
 	t.Parallel()
 
-	snap := k8senv.ApplyOptionsForTesting(
+	got := k8senv.ApplyOptionsForTesting(
 		k8senv.WithPoolSize(2),
 		k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
 		k8senv.WithKineBinary("/opt/kine"),
@@ -451,27 +451,22 @@ func TestOptionApplicationMultipleOptions(t *testing.T) {
 		k8senv.WithBaseDataDir("/tmp/custom-k8senv"),
 		k8senv.WithCleanupTimeout(45*time.Second),
 	)
+	want := k8senv.ConfigSnapshot{
+		PoolSize:             2,
+		ReleaseStrategy:      k8senv.ReleaseClean,
+		KineBinary:           "/opt/kine",
+		KubeAPIServerBinary:  "/opt/kube-apiserver",
+		AcquireTimeout:       1 * time.Minute,
+		BaseDataDir:          "/tmp/custom-k8senv",
+		CleanupTimeout:       45 * time.Second,
+		CRDCacheTimeout:      k8senv.DefaultCRDCacheTimeout,
+		InstanceStartTimeout: k8senv.DefaultInstanceStartTimeout,
+		InstanceStopTimeout:  k8senv.DefaultInstanceStopTimeout,
+		ShutdownDrainTimeout: k8senv.DefaultShutdownDrainTimeout,
+	}
 
-	if snap.PoolSize != 2 {
-		t.Errorf("PoolSize = %d, want 2", snap.PoolSize)
-	}
-	if snap.ReleaseStrategy != k8senv.ReleaseClean {
-		t.Errorf("ReleaseStrategy = %v, want ReleaseClean", snap.ReleaseStrategy)
-	}
-	if snap.KineBinary != "/opt/kine" {
-		t.Errorf("KineBinary = %q, want %q", snap.KineBinary, "/opt/kine")
-	}
-	if snap.KubeAPIServerBinary != "/opt/kube-apiserver" {
-		t.Errorf("KubeAPIServerBinary = %q, want %q", snap.KubeAPIServerBinary, "/opt/kube-apiserver")
-	}
-	if snap.AcquireTimeout != 1*time.Minute {
-		t.Errorf("AcquireTimeout = %v, want 1m", snap.AcquireTimeout)
-	}
-	if snap.BaseDataDir != "/tmp/custom-k8senv" {
-		t.Errorf("BaseDataDir = %q, want %q", snap.BaseDataDir, "/tmp/custom-k8senv")
-	}
-	if snap.CleanupTimeout != 45*time.Second {
-		t.Errorf("CleanupTimeout = %v, want 45s", snap.CleanupTimeout)
+	if got != want {
+		t.Errorf("ApplyOptionsForTesting() =\n  %+v\nwant\n  %+v", got, want)
 	}
 }
 
