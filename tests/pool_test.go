@@ -45,7 +45,7 @@ func TestPoolAcquireRelease(t *testing.T) {
 
 	// Release it back
 	if err = inst.Release(); err != nil {
-		t.Logf("release error: %v", err)
+		t.Errorf("release error: %v", err)
 	}
 
 	// Verify the instance can be re-acquired after release
@@ -54,7 +54,7 @@ func TestPoolAcquireRelease(t *testing.T) {
 		t.Fatalf("failed to re-acquire after release: %v", err)
 	}
 	if err = inst2.Release(); err != nil {
-		t.Logf("release error: %v", err)
+		t.Errorf("release error: %v", err)
 	}
 }
 
