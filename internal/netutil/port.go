@@ -98,8 +98,9 @@ func (r *PortRegistry) AllocatePortPair() (port1, port2 int, err error) {
 	l2, p2, err := r.getFreePortFromKernel()
 	if err != nil {
 		// Close the listener BEFORE releasing the port from the registry.
-		// This prevents a TOCTOU race where another goroutine allocates the
-		// same port while the listener still holds it.
+		// This prevents a TOCTOU race where another goroutine receives the
+		// same port from the kernel after the listener is closed but before
+		// the registry entry is removed.
 		if closeErr := l1.Close(); closeErr != nil {
 			r.log.Warn("close listener after port allocation", "port", p1, "error", closeErr)
 		}
