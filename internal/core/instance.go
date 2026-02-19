@@ -21,9 +21,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// DefaultMaxStartRetries is the default number of startup retries for transient startup failures
+// defaultMaxStartRetries is the default number of startup retries for transient startup failures
 // such as port conflicts during kubestack startup.
-const DefaultMaxStartRetries = 5
+const defaultMaxStartRetries = 5
 
 // maxNamespaceRetries is the number of full restart attempts when system
 // namespaces fail to appear after an otherwise successful stack start.

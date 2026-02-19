@@ -228,7 +228,7 @@ func (m *Manager) doInitialize(ctx context.Context) error {
 		StartTimeout:        m.cfg.InstanceStartTimeout,
 		StopTimeout:         m.cfg.InstanceStopTimeout,
 		CleanupTimeout:      m.cfg.CleanupTimeout,
-		MaxStartRetries:     DefaultMaxStartRetries,
+		MaxStartRetries:     defaultMaxStartRetries,
 		CachedDBPath:        m.cachedDBPath,
 		KineBinary:          m.cfg.KineBinary,
 		KubeAPIServerBinary: m.cfg.KubeAPIServerBinary,
