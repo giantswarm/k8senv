@@ -254,6 +254,37 @@ func TestWaitReady_FatalCheckError(t *testing.T) {
 	}
 }
 
+func TestWaitReady_Timeout(t *testing.T) {
+	t.Parallel()
+
+	called := 0
+	start := time.Now()
+	err := WaitReady(context.Background(), WaitReadyConfig{
+		Interval: 50 * time.Millisecond,
+		Timeout:  200 * time.Millisecond,
+		Name:     "test-proc",
+		Port:     12345,
+	}, func(_ context.Context, _ int) (bool, error) {
+		called++
+		return false, nil
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error after timeout, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded in error chain, got: %v", err)
+	}
+	if called < 2 {
+		t.Fatalf("expected at least 2 check calls before timeout, got %d", called)
+	}
+	// Should complete close to the 200ms timeout, not hang longer.
+	if elapsed > 2*time.Second {
+		t.Fatalf("expected completion near timeout, took %v", elapsed)
+	}
+}
+
 func TestWaitReady_NilProcessExited(t *testing.T) {
 	t.Parallel()
 
