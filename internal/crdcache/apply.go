@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -56,6 +58,11 @@ const (
 	// directories containing an unreasonable number of files.
 	maxYAMLFiles = 1000
 )
+
+// ssaFieldManager identifies k8senv as the field manager for server-side
+// apply operations when applying CRD and companion YAML documents to the
+// ephemeral kube-apiserver during cache creation.
+const ssaFieldManager = "k8senv"
 
 // Concurrency and rate-limiting constants for CRD apply against the local
 // ephemeral kube-apiserver.
@@ -302,7 +309,8 @@ func isCRDDocument(obj *unstructured.Unstructured) bool {
 }
 
 // applyParsedDocument resolves the REST mapping for a pre-parsed document and
-// creates it on the API server.
+// applies it to the API server using server-side apply (SSA). SSA is idempotent:
+// if the resource already exists it is updated, otherwise it is created.
 func applyParsedDocument(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -335,11 +343,23 @@ func applyParsedDocument(
 		dr = dynClient.Resource(mapping.Resource)
 	}
 
-	if _, err := dr.Create(ctx, doc.obj, metav1.CreateOptions{}); err != nil {
-		return fmt.Errorf("%s: create %s/%s: %w", doc.file, gvk.Kind, doc.obj.GetName(), err)
+	// Server-side apply requires clean JSON without client-side metadata that
+	// would conflict with the API server's own managed-fields bookkeeping.
+	doc.obj.SetManagedFields(nil)
+	doc.obj.SetResourceVersion("")
+
+	data, err := json.Marshal(doc.obj)
+	if err != nil {
+		return fmt.Errorf("%s: marshal %s/%s: %w", doc.file, gvk.Kind, doc.obj.GetName(), err)
 	}
 
-	logger.Debug("created resource", "kind", gvk.Kind, "name", doc.obj.GetName())
+	if _, err := dr.Patch(ctx, doc.obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
+		FieldManager: ssaFieldManager,
+	}); err != nil {
+		return fmt.Errorf("%s: apply %s/%s: %w", doc.file, gvk.Kind, doc.obj.GetName(), err)
+	}
+
+	logger.Debug("applied resource", "kind", gvk.Kind, "name", doc.obj.GetName())
 	return nil
 }
 
