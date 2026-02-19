@@ -150,13 +150,13 @@ func TestReleasePreservesSystemNamespaces(t *testing.T) {
 		t.Fatalf("list namespaces: %v", err)
 	}
 
-	found := make(map[string]bool)
+	found := make(map[string]struct{}, len(nsList.Items))
 	for _, ns := range nsList.Items {
-		found[ns.Name] = true
+		found[ns.Name] = struct{}{}
 	}
 
 	for name := range testutil.SystemNamespaces() {
-		if !found[name] {
+		if _, ok := found[name]; !ok {
 			t.Errorf("system namespace %q missing after cleanup", name)
 		}
 	}
