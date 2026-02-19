@@ -289,6 +289,74 @@ func (f *fakeStoppable) Close() {
 	f.closed = true
 }
 
+func TestSetupAndStart_NilCmd(t *testing.T) {
+	t.Parallel()
+
+	bp := NewBaseProcess("test-proc", nil)
+	err := bp.SetupAndStart(nil, "/tmp/data")
+	if err == nil {
+		t.Fatal("expected error for nil cmd, got nil")
+	}
+	if got := err.Error(); got != "cmd must not be nil" {
+		t.Errorf("error = %q, want %q", got, "cmd must not be nil")
+	}
+}
+
+func TestSetupAndStart_EmptyPath(t *testing.T) {
+	t.Parallel()
+
+	bp := NewBaseProcess("test-proc", nil)
+	cmd := &exec.Cmd{} // Path is empty by default
+	err := bp.SetupAndStart(cmd, "/tmp/data")
+	if err == nil {
+		t.Fatal("expected error for empty Path, got nil")
+	}
+	if got := err.Error(); got != "cmd.Path must not be empty" {
+		t.Errorf("error = %q, want %q", got, "cmd.Path must not be empty")
+	}
+}
+
+func TestSetupAndStart_EmptyDataDir(t *testing.T) {
+	t.Parallel()
+
+	bp := NewBaseProcess("test-proc", nil)
+	cmd := &exec.Cmd{Path: "/usr/bin/sleep"}
+	err := bp.SetupAndStart(cmd, "")
+	if err == nil {
+		t.Fatal("expected error for empty dataDir, got nil")
+	}
+	if got := err.Error(); got != "data directory must not be empty" {
+		t.Errorf("error = %q, want %q", got, "data directory must not be empty")
+	}
+}
+
+func TestSetupAndStart_AlreadyStarted(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	bp := NewBaseProcess("test-proc", nil)
+
+	// Start a real process so bp.cmd becomes non-nil.
+	cmd := exec.Command("sleep", "60")
+	if err := bp.SetupAndStart(cmd, dataDir); err != nil {
+		t.Fatalf("first SetupAndStart failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = bp.Stop(5 * time.Second)
+		bp.Close()
+	})
+
+	// Attempt a second start while the process is still running.
+	cmd2 := exec.Command("sleep", "60")
+	err := bp.SetupAndStart(cmd2, dataDir)
+	if err == nil {
+		t.Fatal("expected error for already started process, got nil")
+	}
+	if !errors.Is(err, ErrAlreadyStarted) {
+		t.Fatalf("expected ErrAlreadyStarted, got: %v", err)
+	}
+}
+
 // makeSignalExitError creates an *exec.ExitError with the given signal.
 // It uses a real process to generate an authentic WaitStatus.
 // Calls t.Fatalf if the process cannot be started, signaled, or does not

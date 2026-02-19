@@ -7,6 +7,106 @@ import (
 	"time"
 )
 
+func TestWaitReady_EmptyName(t *testing.T) {
+	t.Parallel()
+
+	err := WaitReady(context.Background(), WaitReadyConfig{
+		Interval: 100 * time.Millisecond,
+		Timeout:  5 * time.Second,
+		Name:     "",
+		Port:     12345,
+	}, func(_ context.Context, _ int) (bool, error) {
+		t.Fatal("check should not be called with empty name")
+		return false, nil
+	})
+	if err == nil {
+		t.Fatal("expected error for empty name, got nil")
+	}
+	want := "wait ready: name must not be empty"
+	if got := err.Error(); got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+}
+
+func TestWaitReady_NilCheckFunction(t *testing.T) {
+	t.Parallel()
+
+	err := WaitReady(context.Background(), WaitReadyConfig{
+		Interval: 100 * time.Millisecond,
+		Timeout:  5 * time.Second,
+		Name:     "test-proc",
+		Port:     12345,
+	}, nil)
+	if err == nil {
+		t.Fatal("expected error for nil check function, got nil")
+	}
+	want := "wait for test-proc: check function must not be nil"
+	if got := err.Error(); got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+}
+
+func TestWaitReady_ContextCancelDuringPolling(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	called := 0
+
+	start := time.Now()
+	err := WaitReady(ctx, WaitReadyConfig{
+		Interval: 10 * time.Millisecond,
+		Timeout:  10 * time.Second,
+		Name:     "test-proc",
+		Port:     12345,
+	}, func(_ context.Context, _ int) (bool, error) {
+		called++
+		if called >= 3 {
+			cancel()
+		}
+		return false, nil
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error after context cancel, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled in error chain, got: %v", err)
+	}
+	if called < 3 {
+		t.Fatalf("expected at least 3 check calls before cancel, got %d", called)
+	}
+	// Should abort quickly after cancel, well under the 10s timeout.
+	if elapsed > 2*time.Second {
+		t.Fatalf("expected fast abort on context cancel, took %v", elapsed)
+	}
+}
+
+func TestWaitReady_MultiAttemptSuccess(t *testing.T) {
+	t.Parallel()
+
+	called := 0
+	err := WaitReady(context.Background(), WaitReadyConfig{
+		Interval: 10 * time.Millisecond,
+		Timeout:  5 * time.Second,
+		Name:     "test-proc",
+		Port:     12345,
+	}, func(_ context.Context, attempt int) (bool, error) {
+		called++
+		if attempt != called {
+			t.Errorf("attempt = %d, want %d (1-based sequential)", attempt, called)
+		}
+		// Succeed on the 5th attempt.
+		return attempt >= 5, nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called != 5 {
+		t.Errorf("expected 5 check calls, got %d", called)
+	}
+}
+
 func TestWaitReady_ZeroInterval(t *testing.T) {
 	t.Parallel()
 
