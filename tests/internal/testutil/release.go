@@ -9,6 +9,7 @@ import (
 	"github.com/giantswarm/k8senv"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // ReleaseRemovesUserNamespaces verifies that releasing an instance removes all
@@ -294,7 +295,36 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 
 	release()
 
-	inst2, client2 := AcquireWithClient(ctx, t, mgr)
+	// Retry acquiring until we get the same instance back. Each instance is a
+	// separate kube-apiserver, so the ConfigMap only exists on the original.
+	// Under pool concurrency another test may grab our instance first.
+	const maxAttempts = 10
+
+	var inst2 k8senv.Instance
+	var client2 kubernetes.Interface
+
+	for attempt := range maxAttempts {
+		candidate, candidateClient := AcquireWithClient(ctx, t, mgr)
+		if candidate.ID() == instID {
+			inst2 = candidate
+			client2 = candidateClient
+			t.Logf("re-acquired same instance on attempt %d", attempt+1)
+
+			break
+		}
+
+		t.Logf("attempt %d: got instance %s, want %s; releasing and retrying",
+			attempt+1, candidate.ID(), instID)
+
+		if err := candidate.Release(); err != nil {
+			t.Logf("release error during retry: %v", err)
+		}
+	}
+
+	if inst2 == nil {
+		t.Skipf("could not re-acquire instance %s after %d attempts", instID, maxAttempts)
+	}
+
 	defer func() {
 		// Clean up the system namespace ConfigMap we created.
 		_ = client2.CoreV1().ConfigMaps("kube-system").Delete(ctx, cmName, metav1.DeleteOptions{})
@@ -302,13 +332,6 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 			t.Logf("release error: %v", err)
 		}
 	}()
-
-	// Each instance is a separate kube-apiserver. If concurrent tests grabbed
-	// our instance before we re-acquired, we get a different one where the
-	// ConfigMap was never created. Only verify when we got the same instance.
-	if inst2.ID() != instID {
-		t.Skip("got different instance (pool concurrency); skipping system resource verification")
-	}
 
 	// Verify the kube-system ConfigMap still exists.
 	got, err := client2.CoreV1().ConfigMaps("kube-system").Get(ctx, cmName, metav1.GetOptions{})
