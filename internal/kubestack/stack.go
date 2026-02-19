@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"time"
 
@@ -208,6 +209,9 @@ func StartWithRetry(
 			if stopErr := stack.Stop(stopTimeout); stopErr != nil {
 				log.Warn("cleanup partially-started kubestack", "error", stopErr)
 			}
+			if isPermanentStartError(err) {
+				return nil, fmt.Errorf("permanent start failure (not retried): %w", err)
+			}
 			continue
 		}
 
@@ -218,6 +222,36 @@ func StartWithRetry(
 	}
 
 	return nil, fmt.Errorf("start kubestack after %d attempts: %w", maxRetries, lastErr)
+}
+
+// isPermanentStartError reports whether err is a permanent failure that will
+// not resolve on retry. Transient errors (port conflicts, brief readiness
+// timeouts) are retryable; everything else is permanent.
+//
+// Permanent errors include:
+//   - process.ErrAlreadyStarted: logical error, the stack is already running
+//   - os.ErrPermission: file/directory permission denied
+//   - os.ErrNotExist: missing binary, database template, or directory
+//   - exec.ErrNotFound: binary not found in PATH
+//   - fileutil.ErrEmptySrc, fileutil.ErrEmptyDst: invalid configuration
+//   - context.Canceled, context.DeadlineExceeded: caller gave up
+func isPermanentStartError(err error) bool {
+	permanentErrors := []error{
+		process.ErrAlreadyStarted,
+		os.ErrPermission,
+		os.ErrNotExist,
+		exec.ErrNotFound,
+		fileutil.ErrEmptySrc,
+		fileutil.ErrEmptyDst,
+		context.Canceled,
+		context.DeadlineExceeded,
+	}
+	for _, target := range permanentErrors {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // Start launches both kine and kube-apiserver concurrently and waits for
