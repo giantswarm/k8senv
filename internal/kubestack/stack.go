@@ -163,6 +163,9 @@ func StartWithRetry(
 	if readyCtx == nil {
 		return nil, errors.New("readyCtx must not be nil")
 	}
+	// Best-effort guard: catches the most common mistake of passing the same
+	// variable for both contexts. Cannot detect logically equivalent but
+	// distinct context values.
 	if procCtx == readyCtx {
 		return nil, errors.New("procCtx and readyCtx must be different contexts; " +
 			"procCtx governs process lifetime, readyCtx governs startup timeout")
