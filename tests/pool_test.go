@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/giantswarm/k8senv/tests/internal/testutil"
+	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -63,32 +64,21 @@ func TestPoolConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
 	// Concurrent acquire/release
-	var wg sync.WaitGroup
-	errCh := make(chan error, 10)
-
+	var g errgroup.Group
 	for range 10 {
-		wg.Go(func() {
-			acquireCtx := context.Background()
-			inst, err := sharedManager.Acquire(acquireCtx)
+		g.Go(func() error {
+			inst, err := sharedManager.Acquire(context.Background())
 			if err != nil {
-				errCh <- fmt.Errorf("failed to acquire: %w", err)
-				return
+				return fmt.Errorf("failed to acquire: %w", err)
 			}
 			// Release errors are safe to ignore; the instance is
 			// removed from the pool but the test is not affected.
 			_ = inst.Release()
-			errCh <- nil
+			return nil
 		})
 	}
-
-	wg.Wait()
-	close(errCh)
-
-	// Check errors from the main test goroutine (safe)
-	for err := range errCh {
-		if err != nil {
-			t.Error(err)
-		}
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }
 
