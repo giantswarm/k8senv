@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/giantswarm/k8senv/internal/sentinel"
 )
@@ -71,12 +70,16 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	// closeDst ensures dstFile.Close is called exactly once. The deferred
 	// call acts as a safety net for early returns; the explicit call in the
 	// normal path captures the close error for the caller.
-	var closeOnce sync.Once
-	var closeErr error
+	var (
+		closed   bool
+		closeErr error
+	)
 	closeDst := func() {
-		closeOnce.Do(func() {
-			closeErr = dstFile.Close()
-		})
+		if closed {
+			return
+		}
+		closed = true
+		closeErr = dstFile.Close()
 	}
 	defer func() {
 		closeDst()
