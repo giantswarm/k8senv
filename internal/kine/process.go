@@ -129,7 +129,9 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 	}, func(checkCtx context.Context, attempt int) (bool, error) {
 		conn, err := dialer.DialContext(checkCtx, "tcp", addr)
 		if err != nil {
-			log.Debug("waitForKine attempt", "port", p.config.Port, "attempt", attempt, "error", err)
+			if log.Enabled(checkCtx, slog.LevelDebug) {
+				log.Debug("waitForKine attempt", "port", p.config.Port, "attempt", attempt, "error", err)
+			}
 			return false, nil // Not ready yet
 		}
 		_ = conn.Close() // best-effort close of readiness check connection

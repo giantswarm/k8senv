@@ -319,7 +319,9 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 		}
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "error", err)
+			if log.Enabled(checkCtx, slog.LevelDebug) {
+				log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "error", err)
+			}
 			return false, nil
 		}
 		// Drain and close the response body so the underlying connection
@@ -332,7 +334,9 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 		if resp.StatusCode == http.StatusOK {
 			return true, nil
 		}
-		log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "status", resp.StatusCode)
+		if log.Enabled(checkCtx, slog.LevelDebug) {
+			log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "status", resp.StatusCode)
+		}
 		return false, nil
 	}); err != nil {
 		return fmt.Errorf("apiserver not ready: %w", err)
