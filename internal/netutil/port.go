@@ -49,9 +49,14 @@ func (r *PortRegistry) reserve(port int) bool {
 }
 
 // Release removes a port from the registry, allowing it to be reused.
+// It logs a warning if the port was not previously reserved.
 func (r *PortRegistry) Release(port int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, ok := r.ports[port]; !ok {
+		r.log.Warn("releasing port that was not reserved", "port", port)
+		return
+	}
 	delete(r.ports, port)
 }
 
