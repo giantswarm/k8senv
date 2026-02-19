@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
-	"syscall"
 	"time"
 
 	"github.com/giantswarm/k8senv/internal/sentinel"
@@ -121,9 +120,7 @@ func (b *BaseProcess) SetupAndStart(cmd *exec.Cmd, dataDir string) error {
 	}
 
 	cmd.Dir = dataDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig: syscall.SIGTERM,
-	}
+	configureSysProcAttr(cmd)
 
 	logFiles, err := StartCmd(cmd, dataDir, b.name)
 	if err != nil {
