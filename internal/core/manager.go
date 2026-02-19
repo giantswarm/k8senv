@@ -41,6 +41,10 @@ const ErrNoYAMLFiles = crdcache.ErrNoYAMLFiles
 // from core, preserving the layering: public API → core → crdcache.
 const ErrMissingKind = crdcache.ErrMissingKind
 
+// ErrCRDEstablishTimeout is re-exported from crdcache so the public API
+// imports only from core, preserving the layering: public API → core → crdcache.
+const ErrCRDEstablishTimeout = crdcache.ErrCRDEstablishTimeout
+
 // Verify Manager implements InstanceReleaser at compile time.
 var _ InstanceReleaser = (*Manager)(nil)
 

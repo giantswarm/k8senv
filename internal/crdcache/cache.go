@@ -15,6 +15,7 @@ import (
 	"github.com/giantswarm/k8senv/internal/kubestack"
 	"github.com/giantswarm/k8senv/internal/netutil"
 	"github.com/giantswarm/k8senv/internal/process"
+	"github.com/giantswarm/k8senv/internal/sentinel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -330,6 +331,10 @@ const crdEstablishmentBurst = 100
 // catching genuinely stuck CRDs before the overall cache timeout expires.
 const longWaitThreshold = 10 * time.Second
 
+// ErrCRDEstablishTimeout is returned when CRDs do not reach the Established
+// condition within the maximum number of polling iterations.
+const ErrCRDEstablishTimeout = sentinel.Error("crd establishment timeout")
+
 // maxEstablishmentPolls is the maximum number of polling iterations in
 // waitForCRDsEstablished. It acts as a safety net against unbounded looping
 // when the context has a very long (or no) deadline. At the default
@@ -362,7 +367,12 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 
 	for {
 		if polls >= maxEstablishmentPolls {
-			return fmt.Errorf("crd establishment did not complete after %d polls: pending CRDs: %v", polls, pendingCRDs)
+			return fmt.Errorf(
+				"crd establishment did not complete after %d polls: pending CRDs: %v: %w",
+				polls,
+				pendingCRDs,
+				ErrCRDEstablishTimeout,
+			)
 		}
 		polls++
 		crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})

@@ -40,4 +40,8 @@ const (
 	// ErrMissingKind is returned by Initialize when a YAML document in the CRD
 	// directory lacks a 'kind' field.
 	ErrMissingKind = core.ErrMissingKind
+
+	// ErrCRDEstablishTimeout is returned by Initialize when CRDs do not reach
+	// the Established condition within the maximum number of polling iterations.
+	ErrCRDEstablishTimeout = core.ErrCRDEstablishTimeout
 )
