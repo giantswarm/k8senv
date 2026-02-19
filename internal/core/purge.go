@@ -12,6 +12,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// registryNamespacesPrefix is the kine key prefix for namespace objects.
+// SUBSTR in the find query uses len(prefix)+1 because SQLite SUBSTR is 1-based.
+const registryNamespacesPrefix = "/registry/namespaces/"
+
 // purgeHandle holds a persistent SQLite connection and a prepared statement for
 // ReleasePurge operations. It is created lazily on first purge and kept open
 // for the lifetime of the instance to amortize connection setup and query
@@ -36,7 +40,7 @@ type purgeHandle struct {
 // Kine is append-only: the row with the highest id for a given name is the
 // current state. We filter system namespaces server-side to avoid client-side
 // allocation per row. The query returns just the namespace name (suffix after
-// the /registry/namespaces/ prefix, which is 21 characters).
+// the registryNamespacesPrefix).
 //
 // The second return value holds the query arguments (one per system namespace).
 func buildFindUserNamespacesQuery() (query string, args []any) {
@@ -45,10 +49,10 @@ func buildFindUserNamespacesQuery() (query string, args []any) {
 	args = make([]any, len(sysNS))
 	for i, ns := range sysNS {
 		placeholders[i] = "?"
-		args[i] = "/registry/namespaces/" + ns
+		args[i] = registryNamespacesPrefix + ns
 	}
 	query = fmt.Sprintf(`
-	SELECT SUBSTR(k.name, 22) FROM kine k
+	SELECT SUBSTR(k.name, %d) FROM kine k
 	INNER JOIN (
 		SELECT name, MAX(id) AS max_id FROM kine
 		WHERE name LIKE '/registry/namespaces/%%'
@@ -57,7 +61,7 @@ func buildFindUserNamespacesQuery() (query string, args []any) {
 	) latest ON k.name = latest.name AND k.id = latest.max_id
 	WHERE k.deleted = 0
 	AND k.name NOT IN (%s)
-`, strings.Join(placeholders, ", "))
+`, len(registryNamespacesPrefix)+1, strings.Join(placeholders, ", "))
 	return query, args
 }
 
@@ -204,7 +208,7 @@ func (h *purgeHandle) deleteNamespaceData(ctx context.Context, namespaces []stri
 		// both core resources (/registry/configmaps/<ns>/foo) and group
 		// resources (/registry/deployments/apps/<ns>/foo).
 		b.WriteString("(name = ? OR name LIKE ? ESCAPE '\\')")
-		args = append(args, "/registry/namespaces/"+ns, "%/"+escapeLIKE(ns)+"/%")
+		args = append(args, registryNamespacesPrefix+ns, "%/"+escapeLIKE(ns)+"/%")
 	}
 
 	if _, err := tx.ExecContext(ctx, b.String(), args...); err != nil {
