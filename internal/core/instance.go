@@ -353,7 +353,7 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 		StopTimeout:           i.cfg.StopTimeout,
 		PortRegistry:          i.ports,
 		Logger:                i.log,
-	}, i.cfg.MaxStartRetries, i.cfg.StopTimeout)
+	}, i.cfg.MaxStartRetries)
 	if err != nil {
 		cancel()
 		// StartWithRetry already exhausted its internal retries for port

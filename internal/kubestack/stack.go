@@ -151,12 +151,12 @@ func newValidated(cfg Config) *Stack {
 // the retry loop. Validation errors are permanent and not retried.
 // The readyCtx is checked before each attempt to avoid pointless retries
 // after timeout. On failure, each partially-started stack is stopped using
-// stopTimeout to release allocated ports.
+// cfg.StopTimeout (or [process.DefaultStopTimeout] when unset) to release
+// allocated ports.
 func StartWithRetry(
 	procCtx, readyCtx context.Context,
 	cfg Config,
 	maxRetries int,
-	stopTimeout time.Duration,
 ) (*Stack, error) {
 	if procCtx == nil {
 		return nil, errors.New("procCtx must not be nil")
@@ -170,9 +170,6 @@ func StartWithRetry(
 	}
 	if maxRetries < 1 {
 		return nil, fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
-	}
-	if stopTimeout <= 0 {
-		return nil, fmt.Errorf("stopTimeout must be positive, got %s", stopTimeout)
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -207,7 +204,7 @@ func StartWithRetry(
 				"max_retries", maxRetries,
 				"error", err,
 			)
-			if stopErr := stack.Stop(stopTimeout); stopErr != nil {
+			if stopErr := stack.Stop(cfg.stopTimeout()); stopErr != nil {
 				log.Warn("cleanup partially-started kubestack", "error", stopErr)
 			}
 			if isPermanentStartError(err) {

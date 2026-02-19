@@ -219,7 +219,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 		StopTimeout:           cfg.stopTimeout(),
 		PortRegistry:          cfg.PortRegistry,
 		Logger:                logger,
-	}, maxPortRetries, cfg.stopTimeout())
+	}, maxPortRetries)
 	if err != nil {
 		return fmt.Errorf("start kubestack for CRD cache: %w", err)
 	}
