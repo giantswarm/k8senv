@@ -122,6 +122,50 @@ func TestDrainDone_TimesOutOnEmpty(t *testing.T) {
 	}
 }
 
+func TestDrainReserve(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		timeout time.Duration
+		want    time.Duration
+	}{
+		"large timeout caps at killDrainBudget": {
+			timeout: 30 * time.Second,
+			want:    killDrainBudget,
+		},
+		"medium timeout caps at killDrainBudget": {
+			timeout: 10 * time.Second,
+			want:    killDrainBudget,
+		},
+		"small timeout uses half": {
+			timeout: 2 * time.Second,
+			want:    1 * time.Second,
+		},
+		"tiny timeout uses half": {
+			timeout: 100 * time.Millisecond,
+			want:    50 * time.Millisecond,
+		},
+		"zero timeout uses floor": {
+			timeout: 0,
+			want:    1 * time.Millisecond,
+		},
+		"negative timeout uses floor": {
+			timeout: -1 * time.Second,
+			want:    1 * time.Millisecond,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := drainReserve(tc.timeout)
+			if got != tc.want {
+				t.Errorf("drainReserve(%v) = %v, want %v", tc.timeout, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNewBaseProcess(t *testing.T) {
 	t.Parallel()
 

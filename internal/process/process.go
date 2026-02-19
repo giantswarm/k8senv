@@ -82,12 +82,28 @@ const DefaultStopTimeout = 10 * time.Second
 // at the overall timeout.
 const termGracePeriod = 5 * time.Second
 
-// killDrainTimeout is the hard upper bound for waiting on the done channel
-// after SIGKILL has been sent (or after the process has already exited).
-// SIGKILL cannot be caught, so the process should exit almost immediately.
-// This timeout is a safety net against indefinite blocking if cmd.Wait
-// never returns (e.g., due to stuck I/O or kernel issues).
-const killDrainTimeout = 10 * time.Second
+// killDrainBudget is the time reserved from the total timeout for draining
+// the done channel after SIGKILL has been sent (or after the process has
+// already exited). SIGKILL cannot be caught, so the process should exit
+// almost immediately. This budget is a safety net against indefinite blocking
+// if cmd.Wait never returns (e.g., due to stuck I/O or kernel issues).
+//
+// This budget is carved out of the caller's timeout, not additive. The main
+// SIGTERM/SIGKILL wait uses (timeout - drainReserve) and the drain uses the
+// remainder, so the total blocking time never exceeds timeout.
+const killDrainBudget = 2 * time.Second
+
+// drainReserve returns the portion of timeout to reserve for draining the
+// done channel after SIGKILL. It is capped at killDrainBudget and never
+// exceeds half of timeout, so at least half the budget is available for the
+// graceful SIGTERM/SIGKILL wait.
+func drainReserve(timeout time.Duration) time.Duration {
+	reserve := min(killDrainBudget, timeout/2)
+	if reserve <= 0 {
+		reserve = 1 * time.Millisecond // floor: avoid zero/negative timer
+	}
+	return reserve
+}
 
 // drainDone reads from the done channel with the given timeout as a hard
 // upper bound. Under normal conditions cmd.Wait returns almost immediately
@@ -124,10 +140,9 @@ func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
 // for clearing these references after stopWithDone returns so that subsequent
 // calls (and IsStarted checks) see the process as stopped.
 //
-// Worst-case blocking duration is timeout + killDrainTimeout (currently 10s).
-// This occurs when the main timeout expires and the post-SIGKILL drain also
-// blocks for its full duration. Callers allocating time budgets should account
-// for this additional killDrainTimeout beyond the configured timeout.
+// Total blocking time is bounded by timeout. A portion of the timeout
+// (killDrainBudget, capped at half of timeout) is reserved for draining the
+// done channel after SIGKILL. The main SIGTERM/SIGKILL wait uses the remainder.
 func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name string) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
@@ -136,11 +151,18 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 		return fmt.Errorf("%s: done channel must not be nil", name)
 	}
 
+	// Partition the timeout budget: reserve a portion at the end for
+	// draining the done channel after SIGKILL, use the rest for the
+	// graceful SIGTERM/SIGKILL wait. This ensures total blocking time
+	// never exceeds timeout.
+	reserve := drainReserve(timeout)
+	mainBudget := timeout - reserve
+
 	// Send SIGTERM for graceful shutdown.
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		// Process already exited; drain the wait goroutine with a hard
-		// upper bound to avoid blocking indefinitely.
-		ok, waitErr := drainDone(done, killDrainTimeout)
+		// Process already exited; drain the wait goroutine within the
+		// caller's timeout budget to avoid blocking indefinitely.
+		ok, waitErr := drainDone(done, timeout)
 		if !ok {
 			return fmt.Errorf("%s: timed out draining process after signal failure", name)
 		}
@@ -150,11 +172,11 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	// Schedule SIGKILL after the grace period. If the process exits before
 	// the grace period, killTimer.Stop() cancels the escalation.
 	//
-	// grace is clamped to timeout so SIGKILL always fires before the total
-	// timeout expires. This guarantees the process receives a kill signal
-	// while totalTimer is still running, giving drainDone a window to
+	// grace is clamped to mainBudget so SIGKILL always fires before the
+	// main wait expires. This guarantees the process receives a kill signal
+	// while the main timer is still running, giving drainDone a window to
 	// collect the exit status rather than hitting the timeout path.
-	grace := min(termGracePeriod, timeout)
+	grace := min(termGracePeriod, mainBudget)
 	killTimer := time.AfterFunc(grace, func() {
 		// Kill after Wait (process already exited) is a no-op that returns
 		// an "os: process already finished" error, which we intentionally
@@ -168,15 +190,18 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	// returns). The defer guarantees the timer is canceled on all exit paths.
 	defer killTimer.Stop()
 
-	// Wait for process exit or total timeout.
-	totalTimer := time.NewTimer(timeout)
+	// Wait for process exit or main budget expiry.
+	totalTimer := time.NewTimer(mainBudget)
 	defer totalTimer.Stop()
 
 	select {
 	case err := <-done:
 		return expectSignalExit(err, name)
 	case <-totalTimer.C:
-		ok, waitErr := drainDone(done, killDrainTimeout)
+		// Main budget expired. Drain with the reserved budget. SIGKILL
+		// was already sent (grace <= mainBudget), so the process should
+		// exit almost immediately; the reserve is a safety net.
+		ok, waitErr := drainDone(done, reserve)
 		if !ok {
 			return fmt.Errorf("%s: timed out waiting for process to exit after SIGKILL", name)
 		}
