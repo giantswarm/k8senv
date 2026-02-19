@@ -304,6 +304,11 @@ func applyParsedDocument(
 	var dr dynamic.ResourceInterface
 	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 		ns := doc.obj.GetNamespace()
+		// Namespace-scoped resources require a namespace in the REST URL.
+		// When the YAML document omits metadata.namespace (common for CRD
+		// companion resources like default instances), fall back to "default"
+		// to match kubectl's behavior (kubectl apply defaults to the "default"
+		// namespace when none is specified in the manifest or context).
 		if ns == "" {
 			ns = "default"
 		}
