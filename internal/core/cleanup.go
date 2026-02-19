@@ -327,14 +327,16 @@ func (i *Instance) discoverDeletableGVRs() ([]schema.GroupVersionResource, error
 		}
 	}
 
-	i.casClientCache(func(cc *clientCache) *clientCache {
+	if err := i.casClientCache(func(cc *clientCache) *clientCache {
 		if cc.gvrs != nil {
 			return nil // another goroutine won the race
 		}
 		updated := *cc
 		updated.gvrs = &gvrs
 		return &updated
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("cache discovered GVRs: %w", err)
+	}
 	// Return the locally-built slice directly instead of re-reading from
 	// i.clients.Load(), which could race with a concurrent Stop() that
 	// stores nil between the CAS and the Load.
@@ -522,14 +524,17 @@ func getOrBuildCachedClient[T any](
 		return zero, fmt.Errorf("create %s: %w", name, err)
 	}
 
-	i.casClientCache(func(cc *clientCache) *clientCache {
+	if err := i.casClientCache(func(cc *clientCache) *clientCache {
 		if !isNil(get(cc)) {
 			return nil // another goroutine won the race
 		}
 		updated := *cc
 		set(&updated, v)
 		return &updated
-	})
+	}); err != nil {
+		var zero T
+		return zero, fmt.Errorf("cache %s: %w", name, err)
+	}
 	// Return the locally-built client directly instead of re-reading from
 	// i.clients.Load(), which could race with a concurrent Stop() that
 	// stores nil between the CAS and the Load.

@@ -433,14 +433,16 @@ func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 	cfg.QPS = 1000
 	cfg.Burst = 2000
 
-	i.casClientCache(func(c *clientCache) *clientCache {
+	if err := i.casClientCache(func(c *clientCache) *clientCache {
 		if c.config != nil {
 			return nil // another goroutine won the race
 		}
 		updated := *c
 		updated.config = cfg
 		return &updated
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("cache rest config: %w", err)
+	}
 	// Return a copy of the locally-built config directly instead of
 	// re-reading from i.clients.Load(), which could race with a concurrent
 	// Stop() that stores nil between the CAS and the Load.
@@ -459,9 +461,9 @@ const maxCASRetries = 100
 // failure, which occurs when a concurrent goroutine updates the cache between
 // Load and CompareAndSwap.
 //
-// Panics if the CAS loop does not converge within maxCASRetries iterations,
-// which indicates a bug rather than normal contention.
-func (i *Instance) casClientCache(fn func(*clientCache) *clientCache) {
+// Returns an error if the CAS loop does not converge within maxCASRetries
+// iterations, which indicates a bug rather than normal contention.
+func (i *Instance) casClientCache(fn func(*clientCache) *clientCache) error {
 	for attempt := range maxCASRetries {
 		old := i.clients.Load()
 		var base clientCache
@@ -470,16 +472,16 @@ func (i *Instance) casClientCache(fn func(*clientCache) *clientCache) {
 		}
 		updated := fn(&base)
 		if updated == nil {
-			return // caller decided no update is needed
+			return nil // caller decided no update is needed
 		}
 		if i.clients.CompareAndSwap(old, updated) {
-			return
+			return nil
 		}
 		// CAS failed — another goroutine modified the cache; retry with
 		// the new snapshot.
 		i.log.Debug("casClientCache CAS retry", "attempt", attempt+1)
 	}
-	panic(fmt.Sprintf("casClientCache did not converge after %d attempts", maxCASRetries))
+	return fmt.Errorf("casClientCache did not converge after %d attempts", maxCASRetries)
 }
 
 // Config returns *rest.Config for connecting to this instance's kube-apiserver.
