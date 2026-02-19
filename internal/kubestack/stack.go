@@ -128,20 +128,29 @@ func New(cfg Config) (*Stack, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid kubestack config: %w", err)
 	}
+	return newValidated(cfg), nil
+}
+
+// newValidated constructs a Stack from a config that has already been
+// validated. It is used internally to avoid redundant validation (e.g.,
+// repeated exec.LookPath calls) inside retry loops.
+func newValidated(cfg Config) *Stack {
 	log := cfg.Logger
 	if log == nil {
 		log = slog.Default()
 	}
 	ports := cfg.PortRegistry
-	return &Stack{config: cfg, log: log, ports: ports}, nil
+	return &Stack{config: cfg, log: log, ports: ports}
 }
 
 // StartWithRetry creates and starts a kubestack, retrying up to maxRetries
 // times on transient failures (e.g., port conflicts). Each retry creates a
-// fresh Stack via [New], which allocates new ports via [netutil.PortRegistry],
-// resolving the root cause of port collisions without backoff.
+// fresh Stack via [newValidated], which allocates new ports via
+// [netutil.PortRegistry], resolving the root cause of port collisions without
+// backoff.
 //
-// Config validation errors from [New] are permanent and not retried.
+// Config validation (including binary path lookups) is performed once before
+// the retry loop. Validation errors are permanent and not retried.
 // The readyCtx is checked before each attempt to avoid pointless retries
 // after timeout. On failure, each partially-started stack is stopped using
 // stopTimeout to release allocated ports.
@@ -164,6 +173,10 @@ func StartWithRetry(
 		return nil, fmt.Errorf("stopTimeout must be positive, got %s", stopTimeout)
 	}
 
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("invalid kubestack config: %w", err)
+	}
+
 	log := cfg.Logger
 	if log == nil {
 		log = slog.Default()
@@ -183,10 +196,7 @@ func StartWithRetry(
 		default:
 		}
 
-		stack, err := New(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("create kubestack: %w", err)
-		}
+		stack := newValidated(cfg)
 
 		if err := stack.Start(procCtx, readyCtx); err != nil {
 			lastErr = err
