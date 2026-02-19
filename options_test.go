@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -480,5 +481,30 @@ func TestOptionApplicationLastWriteWins(t *testing.T) {
 
 	if snap.PoolSize != 8 {
 		t.Errorf("PoolSize = %d, want 8 (last write wins)", snap.PoolSize)
+	}
+}
+
+// TestConfigSnapshotFieldCount is a canary test that detects when
+// core.ManagerConfig fields are added without updating ConfigSnapshot and
+// ApplyOptionsForTesting. ConfigSnapshot must mirror every ManagerConfig field
+// so that option tests exercise the full configuration surface.
+//
+// If this test fails, a field was added to core.ManagerConfig. You must also:
+//  1. Add the field to ConfigSnapshot in export_test.go
+//  2. Copy the field in ApplyOptionsForTesting in export_test.go
+//  3. Update expectedFields below to match the new count
+func TestConfigSnapshotFieldCount(t *testing.T) {
+	t.Parallel()
+
+	// ConfigSnapshot must have 13 fields, matching core.ManagerConfig (see
+	// TestManagerConfigFieldCount in internal/core/config_test.go).
+	const expectedFields = 13
+
+	actual := reflect.TypeFor[k8senv.ConfigSnapshot]().NumField()
+	if actual != expectedFields {
+		t.Errorf("ConfigSnapshot has %d fields, expected %d; "+
+			"if you added a field to core.ManagerConfig, also update "+
+			"ConfigSnapshot and ApplyOptionsForTesting in export_test.go",
+			actual, expectedFields)
 	}
 }

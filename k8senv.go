@@ -121,7 +121,7 @@ func (w *instanceWrapper) ID() string {
 // values. Both NewManager and test helpers use this to avoid duplicating
 // the default field assignments.
 func defaultManagerConfig() managerConfig {
-	return managerConfig{core.ManagerConfig{
+	return managerConfig{ManagerConfig: core.ManagerConfig{
 		PoolSize:             DefaultPoolSize,
 		ReleaseStrategy:      DefaultReleaseStrategy,
 		KineBinary:           DefaultKineBinary,
