@@ -377,6 +377,9 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 
 		if !warned && time.Since(startTime) >= longWaitThreshold {
 			warned = true
+			// Clone pendingCRDs before passing to slog: the slice is reused
+			// across loop iterations (reset via [:0] above), so an async log
+			// handler could observe mutated contents without a defensive copy.
 			logger.Warn("CRD establishment is taking longer than expected",
 				"elapsed", time.Since(startTime).Round(time.Millisecond),
 				"pending_crds", slices.Clone(pendingCRDs),
@@ -384,7 +387,10 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 		}
 
 		if logger.Enabled(ctx, slog.LevelDebug) {
-			logger.Debug("waiting for CRD establishment", "pending_crds", slices.Clone(pendingCRDs))
+			// Clone: same reason as the Warn clone above.
+			logger.Debug("waiting for CRD establishment",
+				"pending_crds", slices.Clone(pendingCRDs),
+			)
 		}
 
 		select {
