@@ -297,6 +297,13 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	if readyCtx == nil {
 		return errors.New("readyCtx must not be nil")
 	}
+	// Best-effort guard: catches the most common mistake of passing the same
+	// variable for both contexts. Cannot detect logically equivalent but
+	// distinct context values.
+	if processCtx == readyCtx {
+		return errors.New("processCtx and readyCtx must be different contexts; " +
+			"processCtx governs process lifetime, readyCtx governs startup timeout")
+	}
 	if s.started {
 		return process.ErrAlreadyStarted
 	}
