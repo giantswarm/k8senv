@@ -163,6 +163,7 @@ func SetupTestLogging() {
 
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(levelStr)); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: invalid K8SENV_LOG_LEVEL %q, falling back to INFO\n", levelStr)
 		level = slog.LevelInfo
 	}
 
