@@ -235,13 +235,14 @@ func configDiffs(stored, incoming managerConfig) []string {
 		}
 	}
 
-	diffInt("PoolSize", stored.PoolSize, incoming.PoolSize)
-	if stored.ReleaseStrategy != incoming.ReleaseStrategy {
-		diffs = append(
-			diffs,
-			fmt.Sprintf("ReleaseStrategy: %s != %s", stored.ReleaseStrategy, incoming.ReleaseStrategy),
-		)
+	diffStringer := func(name string, a, b fmt.Stringer) {
+		if a.String() != b.String() {
+			diffs = append(diffs, fmt.Sprintf("%s: %s != %s", name, a, b))
+		}
 	}
+
+	diffInt("PoolSize", stored.PoolSize, incoming.PoolSize)
+	diffStringer("ReleaseStrategy", stored.ReleaseStrategy, incoming.ReleaseStrategy)
 	diffStr("KineBinary", stored.KineBinary, incoming.KineBinary)
 	diffStr("KubeAPIServerBinary", stored.KubeAPIServerBinary, incoming.KubeAPIServerBinary)
 	diffDur("AcquireTimeout", stored.AcquireTimeout, incoming.AcquireTimeout)
