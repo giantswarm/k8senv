@@ -53,6 +53,8 @@
 //	        if err != nil {
 //	            t.Fatal(err)
 //	        }
+//	        // Use t.Cleanup instead of defer so Release runs when the
+//	        // subtest completes, not when the outer function returns.
 //	        t.Cleanup(func() { _ = inst.Release() })
 //	        // Use unique namespaces for isolation
 //	    })
