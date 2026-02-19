@@ -120,8 +120,11 @@ func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
 // A plain Delete puts namespaces into perpetual "Terminating" state. This method
 // explicitly removes finalizers via the Finalize subresource after deletion.
 //
-// Returns nil immediately if no user namespaces exist (fast path).
-func (i *Instance) cleanNamespaces(ctx context.Context) error {
+// initialUserNS is the already-fetched list of user namespaces from the caller.
+// On the first iteration this list is used directly, avoiding a redundant List
+// call immediately after the caller's own List in listUserNamespaces. Subsequent
+// iterations re-list to confirm convergence.
+func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) error {
 	client, err := i.getOrBuildCleanupClient()
 	if err != nil {
 		return fmt.Errorf("build cleanup client for namespace cleanup: %w", err)
@@ -131,9 +134,9 @@ func (i *Instance) cleanNamespaces(ctx context.Context) error {
 	// cleanupConfirmations consecutive clean List results before returning.
 	consecutiveClean := 0
 
-	// Reuse the slice across iterations to avoid per-loop heap allocation.
-	// Same pattern as crdcache/cache.go pendingCRDs.
-	var userNamespaces []string
+	// userNamespaces holds the working set for the current iteration.
+	// Seeded with initialUserNS on iteration 0; re-listed on subsequent ones.
+	userNamespaces := initialUserNS
 
 	// Single timer reused via Reset to avoid per-iteration time.After leaks.
 	confirmTimer := time.NewTimer(cleanupConfirmDelay)
@@ -156,16 +159,22 @@ func (i *Instance) cleanNamespaces(ctx context.Context) error {
 				len(userNamespaces),
 			)
 		}
-		nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return fmt.Errorf("list namespaces for cleanup: %w", err)
-		}
 
-		userNamespaces = userNamespaces[:0]
-		for idx := range nsList.Items {
-			name := nsList.Items[idx].Name
-			if !isSystemNamespace(name) {
-				userNamespaces = append(userNamespaces, name)
+		// On the first iteration use the caller-supplied list to avoid a
+		// redundant List call — listUserNamespaces already fetched this data.
+		// On subsequent iterations re-list to observe post-deletion state.
+		if iteration > 0 {
+			nsList, listErr := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+			if listErr != nil {
+				return fmt.Errorf("list namespaces for cleanup: %w", listErr)
+			}
+
+			userNamespaces = userNamespaces[:0]
+			for idx := range nsList.Items {
+				name := nsList.Items[idx].Name
+				if !isSystemNamespace(name) {
+					userNamespaces = append(userNamespaces, name)
+				}
 			}
 		}
 

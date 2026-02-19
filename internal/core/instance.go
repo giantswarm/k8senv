@@ -667,7 +667,7 @@ func (i *Instance) Release(token uint64) error {
 					return i.failRelease(token, "resource cleanup during release", err)
 				}
 
-				if err = i.cleanNamespaces(cleanCtx); err != nil {
+				if err = i.cleanNamespaces(cleanCtx, userNS); err != nil {
 					return i.failRelease(token, "namespace cleanup during release", err)
 				}
 			}
