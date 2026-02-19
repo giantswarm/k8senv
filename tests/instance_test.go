@@ -51,7 +51,7 @@ func TestInstanceReuse(t *testing.T) {
 
 	// Release instance — behavior determined by manager's release strategy
 	if err = inst1.Release(); err != nil {
-		t.Logf("release error: %v", err)
+		t.Errorf("release error: %v", err)
 	}
 
 	// Second acquisition — may get same or different instance from pool
