@@ -49,7 +49,7 @@
 //	for i := 0; i < 10; i++ {
 //	    t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
 //	        t.Parallel()
-//	        inst, err := mgr.Acquire(ctx)
+//	        inst, err := mgr.Acquire(t.Context())
 //	        if err != nil {
 //	            t.Fatal(err)
 //	        }
