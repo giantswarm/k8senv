@@ -279,3 +279,22 @@ func TestManagerConfigFieldCount(t *testing.T) {
 			actual, expectedFields)
 	}
 }
+
+// TestInstanceConfigFieldCount is a canary test that detects when fields are
+// added to InstanceConfig without updating validation and instance construction.
+//
+// If this test fails, you added a field to core.InstanceConfig. You must also:
+//  1. Add validation in InstanceConfig.Validate (if the field is required)
+//  2. Wire it through from ManagerConfig in pool.go's instance construction
+//  3. Update expectedFields below to match the new count
+func TestInstanceConfigFieldCount(t *testing.T) {
+	t.Parallel()
+	const expectedFields = 8 // Update this when adding new fields to InstanceConfig.
+
+	actual := reflect.TypeFor[InstanceConfig]().NumField()
+	if actual != expectedFields {
+		t.Errorf("InstanceConfig has %d fields, expected %d; "+
+			"if you added a field, also update validation and instance construction",
+			actual, expectedFields)
+	}
+}
