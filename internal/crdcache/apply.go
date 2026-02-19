@@ -31,8 +31,8 @@ import (
 // ErrMissingKind is returned when a YAML document lacks a 'kind' field.
 const ErrMissingKind = sentinel.Error("missing kind in document")
 
-// ErrTooManyYAMLFiles is returned when a CRD directory contains more files than maxYAMLFiles.
-const ErrTooManyYAMLFiles = sentinel.Error("too many YAML files in directory")
+// errTooManyYAMLFiles is returned when a CRD directory contains more files than maxYAMLFiles.
+const errTooManyYAMLFiles = sentinel.Error("too many YAML files in directory")
 
 // Discovery retry constants control polling for CRD registration propagation.
 const (
@@ -169,7 +169,7 @@ func applyYAMLFiles(
 	files []hashedFile,
 ) error {
 	if len(files) > maxYAMLFiles {
-		return fmt.Errorf("%w: found %d files (max %d)", ErrTooManyYAMLFiles, len(files), maxYAMLFiles)
+		return fmt.Errorf("%w: found %d files (max %d)", errTooManyYAMLFiles, len(files), maxYAMLFiles)
 	}
 
 	// Effectively disable client-side rate limiting for the local, ephemeral
