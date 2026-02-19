@@ -667,67 +667,18 @@ func (i *Instance) Release(token uint64) error {
 		// Skip all cleanup — return to pool immediately.
 
 	case ReleaseClean:
-		// Clean user resources and namespaces before returning to pool, so
-		// the next consumer gets a clean instance. Only run if the instance
-		// has started processes (kubeconfig exists and apiserver is reachable).
-		// Resources must be deleted before namespaces because k8senv runs in
-		// API-only mode (no kube-controller-manager), so namespace deletion
-		// does not cascade-delete contained resources.
-		//
-		// A single timeout covers the entire cleanup sequence so worst-case
-		// duration is bounded to one CleanupTimeout, not two.
-		if i.started.Load() {
-			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
-			defer cleanCancel()
-
-			// Fast path: skip the expensive resource sweep (~20+ cluster-wide
-			// List calls) when no user namespaces exist. This is common when
-			// tests use unique namespaces that were already cleaned up, or when
-			// no resources were created at all.
-			userNS, err := i.listUserNamespaces(cleanCtx)
-			if err != nil {
-				return i.failRelease(token, "user namespace check during release", err)
-			}
-
-			if len(userNS) > 0 {
-				if err = i.cleanNamespacedResources(cleanCtx, userNS); err != nil {
-					return i.failRelease(token, "resource cleanup during release", err)
-				}
-
-				if err = i.cleanNamespaces(cleanCtx, userNS); err != nil {
-					return i.failRelease(token, "namespace cleanup during release", err)
-				}
-			}
+		if err := i.releaseClean(token); err != nil {
+			return err
 		}
 
 	case ReleasePurge:
-		// Purge user data directly from kine's SQLite database. Both kine
-		// and kube-apiserver stay running. Because --watch-cache=false,
-		// subsequent API calls see the cleaned state immediately.
-		//
-		// Unlike ReleaseClean, we do NOT clear the client cache: the
-		// kube-apiserver port and TLS certs are unchanged, so cached
-		// clients and GVR discovery remain valid.
-		if i.started.Load() {
-			h, err := i.ensurePurge()
-			if err != nil {
-				return i.failRelease(token, "open purge handle during release", err)
-			}
-			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
-			defer cleanCancel()
-			if err := h.purge(cleanCtx, i.log); err != nil {
-				return i.failRelease(token, "SQLite purge during release", err)
-			}
+		if err := i.releasePurge(token); err != nil {
+			return err
 		}
 
 	case ReleaseRestart:
-		// Stop the instance. The next Acquire will start fresh — kine's
-		// Start removes the old database (or restores from the cached
-		// template when CRDs are configured). No API-level cleanup needed.
-		ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
-		defer cancel()
-		if err := i.Stop(ctx); err != nil {
-			return i.failRelease(token, "stop during release", err)
+		if err := i.releaseRestart(token); err != nil {
+			return err
 		}
 
 	default:
@@ -744,5 +695,82 @@ func (i *Instance) Release(token uint64) error {
 	if !i.releaser.ReleaseToPool(i, token) {
 		i.log.Debug("instance stopped during release: manager shutting down")
 	}
+	return nil
+}
+
+// releaseClean deletes all user namespaces and their resources via the
+// Kubernetes API before returning the running instance to the pool.
+// Resources are deleted before namespaces because k8senv runs in API-only
+// mode (no kube-controller-manager), so namespace deletion does not
+// cascade-delete contained resources. A single timeout covers the entire
+// cleanup sequence so worst-case duration is bounded to one CleanupTimeout.
+func (i *Instance) releaseClean(token uint64) error {
+	if !i.started.Load() {
+		return nil
+	}
+
+	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
+	defer cleanCancel()
+
+	// Fast path: skip the expensive resource sweep (~20+ cluster-wide
+	// List calls) when no user namespaces exist. This is common when
+	// tests use unique namespaces that were already cleaned up, or when
+	// no resources were created at all.
+	userNS, err := i.listUserNamespaces(cleanCtx)
+	if err != nil {
+		return i.failRelease(token, "user namespace check during release", err)
+	}
+
+	if len(userNS) == 0 {
+		return nil
+	}
+
+	if err = i.cleanNamespacedResources(cleanCtx, userNS); err != nil {
+		return i.failRelease(token, "resource cleanup during release", err)
+	}
+
+	if err = i.cleanNamespaces(cleanCtx, userNS); err != nil {
+		return i.failRelease(token, "namespace cleanup during release", err)
+	}
+
+	return nil
+}
+
+// releasePurge deletes user data directly from kine's SQLite database,
+// bypassing the Kubernetes API entirely. Both kine and kube-apiserver stay
+// running. Because --watch-cache=false, subsequent API calls see the cleaned
+// state immediately. The client cache is NOT cleared since the kube-apiserver
+// port and TLS certs are unchanged.
+func (i *Instance) releasePurge(token uint64) error {
+	if !i.started.Load() {
+		return nil
+	}
+
+	h, err := i.ensurePurge()
+	if err != nil {
+		return i.failRelease(token, "open purge handle during release", err)
+	}
+
+	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
+	defer cleanCancel()
+
+	if err := h.purge(cleanCtx, i.log); err != nil {
+		return i.failRelease(token, "SQLite purge during release", err)
+	}
+
+	return nil
+}
+
+// releaseRestart stops the instance so the next Acquire starts fresh. Kine's
+// Start removes the old database (or restores from the cached template when
+// CRDs are configured), so no API-level cleanup is needed.
+func (i *Instance) releaseRestart(token uint64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
+	defer cancel()
+
+	if err := i.Stop(ctx); err != nil {
+		return i.failRelease(token, "stop during release", err)
+	}
+
 	return nil
 }
