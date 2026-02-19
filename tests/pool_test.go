@@ -170,14 +170,12 @@ func TestParallelAcquisition(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create namespace: %v", err)
 			}
+			t.Cleanup(func() {
+				// Use context.Background because the test's ctx may be canceled by the time cleanup runs.
+				_ = client.CoreV1().Namespaces().Delete(context.Background(), nsName, metav1.DeleteOptions{})
+			})
 
 			t.Logf("Test %d: Created namespace %s", i, nsName)
-
-			// Cleanup namespace
-			err = client.CoreV1().Namespaces().Delete(ctx, nsName, metav1.DeleteOptions{})
-			if err != nil {
-				t.Logf("Warning: Failed to delete namespace %s: %v", nsName, err)
-			}
 		})
 	}
 }

@@ -175,6 +175,10 @@ func TestAPIServerOnlyMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create namespace: %v", err)
 	}
+	t.Cleanup(func() {
+		// Use context.Background because the test's ctx may be canceled by the time cleanup runs.
+		_ = client.CoreV1().Namespaces().Delete(context.Background(), nsName, metav1.DeleteOptions{})
+	})
 
 	t.Run("NamespaceOperations", func(t *testing.T) {
 		nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
@@ -239,11 +243,6 @@ func TestAPIServerOnlyMode(t *testing.T) {
 			t.Errorf("Expected pod phase Pending or empty without scheduler, got %s", retrievedPod.Status.Phase)
 		}
 	})
-
-	// Cleanup
-	if err := client.CoreV1().Namespaces().Delete(ctx, nsName, metav1.DeleteOptions{}); err != nil {
-		t.Logf("Warning: Failed to delete namespace %s: %v", nsName, err)
-	}
 }
 
 // TestMultipleInstancesWithAPIOnly verifies that multiple instances can run
