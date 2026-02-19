@@ -199,6 +199,8 @@ func (i *Instance) isCurrentToken(token uint64) bool {
 // opening the connection and preparing statements on first call. Keeping the
 // handle open amortizes connection setup and query compilation across many
 // release cycles (~0.5-1ms saved per call with modernc.org/sqlite).
+//
+// SAFETY: called only while instance is acquired (single goroutine).
 func (i *Instance) ensurePurge() (*purgeHandle, error) {
 	if i.purge != nil {
 		return i.purge, nil
