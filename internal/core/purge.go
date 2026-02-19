@@ -158,12 +158,14 @@ func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) 
 	return namespaces, nil
 }
 
-// escapeLIKE escapes SQL LIKE wildcard characters (%, _) and the escape
-// character itself (\) in s so that s is matched literally in a LIKE pattern
-// used with ESCAPE '\'.
+// likeEscaper escapes SQL LIKE wildcard characters (%, _) and the escape
+// character itself (\) so that strings are matched literally in a LIKE
+// pattern used with ESCAPE '\'.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// escapeLIKE escapes SQL LIKE wildcard characters in s for literal matching.
 func escapeLIKE(s string) string {
-	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return r.Replace(s)
+	return likeEscaper.Replace(s)
 }
 
 // deleteNamespaceData removes all kine rows associated with the given
