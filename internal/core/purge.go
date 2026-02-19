@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -92,8 +93,7 @@ func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 
 // Close releases the prepared statement and closes the database connection.
 func (h *purgeHandle) Close() error {
-	h.findStmt.Close() //nolint:errcheck,gosec // best-effort cleanup
-	return h.db.Close()
+	return errors.Join(h.findStmt.Close(), h.db.Close())
 }
 
 // purge deletes all rows associated with non-system namespaces from kine's
