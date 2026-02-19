@@ -51,10 +51,6 @@ type Config struct {
 	Logger *slog.Logger
 }
 
-// defaultMaxPortRetries is the default number of startup retries for
-// transient failures such as port conflicts during stack startup.
-const defaultMaxPortRetries = 3
-
 // Stack manages a coordinated kine + kube-apiserver pair.
 type Stack struct {
 	// Immutable after New: configuration, logger, and shared port registry.
