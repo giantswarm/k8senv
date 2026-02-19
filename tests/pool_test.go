@@ -19,6 +19,7 @@ import (
 // Pool Behavior Tests
 // =============================================================================
 
+// TestPoolAcquireRelease tests that an instance can be acquired, used, released, and re-acquired.
 func TestPoolAcquireRelease(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -60,6 +61,7 @@ func TestPoolAcquireRelease(t *testing.T) {
 	}
 }
 
+// TestPoolConcurrentAccess verifies that concurrent acquire and release operations are safe under the race detector.
 func TestPoolConcurrentAccess(t *testing.T) {
 	t.Parallel()
 

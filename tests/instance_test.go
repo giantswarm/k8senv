@@ -83,6 +83,7 @@ func TestInstanceReuse(t *testing.T) {
 	t.Logf("Successfully acquired instances: first=%s, second=%s", inst1.ID(), inst2.ID())
 }
 
+// TestIDUniqueness verifies that each acquired instance has a unique, non-empty ID.
 func TestIDUniqueness(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -113,6 +114,7 @@ func TestIDUniqueness(t *testing.T) {
 	}
 }
 
+// TestDoubleReleasePanics verifies that releasing an instance twice panics with a descriptive message.
 func TestDoubleReleasePanics(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
