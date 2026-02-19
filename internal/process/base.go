@@ -54,6 +54,10 @@ func (b *BaseProcess) Stop(timeout time.Duration) error {
 		return nil
 	}
 	err := stopWithDone(b.cmd, b.waitDone, timeout, b.name)
+	if err != nil {
+		b.log.Warn("process stop failed; process may be orphaned",
+			"process", b.name, "error", err)
+	}
 	b.cmd = nil
 	b.waitDone = nil
 	b.exited = nil
