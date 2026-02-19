@@ -14,6 +14,13 @@ import (
 	"github.com/giantswarm/k8senv/internal/process"
 )
 
+// sqliteBusyTimeoutMs is the SQLite busy_timeout pragma value in milliseconds.
+// It prevents "database is locked" errors during concurrent operations (kine
+// and purge accessing the same database) while keeping test latency acceptable.
+// 5 seconds is generous for a local SQLite file; in practice, lock waits
+// resolve within a few milliseconds.
+const sqliteBusyTimeoutMs = 5000
+
 // readinessPollInterval is the interval between consecutive TCP connection
 // attempts when waiting for the kine process to become ready.
 const readinessPollInterval = 10 * time.Millisecond
@@ -105,7 +112,7 @@ func (p *Process) Start(ctx context.Context) error {
 	}
 
 	args := []string{
-		"--endpoint=sqlite://" + p.config.SQLitePath + "?_busy_timeout=5000",
+		fmt.Sprintf("--endpoint=sqlite://%s?_busy_timeout=%d", p.config.SQLitePath, sqliteBusyTimeoutMs),
 		fmt.Sprintf("--listen-address=127.0.0.1:%d", p.config.Port),
 		"--metrics-bind-address=0", // Disable metrics server to avoid port conflicts
 	}

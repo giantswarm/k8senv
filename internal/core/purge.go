@@ -12,6 +12,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// sqliteBusyTimeoutMs is the SQLite busy_timeout pragma value in milliseconds.
+// It prevents "database is locked" errors when purge runs concurrently with
+// kine's own SQLite operations while keeping test latency acceptable.
+// 5 seconds is generous for a local SQLite file; in practice, lock waits
+// resolve within a few milliseconds.
+const sqliteBusyTimeoutMs = 5000
+
 // purgeHandle holds a persistent SQLite connection and a prepared DELETE
 // statement for ReleasePurge operations. It is created eagerly during instance
 // startup (after system namespaces are verified) and kept open for the lifetime
@@ -83,8 +90,8 @@ func buildPurgeDeleteQuery() (query string, makeArgs func(baselineID int64) []an
 // where crash durability is irrelevant.
 func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(OFF)",
-		sqlitePath,
+		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(%d)&_pragma=synchronous(OFF)",
+		sqlitePath, sqliteBusyTimeoutMs,
 	)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

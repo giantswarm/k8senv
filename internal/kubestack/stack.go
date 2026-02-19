@@ -246,29 +246,33 @@ func StartWithRetry(
 	return nil, fmt.Errorf("start kubestack after %d attempts: %w", maxRetries, lastErr)
 }
 
-// isPermanentStartError reports whether err is a permanent failure that will
-// not resolve on retry. Transient errors (port conflicts, brief readiness
-// timeouts) are retryable; everything else is permanent.
+// permanentStartErrors lists errors that indicate a permanent failure during
+// stack startup. These errors will not resolve on retry, so retrying would
+// waste time and resources. Transient errors (port conflicts, brief readiness
+// timeouts) are not in this list and remain retryable.
 //
-// Permanent errors include:
+// Entries:
 //   - process.ErrAlreadyStarted: logical error, the stack is already running
 //   - os.ErrPermission: file/directory permission denied
 //   - os.ErrNotExist: missing binary, database template, or directory
 //   - exec.ErrNotFound: binary not found in PATH
 //   - fileutil.ErrEmptySrc, fileutil.ErrEmptyDst: invalid configuration
 //   - context.Canceled, context.DeadlineExceeded: caller gave up
+var permanentStartErrors = []error{
+	process.ErrAlreadyStarted,
+	os.ErrPermission,
+	os.ErrNotExist,
+	exec.ErrNotFound,
+	fileutil.ErrEmptySrc,
+	fileutil.ErrEmptyDst,
+	context.Canceled,
+	context.DeadlineExceeded,
+}
+
+// isPermanentStartError reports whether err is a permanent failure that will
+// not resolve on retry.
 func isPermanentStartError(err error) bool {
-	permanentErrors := []error{
-		process.ErrAlreadyStarted,
-		os.ErrPermission,
-		os.ErrNotExist,
-		exec.ErrNotFound,
-		fileutil.ErrEmptySrc,
-		fileutil.ErrEmptyDst,
-		context.Canceled,
-		context.DeadlineExceeded,
-	}
-	for _, target := range permanentErrors {
+	for _, target := range permanentStartErrors {
 		if errors.Is(err, target) {
 			return true
 		}
