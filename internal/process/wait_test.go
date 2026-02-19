@@ -2,7 +2,7 @@ package process
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"testing"
 	"time"
 )
@@ -22,8 +22,8 @@ func TestWaitReady_ZeroInterval(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for zero interval, got nil")
 	}
-	if !strings.Contains(err.Error(), "interval must be positive") {
-		t.Fatalf("unexpected error message: %v", err)
+	if !errors.Is(err, ErrIntervalNotPositive) {
+		t.Fatalf("expected ErrIntervalNotPositive, got: %v", err)
 	}
 }
 
@@ -42,8 +42,8 @@ func TestWaitReady_NegativeInterval(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative interval, got nil")
 	}
-	if !strings.Contains(err.Error(), "interval must be positive") {
-		t.Fatalf("unexpected error message: %v", err)
+	if !errors.Is(err, ErrIntervalNotPositive) {
+		t.Fatalf("expected ErrIntervalNotPositive, got: %v", err)
 	}
 }
 
@@ -62,8 +62,8 @@ func TestWaitReady_ZeroTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for zero timeout, got nil")
 	}
-	if !strings.Contains(err.Error(), "timeout must be positive") {
-		t.Fatalf("unexpected error message: %v", err)
+	if !errors.Is(err, ErrTimeoutNotPositive) {
+		t.Fatalf("expected ErrTimeoutNotPositive, got: %v", err)
 	}
 }
 
@@ -82,8 +82,8 @@ func TestWaitReady_NegativeTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative timeout, got nil")
 	}
-	if !strings.Contains(err.Error(), "timeout must be positive") {
-		t.Fatalf("unexpected error message: %v", err)
+	if !errors.Is(err, ErrTimeoutNotPositive) {
+		t.Fatalf("expected ErrTimeoutNotPositive, got: %v", err)
 	}
 }
 
@@ -111,8 +111,8 @@ func TestWaitReady_ProcessExited(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "process test-proc exited before becoming ready") {
-		t.Fatalf("unexpected error message: %v", err)
+	if !errors.Is(err, ErrProcessExited) {
+		t.Fatalf("expected ErrProcessExited, got: %v", err)
 	}
 	// The function should return almost immediately, well under 1 second.
 	if elapsed > time.Second {

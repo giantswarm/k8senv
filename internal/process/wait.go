@@ -10,6 +10,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// Sentinel errors returned by WaitReady for invalid configuration and
+// process lifecycle conditions. Callers can match these with errors.Is
+// through wrapped error chains.
+var (
+	// ErrIntervalNotPositive indicates a non-positive poll interval.
+	ErrIntervalNotPositive = errors.New("interval must be positive")
+
+	// ErrTimeoutNotPositive indicates a non-positive timeout.
+	ErrTimeoutNotPositive = errors.New("timeout must be positive")
+
+	// ErrProcessExited indicates the process exited before becoming ready.
+	ErrProcessExited = errors.New("process exited before becoming ready")
+)
+
 // ReadinessCheck is a function that checks if a process is ready.
 // The context is canceled when the polling loop times out or the caller
 // cancels, allowing checks (e.g., HTTP requests) to exit promptly.
@@ -36,10 +50,10 @@ func WaitReady(ctx context.Context, cfg WaitReadyConfig, check ReadinessCheck) e
 		return errors.New("wait ready: name must not be empty")
 	}
 	if cfg.Interval <= 0 {
-		return fmt.Errorf("wait for %s: interval must be positive", cfg.Name)
+		return fmt.Errorf("wait for %s: %w", cfg.Name, ErrIntervalNotPositive)
 	}
 	if cfg.Timeout <= 0 {
-		return fmt.Errorf("wait for %s: timeout must be positive", cfg.Name)
+		return fmt.Errorf("wait for %s: %w", cfg.Name, ErrTimeoutNotPositive)
 	}
 
 	log := cfg.Logger
@@ -60,7 +74,7 @@ func WaitReady(ctx context.Context, cfg WaitReadyConfig, check ReadinessCheck) e
 			if cfg.ProcessExited != nil {
 				select {
 				case <-cfg.ProcessExited:
-					return false, fmt.Errorf("process %s exited before becoming ready", cfg.Name)
+					return false, fmt.Errorf("process %s: %w", cfg.Name, ErrProcessExited)
 				default:
 				}
 			}
