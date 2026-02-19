@@ -79,9 +79,10 @@ func (c Config) stopTimeout() time.Duration {
 }
 
 // validate checks that all required Config fields are set and returns an error
-// describing every violation found. It uses errors.Join to report multiple
-// issues at once, allowing callers to fix all problems in a single pass rather
-// than playing whack-a-mole with one error at a time.
+// describing every violation found. It performs I/O via exec.LookPath to verify
+// that configured binaries exist on $PATH. It uses errors.Join to report
+// multiple issues at once, allowing callers to fix all problems in a single
+// pass rather than playing whack-a-mole with one error at a time.
 func (c Config) validate() error {
 	var errs []error
 
