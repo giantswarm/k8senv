@@ -62,8 +62,8 @@ func (w *managerWrapper) Shutdown() error {
 // instanceWrapper wraps core.Instance to implement the Instance interface.
 //
 // The core.Instance is stored as a named (unexported) field rather than embedded
-// to prevent callers from using type assertions to access internal lifecycle methods
-// (e.g., Start, Stop, IsStarted, IsBusy) that are not part of the public Instance interface.
+// to prevent callers from using type assertions to access internal methods
+// that are not part of the public Instance interface.
 type instanceWrapper struct {
 	inst  *core.Instance
 	token uint64
