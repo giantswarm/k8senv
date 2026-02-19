@@ -208,7 +208,6 @@ func StressCreateService(ctx context.Context, t *testing.T, client kubernetes.In
 			Spec: v1.ServiceSpec{
 				Ports: []v1.ServicePort{
 					{
-						//nolint:gosec // idx is bounded by StressMaxNS*StressMaxRes (15)
 						Port: int32(
 							8080 + idx%1000,
 						),
