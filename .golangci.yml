@@ -263,19 +263,6 @@ linters:
         - github.com/giantswarm/k8senv.Manager
         - github.com/giantswarm/k8senv.Instance
 
-  exclusions:
-    generated: lax
-    rules:
-      # G306: Allow 0644 file permissions in tests
-      - linters:
-          - gosec
-        text: G306
-
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
