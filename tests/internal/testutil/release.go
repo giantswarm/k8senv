@@ -19,8 +19,7 @@ import (
 func ReleaseRemovesUserNamespaces(t *testing.T, ctx context.Context, mgr k8senv.Manager, label string) {
 	t.Helper()
 
-	inst, client, release := AcquireWithGuardedRelease(ctx, t, mgr)
-	instID := inst.ID()
+	_, client, release := AcquireWithGuardedRelease(ctx, t, mgr)
 
 	userNS := []string{
 		UniqueName(label + "-a"),
@@ -53,12 +52,6 @@ func ReleaseRemovesUserNamespaces(t *testing.T, ctx context.Context, mgr k8senv.
 			t.Logf("release error: %v", err)
 		}
 	}()
-
-	if inst2.ID() == instID {
-		t.Log("got same instance back")
-	} else {
-		t.Log("got different instance")
-	}
 
 	nsList2, err := client2.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -134,8 +127,7 @@ func ReleaseWithNoUserNamespaces(t *testing.T, ctx context.Context, mgr k8senv.M
 func ReleaseRemovesNamespacedResources(t *testing.T, ctx context.Context, mgr k8senv.Manager, label string) {
 	t.Helper()
 
-	inst, client, release := AcquireWithGuardedRelease(ctx, t, mgr)
-	instID := inst.ID()
+	_, client, release := AcquireWithGuardedRelease(ctx, t, mgr)
 
 	nsName := UniqueName("res-" + label)
 	CreateNamespace(ctx, t, client, nsName)
@@ -166,12 +158,6 @@ func ReleaseRemovesNamespacedResources(t *testing.T, ctx context.Context, mgr k8
 			t.Logf("release error: %v", err)
 		}
 	}()
-
-	if inst2.ID() == instID {
-		t.Log("got same instance back")
-	} else {
-		t.Log("got different instance")
-	}
 
 	// Verify namespace is gone.
 	nsList, err := client2.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
@@ -218,8 +204,7 @@ func ReleaseRemovesNamespacedResources(t *testing.T, ctx context.Context, mgr k8
 func ReleaseRemovesResourcesWithFinalizers(t *testing.T, ctx context.Context, mgr k8senv.Manager, label string) {
 	t.Helper()
 
-	inst, client, release := AcquireWithGuardedRelease(ctx, t, mgr)
-	instID := inst.ID()
+	_, client, release := AcquireWithGuardedRelease(ctx, t, mgr)
 
 	nsName := UniqueName("finalizer-" + label)
 	CreateNamespace(ctx, t, client, nsName)
@@ -246,12 +231,6 @@ func ReleaseRemovesResourcesWithFinalizers(t *testing.T, ctx context.Context, mg
 			t.Logf("release error: %v", err)
 		}
 	}()
-
-	if inst2.ID() == instID {
-		t.Log("got same instance back")
-	} else {
-		t.Log("got different instance")
-	}
 
 	// Verify the finalized resource is gone.
 	cmList, err := client2.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{})

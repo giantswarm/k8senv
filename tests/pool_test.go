@@ -96,15 +96,13 @@ func TestParallelAcquisition(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		t.Logf("Instance usage statistics:")
-		totalUses := 0
-		for id, count := range instanceUsage {
-			t.Logf("  Instance %s: used %d times", id, count)
-			totalUses += count
-		}
-
 		if len(instanceUsage) == 0 {
 			t.Error("Expected at least one instance to be used")
+		}
+
+		totalUses := 0
+		for _, count := range instanceUsage {
+			totalUses += count
 		}
 
 		if totalUses != 10 {
@@ -135,8 +133,6 @@ func TestParallelAcquisition(t *testing.T) {
 			instanceUsage[inst.ID()]++
 			mu.Unlock()
 
-			t.Logf("Test %d acquired instance %s", i, inst.ID())
-
 			// Get config and create client
 			cfg, err := inst.Config()
 			if err != nil {
@@ -149,12 +145,10 @@ func TestParallelAcquisition(t *testing.T) {
 			}
 
 			// Verify we can interact with the API
-			namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+			_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 			if err != nil {
 				t.Fatalf("Failed to list namespaces: %v", err)
 			}
-
-			t.Logf("Test %d: Successfully listed %d namespaces", i, len(namespaces.Items))
 
 			// Create a unique namespace for this test
 			nsName := testutil.UniqueName(fmt.Sprintf("test-%d", i))
@@ -179,8 +173,6 @@ func TestParallelAcquisition(t *testing.T) {
 				defer cancel()
 				_ = client.CoreV1().Namespaces().Delete(cleanupCtx, nsName, metav1.DeleteOptions{})
 			})
-
-			t.Logf("Test %d: Created namespace %s", i, nsName)
 		})
 	}
 }

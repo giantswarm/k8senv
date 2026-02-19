@@ -20,8 +20,6 @@ func TestBasicUsage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	startTime := time.Now()
-
 	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
 	defer func() {
 		if err := inst.Release(); err != nil {
@@ -29,16 +27,10 @@ func TestBasicUsage(t *testing.T) {
 		}
 	}()
 
-	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	_, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list namespaces: %v", err)
 	}
-
-	t.Logf(
-		"kube-apiserver instance running with %d namespaces (total test time: %v)",
-		len(namespaces.Items),
-		time.Since(startTime),
-	)
 }
 
 // TestInstanceReuse explicitly tests that released instances can be acquired again.
@@ -75,8 +67,6 @@ func TestInstanceReuse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list namespaces from second instance: %v", err)
 	}
-
-	t.Logf("Successfully acquired instances: first=%s, second=%s", inst1.ID(), inst2.ID())
 }
 
 // TestIDUniqueness verifies that each acquired instance has a unique, non-empty ID.
@@ -189,7 +179,6 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		if !found {
 			t.Fatalf("Expected namespace %s in list, but not found", nsName)
 		}
-		t.Logf("Listed %d namespaces, found %s", len(nsList.Items), nsName)
 	})
 
 	t.Run("ConfigMapOperations", func(t *testing.T) {
@@ -254,7 +243,6 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 			t.Logf("release error: %v", err)
 		}
 	}()
-	t.Logf("Acquired first instance: %s", inst1.ID())
 
 	// Acquire second instance - this would fail without API-only mode
 	inst2, err := sharedManager.Acquire(ctx)
@@ -266,7 +254,6 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 			t.Logf("release error: %v", err)
 		}
 	}()
-	t.Logf("Acquired second instance: %s", inst2.ID())
 
 	// Verify both instances are different
 	if inst1.ID() == inst2.ID() {
@@ -286,10 +273,9 @@ func TestMultipleInstancesWithAPIOnly(t *testing.T) {
 		}
 
 		// Test API operations
-		nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+		_, err = client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			t.Fatalf("Failed to list namespaces from instance %d: %v", i+1, err)
 		}
-		t.Logf("Instance %d: Listed %d namespaces successfully", i+1, len(nsList.Items))
 	}
 }

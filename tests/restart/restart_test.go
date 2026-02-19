@@ -5,7 +5,6 @@ package k8senv_restart_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -33,9 +32,6 @@ func TestReleaseRestart(t *testing.T) {
 func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 	t.Helper()
 
-	t.Logf("Cycle %d: Acquiring instance...", cycle)
-	startTime := time.Now()
-
 	inst, err := sharedManager.Acquire(ctx)
 	if err != nil {
 		t.Fatalf("Cycle %d: Acquire failed: %v", cycle, err)
@@ -49,8 +45,6 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 			inst.Release() //nolint:errcheck,gosec // safety net on test failure
 		}
 	}()
-
-	t.Logf("Cycle %d: Acquired instance %s in %v", cycle, inst.ID(), time.Since(startTime))
 
 	// Verify the instance works.
 	cfg, err := inst.Config()
@@ -68,8 +62,6 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 		t.Fatalf("Cycle %d: API call failed: %v", cycle, err)
 	}
 
-	t.Logf("Cycle %d: API operations successful", cycle)
-
 	// Release — ReleaseRestart stops the instance.
 	// This is the core behavior under test; a failure here must fail the test.
 	if err := inst.Release(); err != nil {
@@ -77,5 +69,4 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 	}
 
 	released = true
-	t.Logf("Cycle %d: Released instance (restart strategy)", cycle)
 }

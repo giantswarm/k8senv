@@ -145,8 +145,6 @@ func TestCRDDirWithYmlExtension(t *testing.T) {
 
 	// The sprocket CRD comes from a .yml file
 	verifyCRDExists(ctx, t, inst, "sprockets.example.com")
-
-	t.Log("CRD from .yml extension file applied successfully")
 }
 
 // TestReleaseCleanupCRDResources verifies that Release() removes CRD
@@ -158,7 +156,6 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	ctx := context.Background()
 
 	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
-	instID := inst.ID()
 
 	// Create a namespace for the CRD instance.
 	nsName := testutil.UniqueName("crd-cleanup")
@@ -213,12 +210,6 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 			t.Logf("release error: %v", err)
 		}
 	}()
-
-	if inst2.ID() == instID {
-		t.Log("got same instance back (LIFO)")
-	} else {
-		t.Log("got different instance (pool concurrency)")
-	}
 
 	// Re-create dynamic client for the (possibly different) instance.
 	cfg2, err := inst2.Config()

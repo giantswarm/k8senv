@@ -118,8 +118,6 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 		t.Logf("release error from goroutine: %v", relErr)
 	}
 
-	t.Log("Acquire unblocked after release")
-
 	// Clean up inst2.
 	releaseInst2()
 }
@@ -148,6 +146,4 @@ func TestPoolBoundedInstanceReuse(t *testing.T) {
 	if len(seen) > 2 {
 		t.Errorf("Expected at most 2 unique instances, got %d: %v", len(seen), seen)
 	}
-
-	t.Logf("Instance usage across 6 sequential acquires: %v", seen)
 }
