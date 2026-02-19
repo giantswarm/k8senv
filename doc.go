@@ -53,7 +53,7 @@
 //	        if err != nil {
 //	            t.Fatal(err)
 //	        }
-//	        defer inst.Release() // safe to ignore in defer
+//	        t.Cleanup(func() { _ = inst.Release() })
 //	        // Use unique namespaces for isolation
 //	    })
 //	}
