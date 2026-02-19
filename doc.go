@@ -109,5 +109,5 @@
 //	    // CRD directory contained no YAML files
 //	}
 //
-// See the exported Err variables for the complete list of sentinel errors.
+// See the exported Err constants for the complete list of sentinel errors.
 package k8senv

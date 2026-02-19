@@ -13,9 +13,9 @@ func TestError_Error(t *testing.T) {
 		err  Error
 		want string
 	}{
-		"simple message":   {err: Error("something failed"), want: "something failed"},
-		"empty message":    {err: Error(""), want: ""},
-		"with punctuation": {err: Error("not found"), want: "not found"},
+		"simple message": {err: Error("something failed"), want: "something failed"},
+		"empty message":  {err: Error(""), want: ""},
+		"with space":     {err: Error("not found"), want: "not found"},
 	}
 
 	for name, tc := range tests {

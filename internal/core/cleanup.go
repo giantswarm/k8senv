@@ -23,8 +23,8 @@ import (
 
 // systemNamespaces lists the namespaces created by kube-apiserver that must
 // never be deleted during cleanup. Declared as a fixed-size array to prevent
-// accidental append or reassignment. isSystemNamespace and
-// SystemNamespaceNames are derived from it.
+// accidental append via the built-in append function, which requires a slice.
+// isSystemNamespace and SystemNamespaceNames are derived from it.
 var systemNamespaces = [4]string{
 	"default",
 	"kube-system",
