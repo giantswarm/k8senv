@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"sync/atomic"
 	"time"
 
 	"github.com/giantswarm/k8senv/internal/apiserver"
@@ -67,7 +66,7 @@ type Stack struct {
 	apiserver *apiserver.Process
 	kinePort  int // allocated port for kine, released on Stop
 	apiPort   int // allocated port for kube-apiserver, released on Stop
-	started   atomic.Bool
+	started   bool
 }
 
 // stopTimeout returns the configured StopTimeout, falling back to
@@ -294,7 +293,7 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	if readyCtx == nil {
 		return errors.New("readyCtx must not be nil")
 	}
-	if s.started.Load() {
+	if s.started {
 		return process.ErrAlreadyStarted
 	}
 
@@ -328,7 +327,7 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 		return err
 	}
 
-	s.started.Store(true)
+	s.started = true
 	s.log.Debug("kube stack started", "elapsed", time.Since(startTime))
 	return nil
 }
@@ -467,10 +466,10 @@ func (s *Stack) Stop(timeout time.Duration) error {
 	if timeout <= 0 {
 		return fmt.Errorf("stop timeout must be positive, got %s", timeout)
 	}
-	if !s.started.Load() {
+	if !s.started {
 		return nil
 	}
-	s.started.Store(false)
+	s.started = false
 
 	var errs []error
 	if err := process.StopCloseAndNil(&s.apiserver, timeout); err != nil {
