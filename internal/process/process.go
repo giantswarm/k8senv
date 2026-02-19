@@ -132,6 +132,9 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
+	if done == nil {
+		return fmt.Errorf("%s: done channel must not be nil", name)
+	}
 
 	// Send SIGTERM for graceful shutdown.
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
