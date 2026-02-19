@@ -14,6 +14,9 @@ import "github.com/giantswarm/k8senv/internal/core"
 //
 // This is intentional: callers can validate and print strategy values without
 // the public package needing to redeclare these methods.
+//
+// Audit: new methods added to core.ReleaseStrategy automatically become
+// part of the public API through this alias.
 type ReleaseStrategy = core.ReleaseStrategy
 
 const (
