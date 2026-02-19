@@ -159,14 +159,8 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 	instID := inst.ID()
-	released := false
-	defer func() {
-		if !released {
-			inst.Release() //nolint:errcheck,gosec // safety net on test failure
-		}
-	}()
 
 	// Create a namespace for the CRD instance.
 	nsName := testutil.UniqueName("crd-cleanup")
@@ -210,10 +204,7 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	}
 
 	// Release and re-acquire.
-	if err := inst.Release(); err != nil {
-		t.Fatalf("Release() failed: %v", err)
-	}
-	released = true
+	release()
 
 	inst2, err := sharedManager.Acquire(ctx)
 	if err != nil {
