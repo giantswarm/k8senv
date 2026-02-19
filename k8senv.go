@@ -141,13 +141,26 @@ func defaultManagerConfig() managerConfig {
 // NewManager creates a fresh manager. This follows the Go stdlib pattern
 // (e.g., net/http/internal) for enabling test isolation within a single
 // binary. It must only be called from tests.
-func resetForTesting() {
+//
+// If a manager already exists, Shutdown is called first to stop any running
+// kine/kube-apiserver processes. Returns an error if Shutdown fails; the
+// singleton state is still reset regardless so tests can proceed.
+func resetForTesting() error {
 	singletonMu.Lock()
 	defer singletonMu.Unlock()
+
+	var shutdownErr error
+	if singletonMgr != nil {
+		if err := singletonMgr.Shutdown(); err != nil {
+			shutdownErr = fmt.Errorf("shutting down existing manager: %w", err)
+		}
+	}
 
 	singletonMgr = nil
 	singletonCreated = false
 	singletonCfg = managerConfig{}
+
+	return shutdownErr
 }
 
 // NewManager returns the process-level singleton Manager.

@@ -5,7 +5,11 @@ import "time"
 // ResetForTesting resets the singleton manager state so that the next
 // call to NewManager creates a fresh instance. This is exported only
 // for use in test packages (package k8senv_test).
-func ResetForTesting() { resetForTesting() }
+//
+// If a manager already exists, Shutdown is called first to stop any running
+// processes. Returns an error if Shutdown fails; the singleton state is still
+// reset regardless so tests can proceed.
+func ResetForTesting() error { return resetForTesting() }
 
 // ConfigSnapshot holds a copy of managerConfig fields for test assertions.
 // Exported only via export_test.go so that the _test package can verify
