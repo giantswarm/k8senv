@@ -362,7 +362,7 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 
 	for {
 		if polls >= maxEstablishmentPolls {
-			return fmt.Errorf("CRD establishment did not complete after %d polls: pending CRDs: %v", polls, pendingCRDs)
+			return fmt.Errorf("crd establishment did not complete after %d polls: pending CRDs: %v", polls, pendingCRDs)
 		}
 		polls++
 		crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
