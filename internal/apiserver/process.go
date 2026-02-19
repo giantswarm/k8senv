@@ -325,7 +325,7 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 		if err != nil {
 			return false, fmt.Errorf("create health check request: %w", err)
 		}
-		resp, err := httpClient.Do(req) //nolint:gosec // G704: URL is from config, not user input.
+		resp, err := httpClient.Do(req) //nolint:gosec // G107: URL is from config, not user input.
 		if err != nil {
 			if log.Enabled(checkCtx, slog.LevelDebug) {
 				log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "error", err)
