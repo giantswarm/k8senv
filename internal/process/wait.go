@@ -47,6 +47,9 @@ type WaitReadyConfig struct {
 // The check function is called repeatedly until it returns true (ready)
 // or returns a non-nil error (fatal, abort polling).
 func WaitReady(ctx context.Context, cfg WaitReadyConfig, check ReadinessCheck) error {
+	if check == nil {
+		return errors.New("wait ready: check function must not be nil")
+	}
 	if cfg.Name == "" {
 		return errors.New("wait ready: name must not be empty")
 	}
