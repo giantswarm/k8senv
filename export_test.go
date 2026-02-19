@@ -1,6 +1,34 @@
 package k8senv
 
-import "time"
+import (
+	"reflect"
+	"time"
+
+	"github.com/giantswarm/k8senv/internal/core"
+)
+
+// ManagerConfigFieldCount returns the number of fields in core.ManagerConfig.
+// Exported for canary tests that verify configDiffs coverage.
+func ManagerConfigFieldCount() int {
+	return reflect.TypeFor[core.ManagerConfig]().NumField()
+}
+
+// ConfigDiffsForTesting calls configDiffs with two configs built from the
+// provided option sets and returns the diff strings. This allows the _test
+// package to exercise configDiffs without accessing unexported types.
+func ConfigDiffsForTesting(storedOpts, incomingOpts []ManagerOption) []string {
+	stored := defaultManagerConfig()
+	for _, opt := range storedOpts {
+		opt(&stored)
+	}
+
+	incoming := defaultManagerConfig()
+	for _, opt := range incomingOpts {
+		opt(&incoming)
+	}
+
+	return configDiffs(stored, incoming)
+}
 
 // ResetForTesting resets the singleton manager state so that the next
 // call to NewManager creates a fresh instance. This is exported only
