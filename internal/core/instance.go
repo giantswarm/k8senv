@@ -445,14 +445,22 @@ func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 	return rest.CopyConfig(cfg), nil
 }
 
+// maxCASRetries is the safety-valve upper bound on CAS loop iterations in
+// casClientCache. In practice a single retry suffices, but a bounded limit
+// converts the loop from infinite to deterministic.
+const maxCASRetries = 100
+
 // casClientCache applies fn to the current clientCache in a compare-and-swap
 // loop. If the cache pointer is nil, fn receives a zero-value clientCache.
 // fn must return a new *clientCache to store, or nil to abort (e.g., when
 // another goroutine already populated the field). The loop retries on CAS
 // failure, which occurs when a concurrent goroutine updates the cache between
 // Load and CompareAndSwap.
+//
+// Panics if the CAS loop does not converge within maxCASRetries iterations,
+// which indicates a bug rather than normal contention.
 func (i *Instance) casClientCache(fn func(*clientCache) *clientCache) {
-	for {
+	for attempt := range maxCASRetries {
 		old := i.clients.Load()
 		var base clientCache
 		if old != nil {
@@ -467,7 +475,9 @@ func (i *Instance) casClientCache(fn func(*clientCache) *clientCache) {
 		}
 		// CAS failed — another goroutine modified the cache; retry with
 		// the new snapshot.
+		i.log.Debug("casClientCache CAS retry", "attempt", attempt+1)
 	}
+	panic(fmt.Sprintf("casClientCache did not converge after %d attempts", maxCASRetries))
 }
 
 // Config returns *rest.Config for connecting to this instance's kube-apiserver.
