@@ -139,6 +139,14 @@ func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) 
 	return namespaces, nil
 }
 
+// escapeLIKE escapes SQL LIKE wildcard characters (%, _) and the escape
+// character itself (\) in s so that s is matched literally in a LIKE pattern
+// used with ESCAPE '\'.
+func escapeLIKE(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
 // deleteNamespaceData removes all kine rows associated with the given
 // namespaces in a single statement. For each namespace it deletes:
 //   - The namespace object itself: name = '/registry/namespaces/<ns>'
@@ -173,8 +181,8 @@ func (h *purgeHandle) deleteNamespaceData(ctx context.Context, namespaces []stri
 		// Pattern matches any key with /<ns>/ as a path segment, catching
 		// both core resources (/registry/configmaps/<ns>/foo) and group
 		// resources (/registry/deployments/apps/<ns>/foo).
-		b.WriteString("name = ? OR name LIKE ?")
-		args = append(args, "/registry/namespaces/"+ns, "%/"+ns+"/%")
+		b.WriteString("name = ? OR name LIKE ? ESCAPE '\\'")
+		args = append(args, "/registry/namespaces/"+ns, "%/"+escapeLIKE(ns)+"/%")
 	}
 
 	if _, err := tx.ExecContext(ctx, b.String(), args...); err != nil {
