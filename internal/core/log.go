@@ -57,7 +57,15 @@ func newDefaultLogger() *slog.Logger {
 // If l is nil, the logger resets to the default: slog.Default() with
 // "component" attribute, re-derived on the next Logger() call and then cached.
 //
-// SetLogger is safe to call concurrently with other k8senv operations.
+// Thread safety: SetLogger is safe to call concurrently with Logger and with
+// other k8senv operations. Both logger and defaultLogger are atomic pointers,
+// so individual loads and stores are data-race-free. There is a brief window
+// between the two stores where a concurrent Logger call could observe the old
+// defaultLogger after the custom logger has been cleared (or vice versa). This
+// is benign: Logger always returns a valid *slog.Logger, and the next call
+// after both stores complete will see the intended state. Callers that need a
+// strict happens-before guarantee should call SetLogger before starting any
+// goroutines that use the library (e.g., in TestMain before m.Run).
 func SetLogger(l *slog.Logger) {
 	logger.Store(l)
 	// Clear the cached default so the next Logger() call re-derives it from

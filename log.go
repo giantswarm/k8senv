@@ -15,7 +15,13 @@ import (
 // "component" attribute, re-derived on the next Logger() call and then
 // cached. Call SetLogger(nil) after slog.SetDefault() to pick up changes.
 //
-// SetLogger is safe to call concurrently with other k8senv operations.
+// Thread safety: SetLogger is safe to call concurrently with other k8senv
+// operations. Both the custom logger and the cached default are stored as
+// atomic pointers, so loads and stores are data-race-free. A concurrent
+// Logger call during SetLogger always returns a valid *slog.Logger, though
+// it may briefly return the previous logger until both atomic stores
+// complete. For a strict happens-before guarantee, call SetLogger before
+// starting goroutines that use the library (e.g., in TestMain before m.Run).
 //
 // Example:
 //

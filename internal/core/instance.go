@@ -92,6 +92,20 @@ type clientCache struct {
 	// dynamic is the dynamic client for resource deletion.
 	dynamic *dynamic.DynamicClient
 	// gvrs is the discovered set of deletable namespaced resource types.
+	//
+	// This field uses a pointer-to-slice (*[]T) rather than a plain slice
+	// ([]T) to distinguish "not yet discovered" (nil pointer) from
+	// "discovered, but zero resource types found" (non-nil pointer to an
+	// empty slice). A plain slice cannot make this distinction because its
+	// zero value is nil, which is also a valid discovery result. The cache-
+	// hit check in discoverDeletableGVRs relies on this: cache.gvrs != nil
+	// means the discovery has already run and the result can be reused,
+	// even if the result was an empty set.
+	//
+	// The other fields (config, clientset, discovery, dynamic) do not need
+	// this treatment because they are pointer types whose nil zero value
+	// unambiguously means "not yet built" — a successfully built client is
+	// never nil.
 	gvrs *[]schema.GroupVersionResource
 }
 
