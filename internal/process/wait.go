@@ -7,21 +7,22 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/giantswarm/k8senv/internal/sentinel"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // Sentinel errors returned by WaitReady for invalid configuration and
 // process lifecycle conditions. Callers can match these with errors.Is
 // through wrapped error chains.
-var (
+const (
 	// ErrIntervalNotPositive indicates a non-positive poll interval.
-	ErrIntervalNotPositive = errors.New("interval must be positive")
+	ErrIntervalNotPositive = sentinel.Error("interval must be positive")
 
 	// ErrTimeoutNotPositive indicates a non-positive timeout.
-	ErrTimeoutNotPositive = errors.New("timeout must be positive")
+	ErrTimeoutNotPositive = sentinel.Error("timeout must be positive")
 
 	// ErrProcessExited indicates the process exited before becoming ready.
-	ErrProcessExited = errors.New("process exited before becoming ready")
+	ErrProcessExited = sentinel.Error("process exited before becoming ready")
 )
 
 // ReadinessCheck is a function that checks if a process is ready.
