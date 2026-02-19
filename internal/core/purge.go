@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	// Register the pure-Go SQLite driver (no CGO required).
 	_ "modernc.org/sqlite"
@@ -82,15 +83,30 @@ func buildPurgeDeleteQuery() (query string, makeArgs func(baselineID int64) []an
 	return query, makeArgs
 }
 
+// baselineQueryRetries is the number of attempts for the baseline ID query
+// in openPurgeHandle. SQLITE_BUSY is transient — kine may hold a write lock
+// briefly after system namespace creation (e.g., WAL checkpoint). Retrying
+// with backoff avoids tearing down the entire stack for a lock that clears
+// in milliseconds.
+const baselineQueryRetries = 3
+
+// baselineQueryBackoff is the initial backoff between baseline query retries.
+// Each subsequent attempt doubles the backoff (100ms, 200ms, 400ms).
+const baselineQueryBackoff = 100 * time.Millisecond
+
 // openPurgeHandle opens a SQLite connection configured for purge operations,
 // captures the baseline ID (MAX(id) at the point where only system data
 // exists), and prepares the reusable DELETE statement. The connection uses WAL
 // mode (matching kine), a generous busy timeout for concurrent access, and
 // relaxed synchronous mode (OFF) since the database is ephemeral test data
 // where crash durability is irrelevant.
+//
+// The busy_timeout pragma is ordered first so it is active before
+// journal_mode(WAL), which may itself trigger SQLITE_BUSY if kine holds
+// a write lock during connection setup.
 func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(%d)&_pragma=synchronous(OFF)",
+		"file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(OFF)",
 		sqlitePath, sqliteBusyTimeoutMs,
 	)
 	db, err := sql.Open("sqlite", dsn)
@@ -105,11 +121,25 @@ func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 
 	// Capture the baseline ID: everything at or below this ID is system data
 	// that must be preserved. COALESCE handles the (theoretical) empty-table
-	// case by returning 0.
+	// case by returning 0. Retry with backoff for transient SQLITE_BUSY
+	// errors that can occur when kine is still settling after namespace
+	// creation (e.g., WAL checkpoint in progress).
 	var baselineID int64
-	if err := db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM kine").Scan(&baselineID); err != nil {
+	var queryErr error
+	backoff := baselineQueryBackoff
+	for attempt := range baselineQueryRetries {
+		queryErr = db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM kine").Scan(&baselineID)
+		if queryErr == nil {
+			break
+		}
+		if attempt < baselineQueryRetries-1 {
+			time.Sleep(backoff)
+			backoff *= 2
+		}
+	}
+	if queryErr != nil {
 		db.Close() //nolint:errcheck,gosec // best-effort cleanup on query failure
-		return nil, fmt.Errorf("query baseline id: %w", err)
+		return nil, fmt.Errorf("query baseline id: %w", queryErr)
 	}
 
 	query, makeArgs := buildPurgeDeleteQuery()

@@ -391,7 +391,7 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 		h, err := openPurgeHandle(i.sqlitePath)
 		if err != nil {
 			i.teardownFailedAttempt(cancel, stack, attempt, err)
-			return true, fmt.Errorf("open purge handle: %w", err)
+			return false, fmt.Errorf("open purge handle: %w", err)
 		}
 		i.purge = h
 	}
@@ -409,12 +409,12 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 	return true, nil
 }
 
-// teardownFailedAttempt cleans up after a failed namespace wait: stops the
+// teardownFailedAttempt cleans up after a failed startup step: stops the
 // stack gracefully via SIGTERM, cancels the process context, and clears
 // cached clients that reference the now-defunct API server ports.
 func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubestack.Stack, attempt int, err error) {
 	if stopErr := stack.Stop(i.cfg.StopTimeout); stopErr != nil {
-		i.log.Warn("cleanup stack after namespace wait failure", "error", stopErr)
+		i.log.Warn("cleanup stack after startup failure", "error", stopErr)
 	}
 	cancel()
 	// Clear stale state from the failed attempt — the old apiserver
@@ -422,7 +422,7 @@ func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubes
 	i.clients.Store(nil)
 
 	if attempt < maxNamespaceRetries {
-		i.log.Warn("system namespace timeout, retrying instance start",
+		i.log.Warn("startup attempt failed, retrying instance start",
 			"attempt", attempt,
 			"max_retries", maxNamespaceRetries,
 			"error", err,
