@@ -136,9 +136,47 @@ func (h *purgeHandle) purge(ctx context.Context, log *slog.Logger) error {
 	return nil
 }
 
+// dnsLabelMaxLen is the maximum length of an RFC 1123 DNS label.
+const dnsLabelMaxLen = 63
+
+// isValidDNSLabel reports whether name is a valid RFC 1123 DNS label:
+// 1-63 characters, lowercase alphanumeric or hyphens, must start and end
+// with an alphanumeric character. Kubernetes namespace names must conform
+// to this format. Validating names extracted from kine's SQLite database
+// before using them in LIKE patterns prevents unexpected query behavior
+// from names containing SQL wildcards (%, _) or path separators (/).
+func isValidDNSLabel(name string) bool {
+	n := len(name)
+	if n == 0 || n > dnsLabelMaxLen {
+		return false
+	}
+	for i := range n {
+		c := name[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+			// lowercase letter — always valid
+		case c >= '0' && c <= '9':
+			// digit — always valid
+		case c == '-':
+			// hyphen — valid only in interior positions
+			if i == 0 || i == n-1 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // findUserNamespaces returns the names of non-system namespaces present in the
 // kine database using the prepared query. The system namespace paths are bound
 // via h.findArgs, which were computed once at handle creation time.
+//
+// Each name is validated against RFC 1123 DNS label rules before inclusion.
+// Names that fail validation (e.g., containing '/', '%', or other non-label
+// characters) are logged and skipped to prevent unexpected SQL LIKE behavior
+// in deleteNamespaceData.
 func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) {
 	rows, err := h.findStmt.QueryContext(ctx, h.findArgs...)
 	if err != nil {
@@ -152,9 +190,17 @@ func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) 
 		if err := rows.Scan(&name); err != nil {
 			return nil, fmt.Errorf("scan namespace row: %w", err)
 		}
-		if name != "" {
-			namespaces = append(namespaces, name)
+		if name == "" {
+			continue
 		}
+		if !isValidDNSLabel(name) {
+			slog.Warn("purge: skipping namespace with invalid name",
+				"name", name,
+				"reason", "does not conform to RFC 1123 DNS label rules",
+			)
+			continue
+		}
+		namespaces = append(namespaces, name)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate namespace rows: %w", err)
