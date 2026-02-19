@@ -33,6 +33,15 @@ const defaultMaxStartRetries = 5
 // port-conflict loop.
 const maxNamespaceRetries = 3
 
+// instanceQPS is the client-side QPS limit for user-facing rest.Config.
+// Set well above client-go's defaults (QPS=5, Burst=10) because each
+// instance has a dedicated, local kube-apiserver with no external consumers.
+const instanceQPS = 1000
+
+// instanceBurst is the client-side burst limit for user-facing rest.Config,
+// allowing short request spikes above instanceQPS.
+const instanceBurst = 2000
+
 // ErrInstanceReleased is returned by Config when called on an instance that has
 // been released back to the pool. After Release, the instance may be re-acquired
 // by another consumer or stopped, making any previously obtained configuration stale.
@@ -444,8 +453,8 @@ func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 	// Burst=10) are designed for shared production clusters. For local
 	// test instances, rate limiting only adds latency — each instance
 	// has its own dedicated kube-apiserver with no external consumers.
-	cfg.QPS = 1000
-	cfg.Burst = 2000
+	cfg.QPS = instanceQPS
+	cfg.Burst = instanceBurst
 
 	if err := i.casClientCache(func(c *clientCache) *clientCache {
 		if c.config != nil {

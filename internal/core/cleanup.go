@@ -59,7 +59,7 @@ const cleanupConfirmDelay = 10 * time.Millisecond
 const cleanupConfirmations = 1
 
 // cleanupQPS is the client-side QPS limit for cleanup clients. Set higher
-// than instance.go's user-facing QPS (1000) because cleanup issues many
+// than instance.go's user-facing instanceQPS because cleanup issues many
 // small deletions in rapid succession and benefits from zero throttling.
 // The target is a local, ephemeral kube-apiserver with no external consumers.
 const cleanupQPS = 10_000
