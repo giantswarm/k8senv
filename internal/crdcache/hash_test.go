@@ -8,18 +8,18 @@ import (
 	"testing"
 )
 
-func writeYAMLFile(t *testing.T, dir, name, content string) {
+func writeTestFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-		t.Fatalf("write yaml file %s: %v", name, err)
+		t.Fatalf("write test file %s: %v", name, err)
 	}
 }
 
 func TestWalkYAMLFiles_FindsYAML(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "a.yaml", "kind: A")
-	writeYAMLFile(t, dir, "b.yml", "kind: B")
+	writeTestFile(t, dir, "a.yaml", "kind: A")
+	writeTestFile(t, dir, "b.yml", "kind: B")
 
 	files, err := walkYAMLFiles(dir)
 	if err != nil {
@@ -33,10 +33,10 @@ func TestWalkYAMLFiles_FindsYAML(t *testing.T) {
 func TestWalkYAMLFiles_IgnoresNonYAML(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "crd.yaml", "kind: CRD")
-	writeYAMLFile(t, dir, "readme.md", "# readme")
-	writeYAMLFile(t, dir, "config.json", "{}")
-	writeYAMLFile(t, dir, "script.sh", "#!/bin/bash")
+	writeTestFile(t, dir, "crd.yaml", "kind: CRD")
+	writeTestFile(t, dir, "readme.md", "# readme")
+	writeTestFile(t, dir, "config.json", "{}")
+	writeTestFile(t, dir, "script.sh", "#!/bin/bash")
 
 	files, err := walkYAMLFiles(dir)
 	if err != nil {
@@ -50,9 +50,9 @@ func TestWalkYAMLFiles_IgnoresNonYAML(t *testing.T) {
 func TestWalkYAMLFiles_ReturnsSorted(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "c.yaml", "kind: C")
-	writeYAMLFile(t, dir, "a.yaml", "kind: A")
-	writeYAMLFile(t, dir, "b.yaml", "kind: B")
+	writeTestFile(t, dir, "c.yaml", "kind: C")
+	writeTestFile(t, dir, "a.yaml", "kind: A")
+	writeTestFile(t, dir, "b.yaml", "kind: B")
 
 	files, err := walkYAMLFiles(dir)
 	if err != nil {
@@ -77,8 +77,8 @@ func TestWalkYAMLFiles_NestedDirectories(t *testing.T) {
 		t.Fatalf("create subdir: %v", err)
 	}
 
-	writeYAMLFile(t, dir, "top.yaml", "kind: Top")
-	writeYAMLFile(t, subDir, "nested.yaml", "kind: Nested")
+	writeTestFile(t, dir, "top.yaml", "kind: Top")
+	writeTestFile(t, subDir, "nested.yaml", "kind: Nested")
 
 	files, err := walkYAMLFiles(dir)
 	if err != nil {
@@ -105,9 +105,9 @@ func TestWalkYAMLFiles_EmptyDirectory(t *testing.T) {
 func TestWalkYAMLFiles_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "a.YAML", "kind: A")
-	writeYAMLFile(t, dir, "b.YML", "kind: B")
-	writeYAMLFile(t, dir, "c.Yaml", "kind: C")
+	writeTestFile(t, dir, "a.YAML", "kind: A")
+	writeTestFile(t, dir, "b.YML", "kind: B")
+	writeTestFile(t, dir, "c.Yaml", "kind: C")
 
 	files, err := walkYAMLFiles(dir)
 	if err != nil {
@@ -134,7 +134,7 @@ func isHex(s string) bool {
 func TestComputeDirHash_ProducesHexHash(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "crd.yaml", "apiVersion: v1\nkind: ConfigMap")
+	writeTestFile(t, dir, "crd.yaml", "apiVersion: v1\nkind: ConfigMap")
 
 	hash, _, err := computeDirHash(dir)
 	if err != nil {
@@ -151,8 +151,8 @@ func TestComputeDirHash_ProducesHexHash(t *testing.T) {
 func TestComputeDirHash_Deterministic(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "a.yaml", "content-a")
-	writeYAMLFile(t, dir, "b.yaml", "content-b")
+	writeTestFile(t, dir, "a.yaml", "content-a")
+	writeTestFile(t, dir, "b.yaml", "content-b")
 
 	hash1, _, err := computeDirHash(dir)
 	if err != nil {
@@ -172,10 +172,10 @@ func TestComputeDirHash_Deterministic(t *testing.T) {
 func TestComputeDirHash_DifferentContent(t *testing.T) {
 	t.Parallel()
 	dir1 := t.TempDir()
-	writeYAMLFile(t, dir1, "crd.yaml", "content-version-1")
+	writeTestFile(t, dir1, "crd.yaml", "content-version-1")
 
 	dir2 := t.TempDir()
-	writeYAMLFile(t, dir2, "crd.yaml", "content-version-2")
+	writeTestFile(t, dir2, "crd.yaml", "content-version-2")
 
 	hash1, _, err := computeDirHash(dir1)
 	if err != nil {
@@ -195,10 +195,10 @@ func TestComputeDirHash_DifferentContent(t *testing.T) {
 func TestComputeDirHash_DifferentFilenames(t *testing.T) {
 	t.Parallel()
 	dir1 := t.TempDir()
-	writeYAMLFile(t, dir1, "first.yaml", "same-content")
+	writeTestFile(t, dir1, "first.yaml", "same-content")
 
 	dir2 := t.TempDir()
-	writeYAMLFile(t, dir2, "second.yaml", "same-content")
+	writeTestFile(t, dir2, "second.yaml", "same-content")
 
 	hash1, _, err := computeDirHash(dir1)
 	if err != nil {
@@ -231,8 +231,8 @@ func TestComputeDirHash_EmptyDir(t *testing.T) {
 func TestComputeDirHash_OnlyNonYAML(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "readme.md", "# readme")
-	writeYAMLFile(t, dir, "config.json", "{}")
+	writeTestFile(t, dir, "readme.md", "# readme")
+	writeTestFile(t, dir, "config.json", "{}")
 
 	_, _, err := computeDirHash(dir)
 	if err == nil {
@@ -254,9 +254,9 @@ func TestComputeDirHash_NonexistentDir(t *testing.T) {
 func TestComputeDirHash_MultipleFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeYAMLFile(t, dir, "crd1.yaml", "apiVersion: v1\nkind: CRD1")
-	writeYAMLFile(t, dir, "crd2.yaml", "apiVersion: v1\nkind: CRD2")
-	writeYAMLFile(t, dir, "crd3.yml", "apiVersion: v1\nkind: CRD3")
+	writeTestFile(t, dir, "crd1.yaml", "apiVersion: v1\nkind: CRD1")
+	writeTestFile(t, dir, "crd2.yaml", "apiVersion: v1\nkind: CRD2")
+	writeTestFile(t, dir, "crd3.yml", "apiVersion: v1\nkind: CRD3")
 
 	hash, _, err := computeDirHash(dir)
 	if err != nil {
