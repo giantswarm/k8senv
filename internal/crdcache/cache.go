@@ -388,7 +388,7 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 
 		if allEstablished {
 			if len(crdList.Items) == 0 {
-				logger.Warn("no CRDs found after apply; expected at least one")
+				logger.Warn("zero CRDs found on API server; verify CRD directory contains valid CRD manifests")
 			}
 			return nil
 		}
