@@ -139,6 +139,14 @@ type Instance struct {
 	// stack is the kine + kube-apiserver process stack. Protected by startMu only.
 	stack *kubestack.Stack
 
+	// purge is a persistent SQLite connection and prepared statements for
+	// ReleasePurge operations. Opened lazily on first purge via ensurePurge,
+	// closed by closePurge (called from Stop). Only used when ReleaseStrategy
+	// is ReleasePurge. Access is safe without synchronization: the pool
+	// contract guarantees at most one goroutine holds the instance between
+	// Acquire and Release.
+	purge *purgeHandle
+
 	// log is the instance-scoped logger.
 	log *slog.Logger
 }
@@ -180,6 +188,34 @@ func (i *Instance) tryRelease(token uint64) bool {
 // still performed via tryRelease (CAS) after side effects complete.
 func (i *Instance) isCurrentToken(token uint64) bool {
 	return i.gen.Load() == token
+}
+
+// ensurePurge returns the persistent purge handle for SQLite operations,
+// opening the connection and preparing statements on first call. Keeping the
+// handle open amortizes connection setup and query compilation across many
+// release cycles (~0.5-1ms saved per call with modernc.org/sqlite).
+func (i *Instance) ensurePurge() (*purgeHandle, error) {
+	if i.purge != nil {
+		return i.purge, nil
+	}
+
+	h, err := openPurgeHandle(i.sqlitePath)
+	if err != nil {
+		return nil, err
+	}
+
+	i.purge = h
+	return h, nil
+}
+
+// closePurge closes the persistent purge handle if open.
+func (i *Instance) closePurge() {
+	if i.purge != nil {
+		if err := i.purge.Close(); err != nil {
+			i.log.Warn("purge: close persistent sqlite", "error", err)
+		}
+		i.purge = nil
+	}
 }
 
 // Err returns the last error that occurred on this instance.
@@ -369,6 +405,10 @@ func (i *Instance) teardownFailedAttempt(cancel context.CancelFunc, stack *kubes
 // getOrBuildRestConfig returns a copy of the cached rest.Config, or builds one
 // from the kubeconfig file and caches it for future calls. The returned copy is
 // safe for callers to mutate (e.g., setting QPS) without affecting the cache.
+//
+// The config is pre-tuned for local testing: high QPS/Burst eliminates
+// client-go rate limiting (the default 5 QPS / 10 Burst is designed for
+// shared production clusters, not local test instances).
 func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 	if cache := i.clients.Load(); cache != nil && cache.config != nil {
 		return rest.CopyConfig(cache.config), nil
@@ -377,6 +417,14 @@ func (i *Instance) getOrBuildRestConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build config from kubeconfig: %w", err)
 	}
+
+	// Disable client-go's default rate limiter. The defaults (QPS=5,
+	// Burst=10) are designed for shared production clusters. For local
+	// test instances, rate limiting only adds latency — each instance
+	// has its own dedicated kube-apiserver with no external consumers.
+	cfg.QPS = 1000
+	cfg.Burst = 2000
+
 	i.casClientCache(func(c *clientCache) *clientCache {
 		if c.config != nil {
 			return nil // another goroutine won the race
@@ -477,6 +525,7 @@ func (i *Instance) Stop(ctx context.Context) error {
 	i.stack = nil
 	i.cancel = nil
 	i.clients.Store(nil)
+	i.closePurge()
 	i.started.Store(false)
 
 	i.startMu.Unlock()
@@ -630,9 +679,13 @@ func (i *Instance) Release(token uint64) error {
 		// kube-apiserver port and TLS certs are unchanged, so cached
 		// clients and GVR discovery remain valid.
 		if i.started.Load() {
+			h, err := i.ensurePurge()
+			if err != nil {
+				return i.failRelease(token, "open purge handle during release", err)
+			}
 			cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
 			defer cleanCancel()
-			if err := purgeViaSQL(cleanCtx, i.sqlitePath, i.log); err != nil {
+			if err := h.purge(cleanCtx, i.log); err != nil {
 				return i.failRelease(token, "SQLite purge during release", err)
 			}
 		}

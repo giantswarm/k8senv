@@ -11,10 +11,75 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// purgeViaSQL opens a direct SQLite connection to kine's database and deletes
-// all rows associated with non-system namespaces. This bypasses the Kubernetes
-// API entirely for maximum speed: a few SQL DELETEs replace ~20+ HTTP round
-// trips through kube-apiserver → kine → SQLite.
+// purgeHandle holds a persistent SQLite connection and a prepared statement for
+// ReleasePurge operations. It is created lazily on first purge and kept open
+// for the lifetime of the instance to amortize connection setup and query
+// compilation across many release cycles.
+type purgeHandle struct {
+	db       *sql.DB
+	findStmt *sql.Stmt
+}
+
+// findUserNamespacesQuery discovers non-deleted, non-system namespace names.
+// Kine is append-only: the row with the highest id for a given name is the
+// current state. We filter system namespaces server-side to avoid client-side
+// allocation per row. The query returns just the namespace name (suffix after
+// the /registry/namespaces/ prefix, which is 21 characters).
+const findUserNamespacesQuery = `
+	SELECT SUBSTR(k.name, 22) FROM kine k
+	INNER JOIN (
+		SELECT name, MAX(id) AS max_id FROM kine
+		WHERE name LIKE '/registry/namespaces/%'
+		AND name NOT LIKE '/registry/namespaces/%/%'
+		GROUP BY name
+	) latest ON k.name = latest.name AND k.id = latest.max_id
+	WHERE k.deleted = 0
+	AND k.name NOT IN (
+		'/registry/namespaces/default',
+		'/registry/namespaces/kube-system',
+		'/registry/namespaces/kube-public',
+		'/registry/namespaces/kube-node-lease'
+	)
+`
+
+// openPurgeHandle opens a SQLite connection configured for purge operations and
+// prepares the reusable find query. The connection uses WAL mode (matching kine),
+// a generous busy timeout for concurrent access, and relaxed synchronous mode
+// (NORMAL) since the database is ephemeral test data where crash durability is
+// irrelevant.
+func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
+	dsn := fmt.Sprintf(
+		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)",
+		sqlitePath,
+	)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite %s: %w", sqlitePath, err)
+	}
+
+	// Single connection — purge is serialized per-instance so a pool is
+	// unnecessary. This also keeps exactly one WAL reader active, reducing
+	// contention with kine's own connection.
+	db.SetMaxOpenConns(1)
+
+	findStmt, err := db.Prepare(findUserNamespacesQuery)
+	if err != nil {
+		db.Close() //nolint:errcheck,gosec // best-effort cleanup on prepare failure
+		return nil, fmt.Errorf("prepare find-namespaces: %w", err)
+	}
+
+	return &purgeHandle{db: db, findStmt: findStmt}, nil
+}
+
+// Close releases the prepared statement and closes the database connection.
+func (h *purgeHandle) Close() error {
+	h.findStmt.Close() //nolint:errcheck,gosec // best-effort cleanup
+	return h.db.Close()
+}
+
+// purge deletes all rows associated with non-system namespaces from kine's
+// database. This bypasses the Kubernetes API entirely for maximum speed: a few
+// SQL DELETEs replace ~20+ HTTP round trips through kube-apiserver → kine → SQLite.
 //
 // Safety: this is only called between Release and the next Acquire, when no
 // API consumers or watchers are active. With --watch-cache=false, kube-apiserver
@@ -26,33 +91,9 @@ import (
 //   - Resources within system namespaces
 //   - Cluster-scoped resources (CRDs, APIServices, ClusterRoles, etc.)
 //   - Internal kine bookkeeping keys (compact_rev_key, gap-*)
-func purgeViaSQL(ctx context.Context, sqlitePath string, log *slog.Logger) error {
-	// Open with WAL mode (matching kine's own mode), a generous busy
-	// timeout to handle concurrent access from kine's connection, and
-	// relaxed synchronous mode. NORMAL is safe here because the database
-	// is ephemeral test data — crash durability is irrelevant — and it
-	// reduces fsync calls during transaction commit.
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)",
-		sqlitePath,
-	)
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return fmt.Errorf("open sqlite %s: %w", sqlitePath, err)
-	}
-	defer func() {
-		if closeErr := db.Close(); closeErr != nil {
-			log.Warn("purge: close sqlite", "error", closeErr)
-		}
-	}()
-
-	// Single connection — we want a short-lived session, not a pool.
-	db.SetMaxOpenConns(1)
-
-	// Discover user namespaces by querying the kine table directly.
-	// Kine stores namespace objects at key path "/registry/namespaces/<name>".
-	// We look at the latest (highest id) row per name and check deleted=0.
-	userNamespaces, err := findUserNamespaces(ctx, db)
+func (h *purgeHandle) purge(ctx context.Context, log *slog.Logger) error {
+	// Discover user namespaces using the prepared statement.
+	userNamespaces, err := h.findUserNamespaces(ctx)
 	if err != nil {
 		return err
 	}
@@ -64,7 +105,7 @@ func purgeViaSQL(ctx context.Context, sqlitePath string, log *slog.Logger) error
 
 	log.Debug("purge: deleting user namespace data", "namespaces", len(userNamespaces))
 
-	if err := deleteNamespaceData(ctx, db, userNamespaces); err != nil {
+	if err := h.deleteNamespaceData(ctx, userNamespaces); err != nil {
 		return err
 	}
 
@@ -73,41 +114,21 @@ func purgeViaSQL(ctx context.Context, sqlitePath string, log *slog.Logger) error
 }
 
 // findUserNamespaces returns the names of non-system namespaces present in the
-// kine database. It queries for the current (non-deleted, highest revision)
-// namespace objects and filters out system namespaces using isSystemNamespace.
-func findUserNamespaces(ctx context.Context, db *sql.DB) ([]string, error) {
-	// Find current (non-deleted) namespace objects. Kine's storage is
-	// append-only: the row with the highest id for a given name is the
-	// current state. We use a subquery to find the max id per name, then
-	// filter for non-deleted entries. System namespaces are filtered
-	// client-side via isSystemNamespace to keep the SQL simple and avoid
-	// duplicating the system namespace list.
-	const query = `
-		SELECT k.name FROM kine k
-		INNER JOIN (
-			SELECT name, MAX(id) AS max_id FROM kine
-			WHERE name LIKE '/registry/namespaces/%'
-			AND name NOT LIKE '/registry/namespaces/%/%'
-			GROUP BY name
-		) latest ON k.name = latest.name AND k.id = latest.max_id
-		WHERE k.deleted = 0
-	`
-
-	rows, err := db.QueryContext(ctx, query)
+// kine database using the prepared query.
+func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) {
+	rows, err := h.findStmt.QueryContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query user namespaces: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck // rows.Err() below catches read errors; Close error is redundant
 
-	const nsPrefix = "/registry/namespaces/"
 	var namespaces []string
 	for rows.Next() {
-		var keyPath string
-		if err := rows.Scan(&keyPath); err != nil {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			return nil, fmt.Errorf("scan namespace row: %w", err)
 		}
-		name := strings.TrimPrefix(keyPath, nsPrefix)
-		if name != "" && !isSystemNamespace(name) {
+		if name != "" {
 			namespaces = append(namespaces, name)
 		}
 	}
@@ -131,8 +152,8 @@ func findUserNamespaces(ctx context.Context, db *sql.DB) ([]string, error) {
 // All historical revisions and deletion markers are removed, not just the
 // current state. This is safe because the instance is idle (no watchers or
 // API consumers) and kine will correctly handle the gaps in revision history.
-func deleteNamespaceData(ctx context.Context, db *sql.DB, namespaces []string) error {
-	tx, err := db.BeginTx(ctx, nil)
+func (h *purgeHandle) deleteNamespaceData(ctx context.Context, namespaces []string) error {
+	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin purge transaction: %w", err)
 	}
