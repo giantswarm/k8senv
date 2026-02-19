@@ -127,6 +127,12 @@ func (dm *discoveryMapper) RESTMapping(gk schema.GroupKind, versions ...string) 
 // round-trip runs at a time, and all concurrent callers receive the same
 // result. This prevents redundant API calls and eliminates the race where
 // a slower, staler refresh could overwrite a newer mapper.
+//
+// IMPORTANT: The caller must NOT hold dm.mu (read or write) when calling
+// refresh, as the singleflight callback acquires the write lock internally.
+// Calling refresh while holding the read lock would deadlock: the write lock
+// cannot be acquired until all read locks are released, but the read lock
+// holder is blocked waiting for refresh to return.
 func (dm *discoveryMapper) refresh() error {
 	_, err, _ := dm.refreshGroup.Do("refresh", func() (any, error) {
 		gr, err := restmapper.GetAPIGroupResources(dm.discClient)
