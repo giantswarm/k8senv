@@ -146,6 +146,9 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, uint64, error) {
 		inst := p.free[n-1]
 		p.free = p.free[:n-1]
 		p.mu.Unlock()
+		// Safe without the mutex: the instance was just removed from p.free
+		// under the lock, so no other Acquire can obtain it. markAcquired
+		// uses an atomic Add, so the write itself is data-race-free.
 		token := inst.markAcquired()
 		return inst, token, nil
 	}
@@ -185,6 +188,9 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, uint64, error) {
 	}
 	p.mu.Unlock()
 
+	// Safe without the mutex: this instance was just created by the factory
+	// and is not yet in p.free, so no other Acquire can obtain it.
+	// markAcquired uses an atomic Add, so the write itself is data-race-free.
 	token := inst.markAcquired()
 	return inst, token, nil
 }
