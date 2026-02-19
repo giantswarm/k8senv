@@ -50,11 +50,10 @@ type Manager interface {
 type Instance interface {
 	// Config returns *rest.Config for connecting to this instance's kube-apiserver.
 	// It must be called while the instance is acquired (between Acquire and Release).
-	// Returns ErrInstanceReleased if called after Release.
 	//
-	// If Config and Release race on the same instance, Config reliably returns
-	// ErrInstanceReleased once Release has been called, because the released
-	// state is tracked with an atomic flag at the wrapper level.
+	// Returns ErrInstanceReleased if called after Release has completed.
+	// If Config and Release race, Config may succeed one final time; the
+	// underlying instance has its own generation guard as defense in depth.
 	Config() (*rest.Config, error)
 
 	// Release returns the instance to the pool. The behavior depends on the

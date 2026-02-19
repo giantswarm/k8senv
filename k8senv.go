@@ -84,9 +84,10 @@ type instanceWrapper struct {
 
 // Config returns *rest.Config for connecting to this instance's kube-apiserver.
 //
-// Returns ErrInstanceReleased if called after Release. The check uses a
-// wrapper-level atomic flag that is set once by Release, providing a
-// definitive per-acquisition guard independent of pool-level state.
+// Returns ErrInstanceReleased if called after Release has completed. The check
+// uses a wrapper-level atomic flag that is set by Release. If Config and
+// Release race, Config may succeed one final time; the underlying instance has
+// its own generation guard as defense in depth.
 func (w *instanceWrapper) Config() (*rest.Config, error) {
 	if w.released.Load() {
 		return nil, ErrInstanceReleased
