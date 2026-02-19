@@ -31,6 +31,10 @@ const (
 
 	// defaultStressSubtests is the default number of stress subtests to run.
 	defaultStressSubtests = 100
+
+	stressCanaryNS  = "stress-canary"
+	stressCanaryCM  = "canary-cm"
+	stressCanaryPod = "canary-pod"
 )
 
 var (
@@ -259,6 +263,78 @@ func StressVerifyCleanInstance(ctx context.Context, t *testing.T, client kuberne
 	}
 }
 
+// StressVerifyNoCanary asserts that the canary namespace and its resources do
+// not exist, confirming cleanup removed them.
+func StressVerifyNoCanary(ctx context.Context, t *testing.T, client kubernetes.Interface) {
+	t.Helper()
+
+	_, err := client.CoreV1().Namespaces().Get(ctx, stressCanaryNS, metav1.GetOptions{})
+	if !errors.IsNotFound(err) {
+		t.Fatalf("canary namespace %q still exists (err=%v)", stressCanaryNS, err)
+	}
+
+	_, err = client.CoreV1().ConfigMaps(stressCanaryNS).Get(ctx, stressCanaryCM, metav1.GetOptions{})
+	if !errors.IsNotFound(err) {
+		t.Fatalf("canary ConfigMap %s/%s still exists (err=%v)", stressCanaryNS, stressCanaryCM, err)
+	}
+
+	_, err = client.CoreV1().Pods(stressCanaryNS).Get(ctx, stressCanaryPod, metav1.GetOptions{})
+	if !errors.IsNotFound(err) {
+		t.Fatalf("canary Pod %s/%s still exists (err=%v)", stressCanaryNS, stressCanaryPod, err)
+	}
+}
+
+// StressCreateCanary creates a static canary namespace with a ConfigMap and Pod.
+func StressCreateCanary(ctx context.Context, t *testing.T, client kubernetes.Interface) {
+	t.Helper()
+
+	StressCreateNamespace(ctx, t, client, stressCanaryNS)
+
+	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
+		_, createErr := client.CoreV1().ConfigMaps(stressCanaryNS).Create(ctx, &v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: stressCanaryCM, Namespace: stressCanaryNS},
+			Data:       map[string]string{"canary": "true"},
+		}, metav1.CreateOptions{})
+		return createErr
+	})
+	if err != nil {
+		t.Fatalf("failed to create canary ConfigMap %s/%s: %v", stressCanaryNS, stressCanaryCM, err)
+	}
+
+	err = retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
+		_, createErr := client.CoreV1().Pods(stressCanaryNS).Create(ctx, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: stressCanaryPod, Namespace: stressCanaryNS},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{Name: "canary", Image: "canary"},
+				},
+			},
+		}, metav1.CreateOptions{})
+		return createErr
+	})
+	if err != nil {
+		t.Fatalf("failed to create canary Pod %s/%s: %v", stressCanaryNS, stressCanaryPod, err)
+	}
+}
+
+// StressVerifyCanaryExists asserts that the canary namespace, ConfigMap, and
+// Pod all exist, confirming creation succeeded before the instance is released.
+func StressVerifyCanaryExists(ctx context.Context, t *testing.T, client kubernetes.Interface) {
+	t.Helper()
+
+	if _, err := client.CoreV1().Namespaces().Get(ctx, stressCanaryNS, metav1.GetOptions{}); err != nil {
+		t.Fatalf("canary namespace %q not found: %v", stressCanaryNS, err)
+	}
+
+	if _, err := client.CoreV1().ConfigMaps(stressCanaryNS).Get(ctx, stressCanaryCM, metav1.GetOptions{}); err != nil {
+		t.Fatalf("canary ConfigMap %s/%s not found: %v", stressCanaryNS, stressCanaryCM, err)
+	}
+
+	if _, err := client.CoreV1().Pods(stressCanaryNS).Get(ctx, stressCanaryPod, metav1.GetOptions{}); err != nil {
+		t.Fatalf("canary Pod %s/%s not found: %v", stressCanaryNS, stressCanaryPod, err)
+	}
+}
+
 // StressWorker is the common body for stress test workers. It acquires an
 // instance, verifies it is clean (only system namespaces), creates random
 // namespaces and resources, deletes the namespaces, and releases.
@@ -275,6 +351,7 @@ func StressWorker(ctx context.Context, t *testing.T, mgr k8senv.Manager, workerI
 	}()
 
 	StressVerifyCleanInstance(ctx, t, client)
+	StressVerifyNoCanary(ctx, t, client)
 
 	nsCount := rng.IntN(StressMaxNS) + 1
 
@@ -288,4 +365,7 @@ func StressWorker(ctx context.Context, t *testing.T, mgr k8senv.Manager, workerI
 			StressCreateRandomResource(ctx, t, client, nsName, idx, rng)
 		}
 	}
+
+	StressCreateCanary(ctx, t, client)
+	StressVerifyCanaryExists(ctx, t, client)
 }
