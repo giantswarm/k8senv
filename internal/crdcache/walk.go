@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// walkYAMLFiles returns all YAML files in a directory, sorted for determinism.
+// walkYAMLFiles returns all YAML files (.yaml, .yml) in a directory tree,
+// sorted by path for determinism. Hidden directories (starting with ".") are skipped.
 func walkYAMLFiles(dirPath string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
