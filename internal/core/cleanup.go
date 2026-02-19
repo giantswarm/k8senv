@@ -214,7 +214,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 		i.log.Debug("cleaning user namespaces", "count", len(userNamespaces))
 
 		g, gCtx := errgroup.WithContext(ctx)
-		g.SetLimit(10)
+		g.SetLimit(gvrCleanupConcurrency)
 
 		for _, name := range userNamespaces {
 			g.Go(func() error {
