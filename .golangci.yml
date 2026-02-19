@@ -266,12 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # G204: Allow subprocess with variable args for kine and kube-apiserver
-      - linters:
-          - gosec
-        path: internal/(apiserver|kine)/process\.go
-        text: G204
-
       # G304: Allow file path from variable for file operations
       - linters:
           - gosec

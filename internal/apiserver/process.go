@@ -140,7 +140,10 @@ func (p *Process) Start(ctx context.Context) error {
 
 	args := p.buildArgs(files.certDir, files.authConfigPath, files.tokenFilePath, files.saKeyPath)
 
-	cmd := exec.CommandContext(ctx, p.config.Binary, args...)
+	cmd := exec.CommandContext(
+		ctx,
+		p.config.Binary,
+		args...) //nolint:gosec // G204: binary path is from config, not user input
 	if err := p.base.SetupAndStart(cmd, dir); err != nil {
 		return fmt.Errorf("setup and start apiserver process: %w", err)
 	}

@@ -117,7 +117,10 @@ func (p *Process) Start(ctx context.Context) error {
 		"--metrics-bind-address=0", // Disable metrics server to avoid port conflicts
 	}
 
-	cmd := exec.CommandContext(ctx, p.config.Binary, args...)
+	cmd := exec.CommandContext(
+		ctx,
+		p.config.Binary,
+		args...) //nolint:gosec // G204: binary path is from config, not user input
 	if err := p.base.SetupAndStart(cmd, p.config.DataDir); err != nil {
 		return fmt.Errorf("setup and start kine process: %w", err)
 	}
