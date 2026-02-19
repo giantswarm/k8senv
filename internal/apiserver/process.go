@@ -52,7 +52,11 @@ const healthCheckTimeout = 5 * time.Second
 
 // readinessPollInterval is the interval between consecutive /livez health
 // check requests when waiting for the kube-apiserver to become ready.
-const readinessPollInterval = 10 * time.Millisecond
+// 100ms is used (rather than 10ms) because each attempt requires a full
+// HTTPS round-trip with TLS handshake, and apiserver typically takes 3-5s
+// to start. A fixed short interval is preferred over adaptive backoff since
+// this is a test framework where instances must start as quickly as possible.
+const readinessPollInterval = 100 * time.Millisecond
 
 // Process manages a kube-apiserver process lifecycle.
 type Process struct {
