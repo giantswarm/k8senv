@@ -167,6 +167,11 @@ func TestParallelAcquisition(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create namespace: %v", err)
 			}
+			// t.Cleanup runs after the subtest function returns (and its defers
+			// have fired), so inst.Release() in the defer above completes before
+			// this cleanup deletes the namespace. This ordering is guaranteed by
+			// the testing package: defers run on function exit, then t.Cleanup
+			// callbacks run in LIFO order before the parent test proceeds.
 			t.Cleanup(func() {
 				// Use a fresh context with timeout because the test's ctx may be canceled
 				// by the time cleanup runs, and we must not block indefinitely.

@@ -170,6 +170,9 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		_ = client.CoreV1().Namespaces().Delete(cleanupCtx, nsName, metav1.DeleteOptions{})
 	})
 
+	// Subtests are intentionally sequential (no t.Parallel) because they share
+	// the namespace and resources created above. Running them in parallel would
+	// introduce races on the shared ConfigMap and namespace state.
 	t.Run("NamespaceOperations", func(t *testing.T) {
 		nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
