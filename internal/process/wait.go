@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -31,6 +32,9 @@ type WaitReadyConfig struct {
 // The check function is called repeatedly until it returns true (ready)
 // or returns a non-nil error (fatal, abort polling).
 func WaitReady(ctx context.Context, cfg WaitReadyConfig, check ReadinessCheck) error {
+	if cfg.Name == "" {
+		return errors.New("wait ready: name must not be empty")
+	}
 	if cfg.Interval <= 0 {
 		return fmt.Errorf("wait for %s: interval must be positive", cfg.Name)
 	}
