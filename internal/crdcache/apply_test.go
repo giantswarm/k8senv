@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -166,4 +167,221 @@ type noUnwrapError struct {
 
 func (e noUnwrapError) Error() string {
 	return e.inner.Error()
+}
+
+// TestApplyParseFileDocuments exercises parseFileDocuments against single-doc,
+// multi-doc, empty, and malformed YAML inputs. The function is a pure parser
+// with no I/O — it decodes []byte content into parsedDoc slices.
+func TestApplyParseFileDocuments(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		content  string
+		wantDocs int
+		wantErr  bool
+		wantKind string // expected Kind of the first document (empty = skip check)
+	}{
+		"single ConfigMap": {
+			content:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-cm",
+			wantDocs: 1,
+			wantKind: "ConfigMap",
+		},
+		"single CRD": {
+			content:  "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: foos.example.com",
+			wantDocs: 1,
+			wantKind: "CustomResourceDefinition",
+		},
+		"multi-document YAML": {
+			content:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: s1",
+			wantDocs: 2,
+			wantKind: "ConfigMap",
+		},
+		"three documents": {
+			content:  "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ns1\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: dep1",
+			wantDocs: 3,
+			wantKind: "Namespace",
+		},
+		"empty content returns zero docs": {
+			content:  "",
+			wantDocs: 0,
+		},
+		"whitespace-only content returns zero docs": {
+			content:  "   \n\n\t  \n",
+			wantDocs: 0,
+		},
+		"separator-only content returns error": {
+			// The YAML reader splits on "---" separators. Consecutive separators
+			// produce non-empty documents (e.g., "---") that fail decoding
+			// because they lack a kind field.
+			content: "---\n---\n---",
+			wantErr: true,
+		},
+		"valid docs with blank docs between separators": {
+			content:  "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\n\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: s1\n---",
+			wantDocs: 2,
+			wantKind: "ConfigMap",
+		},
+		"leading separator before document": {
+			content:  "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1",
+			wantDocs: 1,
+			wantKind: "ConfigMap",
+		},
+		"document with all metadata fields": {
+			content:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\n  namespace: kube-system\n  labels:\n    app: test\ndata:\n  key: value",
+			wantDocs: 1,
+			wantKind: "ConfigMap",
+		},
+		"JSON document": {
+			content:  `{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"json-cm"}}`,
+			wantDocs: 1,
+			wantKind: "ConfigMap",
+		},
+		"missing kind field returns error": {
+			content: "apiVersion: v1\nmetadata:\n  name: no-kind",
+			wantErr: true,
+		},
+		"empty object returns error": {
+			content: "foo: bar",
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			docs, err := parseFileDocuments([]byte(tc.content), "test.yaml")
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(docs) != tc.wantDocs {
+				t.Fatalf("got %d docs, want %d", len(docs), tc.wantDocs)
+			}
+			if tc.wantKind != "" && len(docs) > 0 {
+				got := docs[0].obj.GroupVersionKind().Kind
+				if got != tc.wantKind {
+					t.Errorf("first doc kind = %q, want %q", got, tc.wantKind)
+				}
+			}
+		})
+	}
+}
+
+// TestApplyParseFileDocumentsMissingKindSentinel verifies that parseFileDocuments
+// wraps ErrMissingKind as a sentinel error detectable via errors.Is.
+func TestApplyParseFileDocumentsMissingKindSentinel(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		content string
+	}{
+		"no kind field": {
+			content: "apiVersion: v1\nmetadata:\n  name: test",
+		},
+		"kind is empty string": {
+			// An object with kind="" is treated the same as missing.
+			content: "apiVersion: v1\nkind: \"\"\nmetadata:\n  name: test",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := parseFileDocuments([]byte(tc.content), "test.yaml")
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !errors.Is(err, ErrMissingKind) {
+				t.Errorf("error %q does not wrap ErrMissingKind", err)
+			}
+		})
+	}
+}
+
+// TestApplyParseFileDocumentsFilename verifies that parseFileDocuments propagates
+// the file parameter into every returned parsedDoc.
+func TestApplyParseFileDocumentsFilename(t *testing.T) {
+	t.Parallel()
+	content := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: s1"
+
+	docs, err := parseFileDocuments([]byte(content), "crds/my-crd.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for i, doc := range docs {
+		if doc.file != "crds/my-crd.yaml" {
+			t.Errorf("docs[%d].file = %q, want %q", i, doc.file, "crds/my-crd.yaml")
+		}
+	}
+}
+
+// TestApplyIsCRDDocument exercises isCRDDocument against CRD and non-CRD
+// unstructured objects to verify group and kind matching.
+func TestApplyIsCRDDocument(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		apiVersion string
+		kind       string
+		want       bool
+	}{
+		"CRD v1": {
+			apiVersion: "apiextensions.k8s.io/v1",
+			kind:       "CustomResourceDefinition",
+			want:       true,
+		},
+		"CRD v1beta1": {
+			apiVersion: "apiextensions.k8s.io/v1beta1",
+			kind:       "CustomResourceDefinition",
+			want:       true,
+		},
+		"ConfigMap is not CRD": {
+			apiVersion: "v1",
+			kind:       "ConfigMap",
+			want:       false,
+		},
+		"Deployment is not CRD": {
+			apiVersion: "apps/v1",
+			kind:       "Deployment",
+			want:       false,
+		},
+		"correct group wrong kind": {
+			apiVersion: "apiextensions.k8s.io/v1",
+			kind:       "SomethingElse",
+			want:       false,
+		},
+		"correct kind wrong group": {
+			apiVersion: "example.com/v1",
+			kind:       "CustomResourceDefinition",
+			want:       false,
+		},
+		"empty apiVersion and kind": {
+			apiVersion: "",
+			kind:       "",
+			want:       false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := &unstructured.Unstructured{}
+			obj.SetAPIVersion(tc.apiVersion)
+			obj.SetKind(tc.kind)
+
+			got := isCRDDocument(obj)
+			if got != tc.want {
+				t.Errorf("isCRDDocument(apiVersion=%q, kind=%q) = %v, want %v",
+					tc.apiVersion, tc.kind, got, tc.want)
+			}
+		})
+	}
 }
