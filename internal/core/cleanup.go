@@ -544,10 +544,10 @@ func getOrBuildCachedClient[T any](
 // shared infrastructure can be overwhelmed.
 func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
 	return getOrBuildCachedClient(i,
-		func(cc *clientCache) *kubernetes.Clientset { return cc.cleanup },
+		func(cc *clientCache) *kubernetes.Clientset { return cc.clientset },
 		func(c *kubernetes.Clientset) bool { return c == nil },
 		kubernetes.NewForConfig,
-		func(cc *clientCache, c *kubernetes.Clientset) { cc.cleanup = c },
+		func(cc *clientCache, c *kubernetes.Clientset) { cc.clientset = c },
 		"cleanup client",
 	)
 }

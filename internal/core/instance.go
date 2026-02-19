@@ -85,8 +85,8 @@ type InstanceReleaser interface {
 type clientCache struct {
 	// config is the parsed rest.Config from the kubeconfig file.
 	config *rest.Config
-	// cleanup is the typed client for namespace operations.
-	cleanup *kubernetes.Clientset
+	// clientset is the typed client for namespace operations.
+	clientset *kubernetes.Clientset
 	// discovery is the discovery client for resource enumeration.
 	discovery *discovery.DiscoveryClient
 	// dynamic is the dynamic client for resource deletion.
