@@ -302,8 +302,8 @@ func TestSetupAndStart_NilCmd(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nil cmd, got nil")
 	}
-	if got := err.Error(); got != "cmd must not be nil" {
-		t.Errorf("error = %q, want %q", got, "cmd must not be nil")
+	if !errors.Is(err, ErrNilCmd) {
+		t.Errorf("expected ErrNilCmd, got: %v", err)
 	}
 }
 
@@ -316,8 +316,8 @@ func TestSetupAndStart_EmptyPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty Path, got nil")
 	}
-	if got := err.Error(); got != "cmd.Path must not be empty" {
-		t.Errorf("error = %q, want %q", got, "cmd.Path must not be empty")
+	if !errors.Is(err, ErrEmptyCmdPath) {
+		t.Errorf("expected ErrEmptyCmdPath, got: %v", err)
 	}
 }
 
@@ -330,8 +330,8 @@ func TestSetupAndStart_EmptyDataDir(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty dataDir, got nil")
 	}
-	if got := err.Error(); got != "data directory must not be empty" {
-		t.Errorf("error = %q, want %q", got, "data directory must not be empty")
+	if !errors.Is(err, ErrEmptyDataDir) {
+		t.Errorf("expected ErrEmptyDataDir, got: %v", err)
 	}
 }
 

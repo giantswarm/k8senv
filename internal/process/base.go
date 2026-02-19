@@ -1,7 +1,6 @@
 package process
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -13,6 +12,15 @@ import (
 // ErrAlreadyStarted is returned when Start is called on a process that is
 // already running. Callers must Stop the process before starting it again.
 const ErrAlreadyStarted = sentinel.Error("process already started")
+
+// ErrNilCmd is returned when SetupAndStart is called with a nil *exec.Cmd.
+const ErrNilCmd = sentinel.Error("cmd must not be nil")
+
+// ErrEmptyCmdPath is returned when SetupAndStart is called with an empty cmd.Path.
+const ErrEmptyCmdPath = sentinel.Error("cmd.Path must not be empty")
+
+// ErrEmptyDataDir is returned when SetupAndStart is called with an empty data directory.
+const ErrEmptyDataDir = sentinel.Error("data directory must not be empty")
 
 // BaseProcess provides common process lifecycle management.
 // Embed this in package-specific Process types to reuse Stop and Close methods.
@@ -115,13 +123,13 @@ func (b *BaseProcess) IsStarted() bool {
 // Stop and Close the process before calling SetupAndStart again.
 func (b *BaseProcess) SetupAndStart(cmd *exec.Cmd, dataDir string) error {
 	if cmd == nil {
-		return errors.New("cmd must not be nil")
+		return ErrNilCmd
 	}
 	if cmd.Path == "" {
-		return errors.New("cmd.Path must not be empty")
+		return ErrEmptyCmdPath
 	}
 	if dataDir == "" {
-		return errors.New("data directory must not be empty")
+		return ErrEmptyDataDir
 	}
 	if b.cmd != nil {
 		return ErrAlreadyStarted
