@@ -2,7 +2,6 @@ package process
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -15,6 +14,9 @@ import (
 // process lifecycle conditions. Callers can match these with errors.Is
 // through wrapped error chains.
 const (
+	// ErrNameEmpty indicates an empty process name in WaitReadyConfig.
+	ErrNameEmpty = sentinel.Error("name must not be empty")
+
 	// ErrIntervalNotPositive indicates a non-positive poll interval.
 	ErrIntervalNotPositive = sentinel.Error("interval must be positive")
 
@@ -48,7 +50,7 @@ type WaitReadyConfig struct {
 // or returns a non-nil error (fatal, abort polling).
 func WaitReady(ctx context.Context, cfg WaitReadyConfig, check ReadinessCheck) error {
 	if cfg.Name == "" {
-		return errors.New("wait ready: name must not be empty")
+		return fmt.Errorf("wait ready: %w", ErrNameEmpty)
 	}
 	if check == nil {
 		return fmt.Errorf("wait for %s: check function must not be nil", cfg.Name)
