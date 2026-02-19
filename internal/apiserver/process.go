@@ -58,6 +58,19 @@ const healthCheckTimeout = 5 * time.Second
 // this is a test framework where instances must start as quickly as possible.
 const readinessPollInterval = 100 * time.Millisecond
 
+// authConfigYAML is the AuthenticationConfiguration that allows anonymous
+// access to health check endpoints. Extracted as a constant so that
+// indentation changes during refactoring cannot silently break the YAML.
+const authConfigYAML = `apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+anonymous:
+  enabled: true
+  conditions:
+  - path: /livez
+  - path: /readyz
+  - path: /healthz
+`
+
 // Process manages a kube-apiserver process lifecycle.
 type Process struct {
 	config Config
@@ -221,16 +234,7 @@ func (p *Process) setupCertsAndKeys(dir string) (certDir string, saKeyPath strin
 // allows anonymous access to health check endpoints (/livez, /readyz, /healthz).
 func (p *Process) writeAuthConfig(dir string) (string, error) {
 	authConfigPath := filepath.Join(dir, "auth-config.yaml")
-	content := `apiVersion: apiserver.config.k8s.io/v1
-kind: AuthenticationConfiguration
-anonymous:
-  enabled: true
-  conditions:
-  - path: /livez
-  - path: /readyz
-  - path: /healthz
-`
-	if err := os.WriteFile(authConfigPath, []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(authConfigPath, []byte(authConfigYAML), 0o600); err != nil {
 		return "", fmt.Errorf("create auth config file: %w", err)
 	}
 	return authConfigPath, nil
