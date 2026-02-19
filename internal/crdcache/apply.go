@@ -371,7 +371,7 @@ func isMissingKindDecodeError(err error) bool {
 // mapper. If the cached mapper returns a NoKindMatch/NoResourceMatch error
 // (indicating a recently applied CRD hasn't propagated yet), the mapper is
 // refreshed via live API server discovery and the lookup is retried with
-// backoff to allow CRD registration to propagate.
+// a fixed delay to allow CRD registration to propagate.
 //
 // IMPORTANT: dm.discClient must be a non-caching discovery client (e.g., one
 // created via discovery.NewDiscoveryClientForConfig). Each refresh call issues
@@ -395,7 +395,7 @@ func discoverRESTMapping(
 	}
 
 	// Slow path: cached mapper doesn't know this GVK. Refresh and retry
-	// with backoff to allow CRD registration to propagate.
+	// with a fixed delay to allow CRD registration to propagate.
 	var lastErr error
 	for attempt := range discoveryRetryCount {
 		if err := ctx.Err(); err != nil {
