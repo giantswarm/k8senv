@@ -252,47 +252,23 @@ func TestWithEmptyStringOptionsPanic(t *testing.T) {
 func TestOptionApplicationDefaults(t *testing.T) {
 	t.Parallel()
 
-	snap := k8senv.ApplyOptionsForTesting()
-	wantBaseDir := filepath.Join(os.TempDir(), k8senv.DefaultBaseDataDirName)
+	got := k8senv.ApplyOptionsForTesting()
+	want := k8senv.ConfigSnapshot{
+		PoolSize:             k8senv.DefaultPoolSize,
+		ReleaseStrategy:      k8senv.DefaultReleaseStrategy,
+		KineBinary:           k8senv.DefaultKineBinary,
+		KubeAPIServerBinary:  k8senv.DefaultKubeAPIServerBinary,
+		AcquireTimeout:       k8senv.DefaultAcquireTimeout,
+		BaseDataDir:          filepath.Join(os.TempDir(), k8senv.DefaultBaseDataDirName),
+		CRDCacheTimeout:      k8senv.DefaultCRDCacheTimeout,
+		InstanceStartTimeout: k8senv.DefaultInstanceStartTimeout,
+		InstanceStopTimeout:  k8senv.DefaultInstanceStopTimeout,
+		CleanupTimeout:       k8senv.DefaultCleanupTimeout,
+		ShutdownDrainTimeout: k8senv.DefaultShutdownDrainTimeout,
+	}
 
-	if snap.PoolSize != k8senv.DefaultPoolSize {
-		t.Errorf("PoolSize = %d, want %d", snap.PoolSize, k8senv.DefaultPoolSize)
-	}
-	if snap.ReleaseStrategy != k8senv.DefaultReleaseStrategy {
-		t.Errorf("ReleaseStrategy = %v, want %v", snap.ReleaseStrategy, k8senv.DefaultReleaseStrategy)
-	}
-	if snap.KineBinary != k8senv.DefaultKineBinary {
-		t.Errorf("KineBinary = %q, want %q", snap.KineBinary, k8senv.DefaultKineBinary)
-	}
-	if snap.KubeAPIServerBinary != k8senv.DefaultKubeAPIServerBinary {
-		t.Errorf("KubeAPIServerBinary = %q, want %q", snap.KubeAPIServerBinary, k8senv.DefaultKubeAPIServerBinary)
-	}
-	if snap.AcquireTimeout != k8senv.DefaultAcquireTimeout {
-		t.Errorf("AcquireTimeout = %v, want %v", snap.AcquireTimeout, k8senv.DefaultAcquireTimeout)
-	}
-	if snap.BaseDataDir != wantBaseDir {
-		t.Errorf("BaseDataDir = %q, want %q", snap.BaseDataDir, wantBaseDir)
-	}
-	if snap.CRDCacheTimeout != k8senv.DefaultCRDCacheTimeout {
-		t.Errorf("CRDCacheTimeout = %v, want %v", snap.CRDCacheTimeout, k8senv.DefaultCRDCacheTimeout)
-	}
-	if snap.InstanceStartTimeout != k8senv.DefaultInstanceStartTimeout {
-		t.Errorf("InstanceStartTimeout = %v, want %v", snap.InstanceStartTimeout, k8senv.DefaultInstanceStartTimeout)
-	}
-	if snap.InstanceStopTimeout != k8senv.DefaultInstanceStopTimeout {
-		t.Errorf("InstanceStopTimeout = %v, want %v", snap.InstanceStopTimeout, k8senv.DefaultInstanceStopTimeout)
-	}
-	if snap.CleanupTimeout != k8senv.DefaultCleanupTimeout {
-		t.Errorf("CleanupTimeout = %v, want %v", snap.CleanupTimeout, k8senv.DefaultCleanupTimeout)
-	}
-	if snap.ShutdownDrainTimeout != k8senv.DefaultShutdownDrainTimeout {
-		t.Errorf("ShutdownDrainTimeout = %v, want %v", snap.ShutdownDrainTimeout, k8senv.DefaultShutdownDrainTimeout)
-	}
-	if snap.PrepopulateDBPath != "" {
-		t.Errorf("PrepopulateDBPath = %q, want empty", snap.PrepopulateDBPath)
-	}
-	if snap.CRDDir != "" {
-		t.Errorf("CRDDir = %q, want empty", snap.CRDDir)
+	if got != want {
+		t.Errorf("ApplyOptionsForTesting() =\n  %+v\nwant\n  %+v", got, want)
 	}
 }
 
