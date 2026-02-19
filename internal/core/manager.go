@@ -314,7 +314,16 @@ func (m *Manager) Acquire(ctx context.Context) (*Instance, uint64, error) {
 	// call Stop on this instance again. This is a harmless no-op because
 	// Instance.Stop is idempotent.
 	if m.loadState() == managerShuttingDown {
-		m.stopInstanceDuringShutdown(acquireCtx, inst, token)
+		// Use a fresh context with the configured stop timeout instead of
+		// acquireCtx, which may have little remaining time after the pool
+		// wait and is unsuitable for a reliable stop operation.
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), m.cfg.InstanceStopTimeout)
+		defer stopCancel()
+		m.stopInstanceDuringShutdown( //nolint:contextcheck // acquireCtx may be near deadline; stop needs fresh bounded context
+			stopCtx,
+			inst,
+			token,
+		)
 		return nil, 0, ErrShuttingDown
 	}
 
@@ -390,9 +399,10 @@ func (m *Manager) ReleaseToPool(i *Instance, token uint64) bool {
 // path to ensure consistent cleanup when the manager is shutting down and an
 // instance cannot be returned to the pool.
 //
-// The provided context bounds the stop operation. Callers that have a context
-// (e.g., Acquire) pass it directly. Callers without a context (e.g.,
-// ReleaseToPool) create a background context with the configured stop timeout.
+// The provided context bounds the stop operation. Both callers (Acquire's
+// shutdown recheck and ReleaseToPool) create a fresh background context with
+// the configured stop timeout, ensuring reliable shutdown regardless of
+// the original caller's context deadline.
 //
 // Panics on double-release (busy flag already clear), which indicates a
 // programming error.
