@@ -325,6 +325,8 @@ func applyParsedDocument(
 		// namespace when none is specified in the manifest or context).
 		if ns == "" {
 			ns = "default"
+			logger.Debug("namespace-scoped resource has no namespace; defaulting to 'default'",
+				"kind", gvk.Kind, "name", doc.obj.GetName(), "file", doc.file)
 		}
 		dr = dynClient.Resource(mapping.Resource).Namespace(ns)
 	} else {
