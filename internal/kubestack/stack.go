@@ -360,6 +360,7 @@ func (s *Stack) createProcesses() error {
 		SQLitePath:   s.config.SQLitePath,
 		Port:         s.kinePort,
 		CachedDBPath: s.config.CachedDBPath,
+		StopTimeout:  s.config.stopTimeout(),
 		Logger:       s.log,
 	})
 	if err != nil {
@@ -375,6 +376,7 @@ func (s *Stack) createProcesses() error {
 		Port:           s.apiPort,
 		EtcdEndpoint:   s.kine.Endpoint(),
 		KubeconfigPath: s.config.KubeconfigPath,
+		StopTimeout:    s.config.stopTimeout(),
 		Logger:         s.log,
 	})
 	if err != nil {

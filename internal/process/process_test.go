@@ -171,7 +171,7 @@ func TestNewBaseProcess(t *testing.T) {
 
 	t.Run("creates process with name", func(t *testing.T) {
 		t.Parallel()
-		bp := NewBaseProcess("kine", nil)
+		bp := NewBaseProcess("kine", nil, 0)
 		if bp.name != "kine" {
 			t.Errorf("name = %q, want %q", bp.name, "kine")
 		}
@@ -198,14 +198,14 @@ func TestNewBaseProcess(t *testing.T) {
 				t.Errorf("panic message = %q, want %q", msg, "k8senv: process name must not be empty")
 			}
 		}()
-		NewBaseProcess("", nil)
+		NewBaseProcess("", nil, 0)
 	})
 }
 
 func TestBaseProcess_StopWhenNotStarted(t *testing.T) {
 	t.Parallel()
 
-	bp := NewBaseProcess("test", nil)
+	bp := NewBaseProcess("test", nil, 0)
 	if err := bp.Stop(time.Second); err != nil {
 		t.Fatalf("Stop on unstarted process should return nil, got %v", err)
 	}
@@ -214,7 +214,7 @@ func TestBaseProcess_StopWhenNotStarted(t *testing.T) {
 func TestBaseProcess_CloseWhenNotStarted(t *testing.T) {
 	t.Parallel()
 
-	bp := NewBaseProcess("test", nil)
+	bp := NewBaseProcess("test", nil, 0)
 	// Close on unstarted process should not panic.
 	bp.Close()
 }
@@ -222,7 +222,7 @@ func TestBaseProcess_CloseWhenNotStarted(t *testing.T) {
 func TestBaseProcess_Exited(t *testing.T) {
 	t.Parallel()
 
-	bp := NewBaseProcess("test", nil)
+	bp := NewBaseProcess("test", nil, 0)
 	if bp.Exited() != nil {
 		t.Error("Exited should return nil for unstarted process")
 	}
@@ -341,7 +341,7 @@ func (f *fakeStoppable) Close() {
 func TestSetupAndStart_NilCmd(t *testing.T) {
 	t.Parallel()
 
-	bp := NewBaseProcess("test-proc", nil)
+	bp := NewBaseProcess("test-proc", nil, 0)
 	err := bp.SetupAndStart(nil, "/tmp/data")
 	if err == nil {
 		t.Fatal("expected error for nil cmd, got nil")
@@ -354,7 +354,7 @@ func TestSetupAndStart_NilCmd(t *testing.T) {
 func TestSetupAndStart_EmptyPath(t *testing.T) {
 	t.Parallel()
 
-	bp := NewBaseProcess("test-proc", nil)
+	bp := NewBaseProcess("test-proc", nil, 0)
 	cmd := &exec.Cmd{} // Path is empty by default
 	err := bp.SetupAndStart(cmd, "/tmp/data")
 	if err == nil {
@@ -368,7 +368,7 @@ func TestSetupAndStart_EmptyPath(t *testing.T) {
 func TestSetupAndStart_EmptyDataDir(t *testing.T) {
 	t.Parallel()
 
-	bp := NewBaseProcess("test-proc", nil)
+	bp := NewBaseProcess("test-proc", nil, 0)
 	cmd := &exec.Cmd{Path: "/usr/bin/sleep"}
 	err := bp.SetupAndStart(cmd, "")
 	if err == nil {
@@ -383,7 +383,7 @@ func TestSetupAndStart_AlreadyStarted(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	bp := NewBaseProcess("test-proc", nil)
+	bp := NewBaseProcess("test-proc", nil, 0)
 
 	// Start a real process so bp.cmd becomes non-nil.
 	cmd := exec.Command("sleep", "60")

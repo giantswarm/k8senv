@@ -30,26 +30,30 @@ const ErrEmptyDataDir = sentinel.Error("data directory must not be empty")
 // In practice, the kubestack.Stack that embeds BaseProcess is itself serialized
 // by the Instance's startMu mutex.
 type BaseProcess struct {
-	cmd      *exec.Cmd
-	waitDone <-chan error    // receives cmd.Wait result; started once in SetupAndStart
-	exited   <-chan struct{} // closed when process exits; readable by multiple goroutines
-	logFiles LogFiles
-	name     string       // Process name for logging (e.g., "kine", "kube-apiserver")
-	log      *slog.Logger // Logger for operational messages
+	cmd         *exec.Cmd
+	waitDone    <-chan error    // receives cmd.Wait result; started once in SetupAndStart
+	exited      <-chan struct{} // closed when process exits; readable by multiple goroutines
+	logFiles    LogFiles
+	name        string        // Process name for logging (e.g., "kine", "kube-apiserver")
+	log         *slog.Logger  // Logger for operational messages
+	stopTimeout time.Duration // Timeout for auto-stop in Close; zero uses DefaultStopTimeout
 }
 
-// NewBaseProcess creates a BaseProcess with the given name and logger.
-// If logger is nil, slog.Default() is used as a fallback.
-// Panics if name is empty, since an empty name produces confusing error
-// messages throughout the process lifecycle (Stop, Close, log entries).
-func NewBaseProcess(name string, logger *slog.Logger) BaseProcess {
+// NewBaseProcess creates a BaseProcess with the given name, logger, and stop
+// timeout. The stopTimeout is used by Close as a safety-net timeout when
+// auto-stopping a process that was not explicitly stopped. If stopTimeout is
+// zero, DefaultStopTimeout is used as a fallback. If logger is nil,
+// slog.Default() is used. Panics if name is empty, since an empty name
+// produces confusing error messages throughout the process lifecycle (Stop,
+// Close, log entries).
+func NewBaseProcess(name string, logger *slog.Logger, stopTimeout time.Duration) BaseProcess {
 	if name == "" {
 		panic("k8senv: process name must not be empty")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return BaseProcess{name: name, log: logger}
+	return BaseProcess{name: name, log: logger, stopTimeout: stopTimeout}
 }
 
 // Stop terminates the process with the given timeout.
@@ -77,6 +81,9 @@ func (b *BaseProcess) Stop(timeout time.Duration) error {
 // prevent resource leaks. Callers should always call Stop before Close; the
 // auto-stop is a safety net, not an intended code path.
 //
+// The auto-stop uses the stopTimeout provided to NewBaseProcess, falling back
+// to DefaultStopTimeout when zero.
+//
 // If the auto-stop fails, Close still closes log files. This means a process
 // that could not be stopped may continue running with its stdout/stderr file
 // handles closed, causing its subsequent writes to fail with EBADF.
@@ -87,7 +94,11 @@ func (b *BaseProcess) Close() {
 		// Best-effort stop; log but do not propagate the error since Close
 		// has no error return and changing the signature would break the
 		// Stoppable interface contract.
-		if err := b.Stop(DefaultStopTimeout); err != nil {
+		timeout := b.stopTimeout
+		if timeout <= 0 {
+			timeout = DefaultStopTimeout
+		}
+		if err := b.Stop(timeout); err != nil {
 			b.log.Warn("auto-stop during Close failed",
 				"process", b.name, "error", err)
 		}

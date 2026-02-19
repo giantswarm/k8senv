@@ -36,6 +36,10 @@ type Config struct {
 	Port         int    // Listen port
 	CachedDBPath string // Optional: source DB to prepopulate from
 
+	// StopTimeout is the timeout used by Close when auto-stopping a process
+	// that was not explicitly stopped. Zero uses process.DefaultStopTimeout.
+	StopTimeout time.Duration
+
 	// Logger (optional, defaults to slog.Default())
 	Logger *slog.Logger
 }
@@ -74,7 +78,7 @@ func New(cfg Config) (*Process, error) {
 	}
 	return &Process{
 		config: cfg,
-		base:   process.NewBaseProcess("kine", cfg.Logger),
+		base:   process.NewBaseProcess("kine", cfg.Logger, cfg.StopTimeout),
 	}, nil
 }
 

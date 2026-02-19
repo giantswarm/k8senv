@@ -36,6 +36,10 @@ type Config struct {
 	EtcdEndpoint   string // Kine/etcd endpoint URL (e.g., "http://127.0.0.1:2379")
 	KubeconfigPath string // Output path for kubeconfig file
 
+	// StopTimeout is the timeout used by Close when auto-stopping a process
+	// that was not explicitly stopped. Zero uses process.DefaultStopTimeout.
+	StopTimeout time.Duration
+
 	// Logger (optional, defaults to slog.Default())
 	Logger *slog.Logger
 }
@@ -106,7 +110,7 @@ func New(cfg Config) (*Process, error) {
 	}
 	return &Process{
 		config: cfg,
-		base:   process.NewBaseProcess("kube-apiserver", cfg.Logger),
+		base:   process.NewBaseProcess("kube-apiserver", cfg.Logger, cfg.StopTimeout),
 	}, nil
 }
 
