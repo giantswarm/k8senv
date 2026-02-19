@@ -266,12 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # Internal packages can have more leeway on exported checks
-      - linters:
-          - revive
-        path: internal/
-        text: exported (method|function|type|const) .* should have comment
-
       # wrapcheck: Allow unwrapped errors in internal packages
       - linters:
           - wrapcheck
@@ -308,7 +302,6 @@ linters:
       - linters:
           - gosec
         text: G306
-
 
     paths:
       - third_party$
