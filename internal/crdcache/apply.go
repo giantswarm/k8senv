@@ -212,27 +212,11 @@ func applyYAMLFiles(
 		return fmt.Errorf("build rest mapper: %w", err)
 	}
 
-	// Parse all documents from all files upfront. Pre-allocate with
-	// len(files) as a reasonable estimate (one doc per file in most cases).
-	crdDocs := make([]parsedDoc, 0, len(files))
-	otherDocs := make([]parsedDoc, 0, len(files))
-	for _, f := range files {
-		relPath, relErr := filepath.Rel(dirPath, f.path)
-		if relErr != nil {
-			relPath = f.path
-		}
-		logger.Debug("parsing file", "file", relPath)
-		docs, parseErr := parseFileDocuments(f.content, relPath)
-		if parseErr != nil {
-			return fmt.Errorf("parse %s: %w", relPath, parseErr)
-		}
-		for idx := range docs {
-			if isCRDDocument(docs[idx].obj) {
-				crdDocs = append(crdDocs, docs[idx])
-			} else {
-				otherDocs = append(otherDocs, docs[idx])
-			}
-		}
+	// Parse all documents from all files upfront and separate CRDs from
+	// non-CRDs so they can be applied in distinct phases.
+	crdDocs, otherDocs, err := classifyDocuments(files, dirPath, logger)
+	if err != nil {
+		return err
 	}
 
 	// Phase 1: Apply CRD documents in parallel.
@@ -261,6 +245,38 @@ func applyYAMLFiles(
 	}
 
 	return nil
+}
+
+// classifyDocuments parses all YAML files and separates the resulting
+// documents into CRD definitions (apiextensions.k8s.io/v1) and non-CRD
+// documents. Pre-allocates with len(files) as a reasonable estimate
+// (one doc per file in most cases).
+func classifyDocuments(
+	files []hashedFile,
+	dirPath string,
+	logger *slog.Logger,
+) (crdDocs []parsedDoc, otherDocs []parsedDoc, err error) {
+	crdDocs = make([]parsedDoc, 0, len(files))
+	otherDocs = make([]parsedDoc, 0, len(files))
+	for _, f := range files {
+		relPath, relErr := filepath.Rel(dirPath, f.path)
+		if relErr != nil {
+			relPath = f.path
+		}
+		logger.Debug("parsing file", "file", relPath)
+		docs, parseErr := parseFileDocuments(f.content, relPath)
+		if parseErr != nil {
+			return nil, nil, fmt.Errorf("parse %s: %w", relPath, parseErr)
+		}
+		for idx := range docs {
+			if isCRDDocument(docs[idx].obj) {
+				crdDocs = append(crdDocs, docs[idx])
+			} else {
+				otherDocs = append(otherDocs, docs[idx])
+			}
+		}
+	}
+	return crdDocs, otherDocs, nil
 }
 
 // parseFileDocuments decodes all YAML documents in a file's content into
