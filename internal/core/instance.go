@@ -515,7 +515,9 @@ func (i *Instance) Stop(ctx context.Context) error {
 	// the alternative (select on ctx.Done + TryLock loop) would add
 	// significant complexity for a scenario that only arises when Start and
 	// Stop race, which the pool layer already prevents.
+	i.log.Debug("stop: waiting for startMu")
 	i.startMu.Lock()
+	i.log.Debug("stop: acquired startMu")
 
 	// Extract references under the lock, clear state, then release the
 	// lock before performing the expensive stack.Stop I/O. After unlock,
