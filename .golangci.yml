@@ -266,11 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # G301: Allow 0755 directory permissions
-      - linters:
-          - gosec
-        text: G301
-
       # G306: Allow 0644 file permissions in tests
       - linters:
           - gosec
