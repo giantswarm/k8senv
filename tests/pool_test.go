@@ -70,14 +70,14 @@ func TestPoolConcurrentAccess(t *testing.T) {
 			if err != nil {
 				return fmt.Errorf("failed to acquire: %w", err)
 			}
-			// Release errors are safe to ignore; the instance is
-			// removed from the pool but the test is not affected.
-			_ = inst.Release()
+			if err := inst.Release(); err != nil {
+				return fmt.Errorf("failed to release: %w", err)
+			}
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		t.Fatal(err)
+		t.Errorf("concurrent acquire/release failed: %v", err)
 	}
 }
 
