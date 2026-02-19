@@ -22,10 +22,10 @@ import (
 )
 
 // systemNamespaces lists the namespaces created by kube-apiserver that must
-// never be deleted during cleanup. This slice is the single source of truth;
-// systemNamespaceCount, isSystemNamespace, and SystemNamespaceNames are
-// derived from it.
-var systemNamespaces = []string{
+// never be deleted during cleanup. Declared as a fixed-size array to prevent
+// accidental append or reassignment. isSystemNamespace and
+// SystemNamespaceNames are derived from it.
+var systemNamespaces = [4]string{
 	"default",
 	"kube-system",
 	"kube-public",
@@ -36,7 +36,7 @@ var systemNamespaces = []string{
 // kube-apiserver that must never be deleted during cleanup. The returned
 // slice is a copy; callers may modify it without affecting internal state.
 func SystemNamespaceNames() []string {
-	return append([]string(nil), systemNamespaces...)
+	return append([]string(nil), systemNamespaces[:]...)
 }
 
 // systemNamespaceCount is the number of system namespaces.
@@ -46,7 +46,7 @@ var systemNamespaceCount = len(systemNamespaces)
 // kube-apiserver that must never be deleted during cleanup. These namespaces
 // are required for the instance to function correctly on reuse.
 func isSystemNamespace(name string) bool {
-	return slices.Contains(systemNamespaces, name)
+	return slices.Contains(systemNamespaces[:], name)
 }
 
 // cleanupConfirmDelay is the short delay before a confirmation re-list when no

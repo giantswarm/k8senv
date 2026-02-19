@@ -39,9 +39,10 @@ type purgeHandle struct {
 //
 // The second return value holds the query arguments (one per system namespace).
 func buildFindUserNamespacesQuery() (query string, args []any) {
-	placeholders := make([]string, len(systemNamespaces))
-	args = make([]any, len(systemNamespaces))
-	for i, ns := range systemNamespaces {
+	sysNS := systemNamespaces[:]
+	placeholders := make([]string, len(sysNS))
+	args = make([]any, len(sysNS))
+	for i, ns := range sysNS {
 		placeholders[i] = "?"
 		args[i] = "/registry/namespaces/" + ns
 	}
