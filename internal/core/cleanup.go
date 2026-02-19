@@ -39,9 +39,6 @@ func SystemNamespaceNames() []string {
 	return append([]string(nil), systemNamespaces[:]...)
 }
 
-// systemNamespaceCount is the number of system namespaces.
-var systemNamespaceCount = len(systemNamespaces)
-
 // isSystemNamespace reports whether name is a namespace created by
 // kube-apiserver that must never be deleted during cleanup. These namespaces
 // are required for the instance to function correctly on reuse.
@@ -118,11 +115,11 @@ func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
 					found++
 				}
 			}
-			if found >= systemNamespaceCount {
+			if found >= len(systemNamespaces) {
 				return true, nil
 			}
 
-			i.log.Debug("waiting for system namespaces", "found", found, "expected", systemNamespaceCount)
+			i.log.Debug("waiting for system namespaces", "found", found, "expected", len(systemNamespaces))
 			return false, nil
 		},
 	); err != nil {
