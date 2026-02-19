@@ -398,6 +398,8 @@ func (s *Stack) createProcesses() error {
 // any goroutine returns an error. Using gCtx for readiness checks ensures
 // that if one process fails to start, the other's readiness poll is
 // canceled immediately rather than waiting for the full timeout.
+//
+// Precondition: both processCtx and readyCtx must be non-nil (validated by Start).
 func (s *Stack) startAndWaitForReady(processCtx, readyCtx context.Context) error {
 	g, gCtx := errgroup.WithContext(readyCtx)
 
