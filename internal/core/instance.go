@@ -244,6 +244,9 @@ func (i *Instance) ID() string {
 }
 
 // setErr records the last error on this instance.
+// Taking &e is safe: Go's escape analysis allocates e on the heap because its
+// address is stored in the atomic pointer, so the pointer remains valid after
+// setErr returns.
 func (i *Instance) setErr(e error) {
 	i.lastErr.Store(&e)
 }

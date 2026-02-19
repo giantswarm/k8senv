@@ -106,6 +106,17 @@ func (w *instanceWrapper) Config() (*rest.Config, error) {
 // After Release returns, any subsequent call to Config on this wrapper returns
 // ErrInstanceReleased.
 func (w *instanceWrapper) Release() error {
+	// Two-layer release guard:
+	//   1. w.released (CAS here) — per-wrapper flag that catches the common case
+	//      of a single caller releasing twice. Returns ErrDoubleRelease immediately
+	//      without touching pool state.
+	//   2. core.Instance.Release(token) — generation-counter CAS inside the core
+	//      layer that catches cross-wrapper races where the same instance has been
+	//      re-acquired by another consumer. This fires when a stale wrapper somehow
+	//      bypasses layer 1 (e.g., two wrappers issued for the same acquisition,
+	//      which would be a programming error).
+	// Both layers are needed: layer 1 gives a clean error; layer 2 is defense
+	// in depth against invariant violations in pool management.
 	if !w.released.CompareAndSwap(false, true) {
 		return ErrDoubleRelease
 	}
@@ -227,6 +238,10 @@ func logDuplicateNewManager(opts []ManagerOption) {
 
 // configDiffs compares two managerConfig values and returns a human-readable
 // description of each field that differs. Returns nil if the configs are equal.
+//
+// When adding a new field to core.ManagerConfig, add a corresponding diff*
+// call below. TestConfigDiffsCoversAllFields (options_test.go) is a canary
+// test that fails if a field is added without updating this function.
 func configDiffs(stored, incoming managerConfig) []string {
 	var diffs []string
 

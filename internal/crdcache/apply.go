@@ -361,6 +361,9 @@ func applyParsedDocument(
 
 	// Server-side apply requires clean JSON without client-side metadata that
 	// would conflict with the API server's own managed-fields bookkeeping.
+	// Mutating doc.obj in place is safe: parseFileDocuments creates an
+	// independent *unstructured.Unstructured per document, and each doc is
+	// processed by exactly one goroutine (CRDs via errgroup, others sequentially).
 	doc.obj.SetManagedFields(nil)
 	doc.obj.SetResourceVersion("")
 
