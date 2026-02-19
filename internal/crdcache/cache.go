@@ -214,6 +214,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 		APIServerBinary:       cfg.KubeAPIServerBinary,
 		KineReadyTimeout:      readyTimeout,
 		APIServerReadyTimeout: readyTimeout,
+		StopTimeout:           cfg.stopTimeout(),
 		PortRegistry:          cfg.PortRegistry,
 		Logger:                logger,
 	}, kubestack.DefaultMaxPortRetries, cfg.stopTimeout())

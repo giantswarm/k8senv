@@ -350,6 +350,7 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 		CachedDBPath:          i.cfg.CachedDBPath,
 		KineReadyTimeout:      i.cfg.StartTimeout,
 		APIServerReadyTimeout: i.cfg.StartTimeout,
+		StopTimeout:           i.cfg.StopTimeout,
 		PortRegistry:          i.ports,
 		Logger:                i.log,
 	}, i.cfg.MaxStartRetries, i.cfg.StopTimeout)

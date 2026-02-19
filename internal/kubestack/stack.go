@@ -33,6 +33,11 @@ type Config struct {
 	KineReadyTimeout      time.Duration
 	APIServerReadyTimeout time.Duration
 
+	// StopTimeout is the per-process timeout used when cleaning up
+	// partially-started processes after a Start failure. If zero,
+	// defaults to process.DefaultStopTimeout.
+	StopTimeout time.Duration
+
 	// PortRegistry coordinates port allocation across concurrent stacks.
 	// Required: callers must provide a shared PortRegistry to prevent
 	// duplicate port allocation. Typically created once per Manager and
@@ -64,6 +69,15 @@ type Stack struct {
 	kinePort  int // allocated port for kine, released on Stop
 	apiPort   int // allocated port for kube-apiserver, released on Stop
 	started   bool
+}
+
+// stopTimeout returns the configured StopTimeout, falling back to
+// process.DefaultStopTimeout when unset.
+func (c Config) stopTimeout() time.Duration {
+	if c.StopTimeout > 0 {
+		return c.StopTimeout
+	}
+	return process.DefaultStopTimeout
 }
 
 // validate checks that all required Config fields are set and returns an error
@@ -261,10 +275,11 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	// regardless of which resources were successfully initialized.
 	defer func() {
 		if retErr != nil {
-			if err := process.StopCloseAndNil(&s.apiserver, process.DefaultStopTimeout); err != nil {
+			cleanupTimeout := s.config.stopTimeout()
+			if err := process.StopCloseAndNil(&s.apiserver, cleanupTimeout); err != nil {
 				s.log.Warn("cleanup apiserver after start failure", "error", err)
 			}
-			if err := process.StopCloseAndNil(&s.kine, process.DefaultStopTimeout); err != nil {
+			if err := process.StopCloseAndNil(&s.kine, cleanupTimeout); err != nil {
 				s.log.Warn("cleanup kine after start failure", "error", err)
 			}
 			s.releasePorts()
