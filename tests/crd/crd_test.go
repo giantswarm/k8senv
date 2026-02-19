@@ -215,7 +215,10 @@ func TestReleaseCleanupCRDResources(t *testing.T) {
 	}
 	released = true
 
-	inst2, _ := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst2, err := sharedManager.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Failed to re-acquire instance: %v", err)
+	}
 	defer func() {
 		if err := inst2.Release(); err != nil {
 			t.Logf("release error: %v", err)
