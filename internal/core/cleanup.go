@@ -23,12 +23,20 @@ import (
 
 // systemNamespaces lists the namespaces created by kube-apiserver that must
 // never be deleted during cleanup. This slice is the single source of truth;
-// systemNamespaceCount and isSystemNamespace are derived from it.
+// systemNamespaceCount, isSystemNamespace, and SystemNamespaceNames are
+// derived from it.
 var systemNamespaces = []string{
 	"default",
 	"kube-system",
 	"kube-public",
 	"kube-node-lease",
+}
+
+// SystemNamespaceNames returns the names of namespaces created by
+// kube-apiserver that must never be deleted during cleanup. The returned
+// slice is a copy; callers may modify it without affecting internal state.
+func SystemNamespaceNames() []string {
+	return append([]string(nil), systemNamespaces...)
 }
 
 // systemNamespaceCount is the number of system namespaces.

@@ -12,8 +12,8 @@ import (
 
 // TestSystemNamespacesMatchAPIServer verifies that testutil.SystemNamespaces()
 // matches exactly the namespaces that kube-apiserver creates on startup.
-// This catches drift between the shared test set and the authoritative set in
-// internal/core/cleanup.go (which the test package cannot import by design).
+// This catches drift between the authoritative set in internal/core/cleanup.go
+// and what a real kube-apiserver actually creates.
 func TestSystemNamespacesMatchAPIServer(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -53,7 +53,7 @@ func TestSystemNamespacesMatchAPIServer(t *testing.T) {
 	for name := range actual {
 		if _, ok := sysNS[name]; !ok {
 			t.Errorf(
-				"API server has namespace %q not in SystemNamespaces set — update testutil.systemNamespaces and internal/core/cleanup.go",
+				"API server has namespace %q not in SystemNamespaces set — update internal/core/cleanup.go:systemNamespaces",
 				name,
 			)
 		}

@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -21,31 +20,25 @@ import (
 	"time"
 
 	"github.com/giantswarm/k8senv"
+	"github.com/giantswarm/k8senv/internal/core"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-// systemNamespaces is the set of namespaces created by kube-apiserver that
-// must survive cleanup. The authoritative source is internal/core/cleanup.go.
-//
-// KEEP IN SYNC with internal/core/cleanup.go:isSystemNamespace.
-// TestSystemNamespacesMatchAPIServer (in tests/cleanup/) verifies this set at
-// runtime against the namespaces that kube-apiserver actually creates on startup.
-var systemNamespaces = map[string]struct{}{
-	"default":         {},
-	"kube-system":     {},
-	"kube-public":     {},
-	"kube-node-lease": {},
-}
-
-// SystemNamespaces returns a copy of the system namespace set so callers
-// cannot accidentally mutate the canonical map.
+// SystemNamespaces returns a set of namespace names created by kube-apiserver
+// that must survive cleanup. The authoritative source is
+// core.SystemNamespaceNames; this function converts the slice to a map for
+// O(1) lookup convenience. Each call returns a fresh map that callers may
+// modify freely.
 func SystemNamespaces() map[string]struct{} {
-	cp := make(map[string]struct{}, len(systemNamespaces))
-	maps.Copy(cp, systemNamespaces)
+	names := core.SystemNamespaceNames()
+	m := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		m[n] = struct{}{}
+	}
 
-	return cp
+	return m
 }
 
 // nameCounter is an atomic counter used by UniqueName to generate resource
