@@ -167,6 +167,10 @@ func StartWithRetry(
 	if readyCtx == nil {
 		return nil, errors.New("readyCtx must not be nil")
 	}
+	if procCtx == readyCtx {
+		return nil, errors.New("procCtx and readyCtx must be different contexts; " +
+			"procCtx governs process lifetime, readyCtx governs startup timeout")
+	}
 	if maxRetries < 1 {
 		return nil, fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
 	}
