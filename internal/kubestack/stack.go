@@ -79,22 +79,20 @@ func (c Config) stopTimeout() time.Duration {
 }
 
 // validate checks that all required Config fields are set and returns an error
-// describing every violation found. It performs I/O via exec.LookPath to verify
-// that configured binaries exist on $PATH. It uses errors.Join to report
-// multiple issues at once, allowing callers to fix all problems in a single
-// pass rather than playing whack-a-mole with one error at a time.
+// describing every violation found. It is a pure function that performs no I/O.
+// Use resolveBinaries to verify that configured binaries exist on $PATH.
+//
+// It uses errors.Join to report multiple issues at once, allowing callers to
+// fix all problems in a single pass rather than playing whack-a-mole with one
+// error at a time.
 func (c Config) validate() error {
 	var errs []error
 
 	if c.KineBinary == "" {
 		errs = append(errs, errors.New("kine binary path must not be empty"))
-	} else if _, err := exec.LookPath(c.KineBinary); err != nil {
-		errs = append(errs, fmt.Errorf("kine binary not found: %w", err))
 	}
 	if c.APIServerBinary == "" {
 		errs = append(errs, errors.New("api server binary path must not be empty"))
-	} else if _, err := exec.LookPath(c.APIServerBinary); err != nil {
-		errs = append(errs, fmt.Errorf("api server binary not found: %w", err))
 	}
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data dir must not be empty"))
@@ -118,6 +116,23 @@ func (c Config) validate() error {
 	return errors.Join(errs...)
 }
 
+// resolveBinaries verifies that configured binary paths exist on $PATH via
+// exec.LookPath. Call after validate to confirm that the binaries are
+// actually available. It uses errors.Join to report all missing binaries at
+// once.
+func (c Config) resolveBinaries() error {
+	var errs []error
+
+	if _, err := exec.LookPath(c.KineBinary); err != nil {
+		errs = append(errs, fmt.Errorf("kine binary not found: %w", err))
+	}
+	if _, err := exec.LookPath(c.APIServerBinary); err != nil {
+		errs = append(errs, fmt.Errorf("api server binary not found: %w", err))
+	}
+
+	return errors.Join(errs...)
+}
+
 // New creates a new Stack. Does not start processes.
 // Callers must set KineBinary, APIServerBinary, DataDir, SQLitePath,
 // KubeconfigPath, and PortRegistry in cfg. Returns an error if any required
@@ -126,12 +141,15 @@ func New(cfg Config) (*Stack, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid kubestack config: %w", err)
 	}
+	if err := cfg.resolveBinaries(); err != nil {
+		return nil, fmt.Errorf("invalid kubestack config: %w", err)
+	}
 	return newValidated(cfg), nil
 }
 
 // newValidated constructs a Stack from a config that has already been
-// validated. It is used internally to avoid redundant validation (e.g.,
-// repeated exec.LookPath calls) inside retry loops.
+// validated and had its binaries resolved. It is used internally to avoid
+// redundant validation and repeated exec.LookPath calls inside retry loops.
 func newValidated(cfg Config) *Stack {
 	log := cfg.Logger
 	if log == nil {
@@ -176,6 +194,9 @@ func StartWithRetry(
 	}
 
 	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("invalid kubestack config: %w", err)
+	}
+	if err := cfg.resolveBinaries(); err != nil {
 		return nil, fmt.Errorf("invalid kubestack config: %w", err)
 	}
 
