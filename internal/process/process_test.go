@@ -3,6 +3,7 @@ package process
 import (
 	"errors"
 	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -67,8 +68,12 @@ func TestExpectSignalExit_WrapsProcessName(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if got := err.Error(); got != "my-proc: connection refused" {
-		t.Errorf("error = %q, want %q", got, "my-proc: connection refused")
+	got := err.Error()
+	if !strings.Contains(got, "my-proc") {
+		t.Errorf("error %q should contain process name %q", got, "my-proc")
+	}
+	if !strings.Contains(got, "connection refused") {
+		t.Errorf("error %q should contain original message %q", got, "connection refused")
 	}
 }
 

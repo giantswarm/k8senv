@@ -23,15 +23,13 @@ func requirePanics(t *testing.T, shouldPanic bool, wantMsg string, fn func()) {
 	t.Helper()
 	defer func() {
 		r := recover()
-		if shouldPanic && r == nil {
+		switch {
+		case shouldPanic && r == nil:
 			t.Fatal("expected panic but didn't get one")
-		}
-		if !shouldPanic && r != nil {
+		case !shouldPanic && r != nil:
 			t.Fatalf("unexpected panic: %v", r)
-		}
-		if shouldPanic && r != nil {
-			msg := fmt.Sprint(r)
-			if msg != wantMsg {
+		case shouldPanic:
+			if msg := fmt.Sprint(r); msg != wantMsg {
 				t.Fatalf("expected panic message %q, got %q", wantMsg, msg)
 			}
 		}
