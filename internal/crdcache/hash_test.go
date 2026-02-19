@@ -266,3 +266,65 @@ func TestComputeDirHash_MultipleFiles(t *testing.T) {
 		t.Errorf("hash length = %d, want 16", len(hash))
 	}
 }
+
+func TestWalkYAMLFiles_SkipsHiddenDirectories(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Create a visible subdirectory with a YAML file.
+	visibleDir := filepath.Join(dir, "visible")
+	if err := os.MkdirAll(visibleDir, 0o755); err != nil {
+		t.Fatalf("create visible dir: %v", err)
+	}
+	writeTestFile(t, visibleDir, "crd.yaml", "kind: Visible")
+
+	// Create a hidden subdirectory with a YAML file that should be skipped.
+	hiddenDir := filepath.Join(dir, ".hidden")
+	if err := os.MkdirAll(hiddenDir, 0o755); err != nil {
+		t.Fatalf("create hidden dir: %v", err)
+	}
+	writeTestFile(t, hiddenDir, "secret.yaml", "kind: Hidden")
+
+	// Create a nested hidden directory to verify recursive skipping.
+	nestedHiddenDir := filepath.Join(dir, "visible", ".nested-hidden")
+	if err := os.MkdirAll(nestedHiddenDir, 0o755); err != nil {
+		t.Fatalf("create nested hidden dir: %v", err)
+	}
+	writeTestFile(t, nestedHiddenDir, "nested.yaml", "kind: NestedHidden")
+
+	files, err := walkYAMLFiles(dir)
+	if err != nil {
+		t.Fatalf("walkYAMLFiles() error: %v", err)
+	}
+
+	// Only the file in the visible directory should be found.
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d: %v", len(files), files)
+	}
+	if filepath.Base(files[0]) != "crd.yaml" {
+		t.Errorf("expected crd.yaml, got %s", filepath.Base(files[0]))
+	}
+}
+
+func TestComputeDirHash_ContentChangeProducesDifferentHash(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeTestFile(t, dir, "crd.yaml", "original-content")
+
+	hashBefore, _, err := computeDirHash(dir)
+	if err != nil {
+		t.Fatalf("computeDirHash() before: %v", err)
+	}
+
+	// Overwrite the same file with different content.
+	writeTestFile(t, dir, "crd.yaml", "modified-content")
+
+	hashAfter, _, err := computeDirHash(dir)
+	if err != nil {
+		t.Fatalf("computeDirHash() after: %v", err)
+	}
+
+	if hashBefore == hashAfter {
+		t.Error("changing file contents should produce a different hash")
+	}
+}
