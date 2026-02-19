@@ -120,6 +120,40 @@ func TestWaitReady_ProcessExited(t *testing.T) {
 	}
 }
 
+func TestWaitReady_FatalCheckError(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a readiness check that encounters a fatal error on the
+	// first attempt (e.g., certificate parse failure, invalid response).
+	// WaitReady must abort immediately and propagate the check's error.
+	errFatal := errors.New("certificate verification failed")
+
+	start := time.Now()
+	err := WaitReady(context.Background(), WaitReadyConfig{
+		Interval: 100 * time.Millisecond,
+		Timeout:  10 * time.Second,
+		Name:     "test-proc",
+		Port:     12345,
+	}, func(_ context.Context, attempt int) (bool, error) {
+		if attempt > 1 {
+			t.Fatal("check should not be called after returning a fatal error")
+		}
+		return false, errFatal
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, errFatal) {
+		t.Fatalf("expected fatal check error in chain, got: %v", err)
+	}
+	// The function should return almost immediately, well under 1 second.
+	if elapsed > time.Second {
+		t.Fatalf("expected fast abort on fatal check error, took %v", elapsed)
+	}
+}
+
 func TestWaitReady_NilProcessExited(t *testing.T) {
 	t.Parallel()
 
