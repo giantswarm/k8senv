@@ -126,8 +126,6 @@ func TestCRDDirWithMultiDocumentYAML(t *testing.T) {
 	if cm.Data["key"] != "value" {
 		t.Errorf("ConfigMap data mismatch: got %v", cm.Data)
 	}
-
-	t.Log("Multi-document YAML with CRD and ConfigMap applied successfully")
 }
 
 // TestCRDDirWithYmlExtension exercises the .yml extension match in walkYAMLFiles.

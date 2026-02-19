@@ -35,6 +35,4 @@ func TestContextCancelDuringAcquire(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("Expected context.Canceled error, got: %v", err)
 	}
-
-	t.Logf("Acquire correctly failed with canceled context: %v", err)
 }

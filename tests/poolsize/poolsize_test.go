@@ -53,8 +53,6 @@ func TestPoolTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Expected DeadlineExceeded, got %v", err)
 	}
-
-	t.Logf("Acquire correctly timed out on exhausted pool: %v", err)
 }
 
 // TestPoolReleaseUnblocks verifies that releasing an instance unblocks a
