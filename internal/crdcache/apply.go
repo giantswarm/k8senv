@@ -15,6 +15,7 @@ import (
 
 	"github.com/giantswarm/k8senv/internal/sentinel"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -81,10 +82,16 @@ type parsedDoc struct {
 // documents share already-known GVKs (e.g., apiextensions.k8s.io/v1 CRDs).
 // The mapper is refreshed on demand when a NoKindMatch error indicates
 // the cache is stale (e.g., after applying a CRD that registers a new type).
+//
+// Concurrent refresh calls are coalesced via singleflight so that only one
+// API server discovery round-trip is in flight at a time. This prevents a
+// stale-overwrites-fresh race where a slower, earlier-started refresh could
+// overwrite the mapper set by a faster, later-started one.
 type discoveryMapper struct {
-	mu         sync.RWMutex
-	mapper     meta.RESTMapper
-	discClient discovery.DiscoveryInterface
+	mu           sync.RWMutex
+	mapper       meta.RESTMapper
+	discClient   discovery.DiscoveryInterface
+	refreshGroup singleflight.Group
 }
 
 // newDiscoveryMapper creates a discoveryMapper with an eagerly populated cache.
@@ -108,17 +115,25 @@ func (dm *discoveryMapper) RESTMapping(gk schema.GroupKind, versions ...string) 
 }
 
 // refresh rebuilds the cached RESTMapper from live API server discovery.
+// Concurrent calls are coalesced via singleflight: only one discovery
+// round-trip runs at a time, and all concurrent callers receive the same
+// result. This prevents redundant API calls and eliminates the race where
+// a slower, staler refresh could overwrite a newer mapper.
 func (dm *discoveryMapper) refresh() error {
-	gr, err := restmapper.GetAPIGroupResources(dm.discClient)
-	if err != nil {
-		return fmt.Errorf("get api groups: %w", err)
-	}
+	_, err, _ := dm.refreshGroup.Do("refresh", func() (any, error) {
+		gr, err := restmapper.GetAPIGroupResources(dm.discClient)
+		if err != nil {
+			return nil, fmt.Errorf("get api groups: %w", err)
+		}
 
-	dm.mu.Lock()
-	dm.mapper = restmapper.NewDiscoveryRESTMapper(gr)
-	dm.mu.Unlock()
+		dm.mu.Lock()
+		dm.mapper = restmapper.NewDiscoveryRESTMapper(gr)
+		dm.mu.Unlock()
 
-	return nil
+		return struct{}{}, nil
+	})
+
+	return err
 }
 
 // applyYAMLFiles applies pre-read YAML files to the cluster using a two-phase
