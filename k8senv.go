@@ -12,7 +12,11 @@ import (
 
 // Singleton state for NewManager. The first call creates the manager;
 // subsequent calls return the same instance and log a warning.
+//
+// singletonMu protects both singletonMgr and singletonOnce so that
+// resetForTesting (used in tests) is concurrency-safe with NewManager.
 var (
+	singletonMu   sync.Mutex
 	singletonMgr  Manager
 	singletonOnce sync.Once
 )
@@ -112,6 +116,9 @@ func defaultManagerConfig() managerConfig {
 // (e.g., net/http/internal) for enabling test isolation within a single
 // binary. It must only be called from tests.
 func resetForTesting() {
+	singletonMu.Lock()
+	defer singletonMu.Unlock()
+
 	singletonMgr = nil
 	singletonOnce = sync.Once{}
 }
@@ -131,6 +138,9 @@ func resetForTesting() {
 //
 //nolint:ireturn // Returns Manager interface by design for testability (mockable).
 func NewManager(opts ...ManagerOption) Manager {
+	singletonMu.Lock()
+	defer singletonMu.Unlock()
+
 	created := false
 	singletonOnce.Do(func() {
 		cfg := defaultManagerConfig()
