@@ -293,20 +293,34 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 
 	for attempt := range maxAttempts {
 		candidate, candidateClient := AcquireWithClient(ctx, t, mgr)
-		if candidate.ID() == instID {
-			inst2 = candidate
-			client2 = candidateClient
-			t.Logf("re-acquired same instance on attempt %d", attempt+1)
 
-			break
+		if candidate.ID() != instID {
+			t.Logf("attempt %d: got instance %s, want %s; releasing and retrying",
+				attempt+1, candidate.ID(), instID)
+
+			if err := candidate.Release(); err != nil {
+				t.Logf("release error during retry: %v", err)
+			}
+
+			continue
 		}
 
-		t.Logf("attempt %d: got instance %s, want %s; releasing and retrying",
-			attempt+1, candidate.ID(), instID)
+		// Found the target instance. Register cleanup immediately via
+		// t.Cleanup so the instance is always released, even if the test
+		// skips, fatals, or panics after this point.
+		inst2 = candidate
+		client2 = candidateClient
+		t.Logf("re-acquired same instance on attempt %d", attempt+1)
 
-		if err := candidate.Release(); err != nil {
-			t.Logf("release error during retry: %v", err)
-		}
+		t.Cleanup(func() {
+			// Clean up the system namespace ConfigMap we created.
+			_ = client2.CoreV1().ConfigMaps("kube-system").Delete(ctx, cmName, metav1.DeleteOptions{})
+			if err := inst2.Release(); err != nil {
+				t.Logf("release error: %v", err)
+			}
+		})
+
+		break
 	}
 
 	if inst2 == nil {
@@ -316,14 +330,6 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 		// which requires the original instance. See the function doc comment.
 		t.Skipf("could not re-acquire instance %s after %d attempts", instID, maxAttempts)
 	}
-
-	defer func() {
-		// Clean up the system namespace ConfigMap we created.
-		_ = client2.CoreV1().ConfigMaps("kube-system").Delete(ctx, cmName, metav1.DeleteOptions{})
-		if err := inst2.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
 
 	// Verify the kube-system ConfigMap still exists.
 	got, err := client2.CoreV1().ConfigMaps("kube-system").Get(ctx, cmName, metav1.GetOptions{})
