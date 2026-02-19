@@ -85,7 +85,10 @@ func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
 		r.log.Debug("port already in registry, retrying", "port", tcpAddr.Port)
 		_ = l.Close()
 	}
-	return nil, 0, fmt.Errorf("allocate unique port: exhausted %d attempts", maxPortRetries)
+	return nil, 0, fmt.Errorf(
+		"allocate unique port: exhausted %d attempts (%d ports in registry)",
+		maxPortRetries, len(r.ports),
+	)
 }
 
 // AllocatePortPair allocates two distinct free ports.
