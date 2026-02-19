@@ -266,11 +266,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # exhaustive: Switch on errors doesn't need exhaustive checking
-      - linters:
-          - exhaustive
-        text: missing cases in switch of type error
-
       # forbidigo: Allow log package in existing code (grandfather clause)
       - linters:
           - forbidigo
