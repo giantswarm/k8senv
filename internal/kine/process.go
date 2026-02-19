@@ -105,7 +105,7 @@ func (p *Process) Start(ctx context.Context) error {
 	}
 
 	args := []string{
-		"--endpoint=sqlite://" + p.config.SQLitePath,
+		"--endpoint=sqlite://" + p.config.SQLitePath + "?_busy_timeout=5000",
 		fmt.Sprintf("--listen-address=127.0.0.1:%d", p.config.Port),
 		"--metrics-bind-address=0", // Disable metrics server to avoid port conflicts
 	}

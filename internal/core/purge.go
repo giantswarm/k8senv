@@ -12,67 +12,78 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// registryNamespacesPrefix is the kine key prefix for namespace objects.
-// SUBSTR in the find query uses len(prefix)+1 because SQLite SUBSTR is 1-based.
-const registryNamespacesPrefix = "/registry/namespaces/"
-
-// purgeHandle holds a persistent SQLite connection and a prepared statement for
-// ReleasePurge operations. It is created lazily on first purge and kept open
-// for the lifetime of the instance to amortize connection setup and query
-// compilation across many release cycles.
+// purgeHandle holds a persistent SQLite connection and a prepared DELETE
+// statement for ReleasePurge operations. It is created eagerly during instance
+// startup (after system namespaces are verified) and kept open for the lifetime
+// of the instance to amortize connection setup and query compilation across
+// many release cycles.
 //
-// findArgs holds the fixed bind parameters for findStmt (the system namespace
-// paths used in the NOT IN clause). They are constant for the lifetime of the
-// handle and stored here so callers do not need to reconstruct them on every
-// invocation.
+// The baseline ID (captured via MAX(id) at startup) anchors the DELETE to only
+// rows created after system bootstrap. deleteArgs holds [baselineID, exact
+// namespace paths..., LIKE patterns...] — constant for the lifetime of the
+// handle.
 type purgeHandle struct {
-	db       *sql.DB
-	findStmt *sql.Stmt
-	findArgs []any
+	db         *sql.DB
+	deleteStmt *sql.Stmt
+	deleteArgs []any
 }
 
-// buildFindUserNamespacesQuery constructs the SQL query that discovers
-// non-deleted, non-system namespace names. The NOT IN clause is built
-// dynamically from the systemNamespaces slice so there is a single source of
-// truth — adding a namespace to systemNamespaces automatically excludes it
-// from purge without requiring a manual SQL update.
+// buildPurgeDeleteQuery constructs the DELETE statement that removes all kine
+// rows created after the baseline ID while preserving system namespace data.
+// The WHERE clause uses `id > ?` (primary key index, O(rows_to_delete)) plus
+// exact-match and LIKE filters for the system namespaces.
 //
-// Kine is append-only: the row with the highest id for a given name is the
-// current state. We filter system namespaces server-side to avoid client-side
-// allocation per row. The query returns just the namespace name (suffix after
-// the registryNamespacesPrefix).
+// The filters are built dynamically from systemNamespaces so there is a single
+// source of truth — adding a namespace to systemNamespaces automatically
+// protects it from purge without requiring a manual SQL update.
 //
-// The second return value holds the query arguments (one per system namespace).
-func buildFindUserNamespacesQuery() (query string, args []any) {
+// Returns the query string and a function that, given a baselineID, produces
+// the full argument slice [baselineID, exact paths..., LIKE patterns...].
+func buildPurgeDeleteQuery() (query string, makeArgs func(baselineID int64) []any) {
 	sysNS := systemNamespaces[:]
-	placeholders := make([]string, len(sysNS))
-	args = make([]any, len(sysNS))
-	for i, ns := range sysNS {
-		placeholders[i] = "?"
-		args[i] = registryNamespacesPrefix + ns
+
+	var b strings.Builder
+	b.WriteString("DELETE FROM kine WHERE id > ?")
+
+	// Exact matches: protect the namespace object itself.
+	for range sysNS {
+		b.WriteString(" AND name != ?")
 	}
-	query = fmt.Sprintf(`
-	SELECT SUBSTR(k.name, %d) FROM kine k
-	INNER JOIN (
-		SELECT name, MAX(id) AS max_id FROM kine
-		WHERE name LIKE '/registry/namespaces/%%'
-		AND name NOT LIKE '/registry/namespaces/%%/%%'
-		GROUP BY name
-	) latest ON k.name = latest.name AND k.id = latest.max_id
-	WHERE k.deleted = 0
-	AND k.name NOT IN (%s)
-`, len(registryNamespacesPrefix)+1, strings.Join(placeholders, ", "))
-	return query, args
+
+	// LIKE patterns: protect resources within system namespaces.
+	// The pattern '%/<ns>/%' matches any key containing /<ns>/ as a path
+	// segment, covering both core resources (/registry/configmaps/<ns>/foo)
+	// and group resources (/registry/deployments/apps/<ns>/foo).
+	for range sysNS {
+		b.WriteString(" AND name NOT LIKE ?")
+	}
+
+	query = b.String()
+
+	makeArgs = func(baselineID int64) []any {
+		args := make([]any, 0, 1+len(sysNS)*2)
+		args = append(args, baselineID)
+		for _, ns := range sysNS {
+			args = append(args, "/registry/namespaces/"+ns)
+		}
+		for _, ns := range sysNS {
+			args = append(args, "%/"+ns+"/%")
+		}
+		return args
+	}
+
+	return query, makeArgs
 }
 
-// openPurgeHandle opens a SQLite connection configured for purge operations and
-// prepares the reusable find query. The connection uses WAL mode (matching kine),
-// a generous busy timeout for concurrent access, and relaxed synchronous mode
-// (NORMAL) since the database is ephemeral test data where crash durability is
-// irrelevant.
+// openPurgeHandle opens a SQLite connection configured for purge operations,
+// captures the baseline ID (MAX(id) at the point where only system data
+// exists), and prepares the reusable DELETE statement. The connection uses WAL
+// mode (matching kine), a generous busy timeout for concurrent access, and
+// relaxed synchronous mode (OFF) since the database is ephemeral test data
+// where crash durability is irrelevant.
 func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)",
+		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(OFF)",
 		sqlitePath,
 	)
 	db, err := sql.Open("sqlite", dsn)
@@ -85,184 +96,57 @@ func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 	// contention with kine's own connection.
 	db.SetMaxOpenConns(1)
 
-	query, findArgs := buildFindUserNamespacesQuery()
-	findStmt, err := db.Prepare(query)
-	if err != nil {
-		db.Close() //nolint:errcheck,gosec // best-effort cleanup on prepare failure
-		return nil, fmt.Errorf("prepare find-namespaces: %w", err)
+	// Capture the baseline ID: everything at or below this ID is system data
+	// that must be preserved. COALESCE handles the (theoretical) empty-table
+	// case by returning 0.
+	var baselineID int64
+	if err := db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM kine").Scan(&baselineID); err != nil {
+		db.Close() //nolint:errcheck,gosec // best-effort cleanup on query failure
+		return nil, fmt.Errorf("query baseline id: %w", err)
 	}
 
-	return &purgeHandle{db: db, findStmt: findStmt, findArgs: findArgs}, nil
+	query, makeArgs := buildPurgeDeleteQuery()
+	deleteArgs := makeArgs(baselineID)
+
+	deleteStmt, err := db.Prepare(query)
+	if err != nil {
+		db.Close() //nolint:errcheck,gosec // best-effort cleanup on prepare failure
+		return nil, fmt.Errorf("prepare purge delete: %w", err)
+	}
+
+	return &purgeHandle{db: db, deleteStmt: deleteStmt, deleteArgs: deleteArgs}, nil
 }
 
 // Close releases the prepared statement and closes the database connection.
 func (h *purgeHandle) Close() error {
-	return errors.Join(h.findStmt.Close(), h.db.Close())
+	return errors.Join(h.deleteStmt.Close(), h.db.Close())
 }
 
-// purge deletes all rows associated with non-system namespaces from kine's
-// database. This bypasses the Kubernetes API entirely for maximum speed: a few
-// SQL DELETEs replace ~20+ HTTP round trips through kube-apiserver → kine → SQLite.
+// purge deletes all rows created after the baseline ID from kine's database,
+// preserving system namespace data. This bypasses the Kubernetes API entirely
+// for maximum speed: a single SQL DELETE replaces ~20+ HTTP round trips through
+// kube-apiserver → kine → SQLite.
 //
 // Safety: this is only called between Release and the next Acquire, when no
 // API consumers or watchers are active. With --watch-cache=false, kube-apiserver
 // reads go directly through kine to SQLite, so subsequent API calls see the
 // cleaned state immediately.
-//
-// The function preserves:
-//   - System namespaces (default, kube-system, kube-public, kube-node-lease)
-//   - Resources within system namespaces
-//   - Cluster-scoped resources (CRDs, APIServices, ClusterRoles, etc.)
-//   - Internal kine bookkeeping keys (compact_rev_key, gap-*)
 func (h *purgeHandle) purge(ctx context.Context, log *slog.Logger) error {
-	// Discover user namespaces using the prepared statement.
-	userNamespaces, err := h.findUserNamespaces(ctx)
+	result, err := h.deleteStmt.ExecContext(ctx, h.deleteArgs...)
 	if err != nil {
-		return err
+		return fmt.Errorf("execute purge delete: %w", err)
 	}
 
-	if len(userNamespaces) == 0 {
-		log.Debug("purge: no user namespaces found, skipping")
-		return nil
-	}
-
-	log.Debug("purge: deleting user namespace data", "namespaces", len(userNamespaces))
-
-	if err := h.deleteNamespaceData(ctx, userNamespaces); err != nil {
-		return err
-	}
-
-	log.Debug("purge: cleanup complete", "namespaces_purged", len(userNamespaces))
-	return nil
-}
-
-// dnsLabelMaxLen is the maximum length of an RFC 1123 DNS label.
-const dnsLabelMaxLen = 63
-
-// isValidDNSLabel reports whether name is a valid RFC 1123 DNS label:
-// 1-63 characters, lowercase alphanumeric or hyphens, must start and end
-// with an alphanumeric character. Kubernetes namespace names must conform
-// to this format. Validating names extracted from kine's SQLite database
-// before using them in LIKE patterns prevents unexpected query behavior
-// from names containing SQL wildcards (%, _) or path separators (/).
-func isValidDNSLabel(name string) bool {
-	n := len(name)
-	if n == 0 || n > dnsLabelMaxLen {
-		return false
-	}
-	for i := range n {
-		c := name[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-			// lowercase letter — always valid
-		case c >= '0' && c <= '9':
-			// digit — always valid
-		case c == '-':
-			// hyphen — valid only in interior positions
-			if i == 0 || i == n-1 {
-				return false
-			}
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// findUserNamespaces returns the names of non-system namespaces present in the
-// kine database using the prepared query. The system namespace paths are bound
-// via h.findArgs, which were computed once at handle creation time.
-//
-// Each name is validated against RFC 1123 DNS label rules before inclusion.
-// Names that fail validation (e.g., containing '/', '%', or other non-label
-// characters) are logged and skipped to prevent unexpected SQL LIKE behavior
-// in deleteNamespaceData.
-func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) {
-	rows, err := h.findStmt.QueryContext(ctx, h.findArgs...)
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("query user namespaces: %w", err)
-	}
-	defer rows.Close() //nolint:errcheck // rows.Err() below catches read errors; Close error is redundant
-
-	var namespaces []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("scan namespace row: %w", err)
-		}
-		if name == "" {
-			continue
-		}
-		if !isValidDNSLabel(name) {
-			slog.Warn("purge: skipping namespace with invalid name",
-				"name", name,
-				"reason", "does not conform to RFC 1123 DNS label rules",
-			)
-			continue
-		}
-		namespaces = append(namespaces, name)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate namespace rows: %w", err)
+		return fmt.Errorf("purge rows affected: %w", err)
 	}
 
-	return namespaces, nil
-}
-
-// likeEscaper escapes SQL LIKE wildcard characters (%, _) and the escape
-// character itself (\) so that strings are matched literally in a LIKE
-// pattern used with ESCAPE '\'.
-var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-// escapeLIKE escapes SQL LIKE wildcard characters in s for literal matching.
-func escapeLIKE(s string) string {
-	return likeEscaper.Replace(s)
-}
-
-// deleteNamespaceData removes all kine rows associated with the given
-// namespaces in a single statement. For each namespace it deletes:
-//   - The namespace object itself: name = '/registry/namespaces/<ns>'
-//   - All resources in the namespace: name LIKE '%/<ns>/%'
-//
-// All namespace patterns are combined into one DELETE with OR clauses so
-// that SQLite scans the table once instead of once per namespace. The
-// leading-wildcard LIKE patterns prevent index usage, making this O(rows)
-// rather than O(N * rows) where N is the namespace count.
-//
-// All historical revisions and deletion markers are removed, not just the
-// current state. This is safe because the instance is idle (no watchers or
-// API consumers) and kine will correctly handle the gaps in revision history.
-func (h *purgeHandle) deleteNamespaceData(ctx context.Context, namespaces []string) error {
-	tx, err := h.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin purge transaction: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
-
-	// Build a single DELETE: ... WHERE (name = ? OR name LIKE ?) OR (name = ? OR name LIKE ?) ...
-	// Two parameters per namespace: exact match for the namespace object,
-	// LIKE pattern for all resources in the namespace.
-	var b strings.Builder
-	b.WriteString("DELETE FROM kine WHERE ")
-	args := make([]any, 0, len(namespaces)*2)
-
-	for idx, ns := range namespaces {
-		if idx > 0 {
-			b.WriteString(" OR ")
-		}
-		// Pattern matches any key with /<ns>/ as a path segment, catching
-		// both core resources (/registry/configmaps/<ns>/foo) and group
-		// resources (/registry/deployments/apps/<ns>/foo).
-		b.WriteString("(name = ? OR name LIKE ? ESCAPE '\\')")
-		args = append(args, registryNamespacesPrefix+ns, "%/"+escapeLIKE(ns)+"/%")
+	if rowsAffected == 0 {
+		log.Debug("purge: no rows to delete")
+	} else {
+		log.Debug("purge: deleted rows", "rows_affected", rowsAffected)
 	}
 
-	if _, err := tx.ExecContext(ctx, b.String(), args...); err != nil {
-		return fmt.Errorf("delete namespace data: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit purge transaction: %w", err)
-	}
 	return nil
 }

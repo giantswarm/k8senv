@@ -5,51 +5,56 @@ import (
 	"testing"
 )
 
-func TestIsValidDNSLabel(t *testing.T) {
+func TestBuildPurgeDeleteQuery(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
-		name string
-		want bool
-	}{
-		// Valid labels.
-		"simple lowercase":             {name: "default", want: true},
-		"with hyphens":                 {name: "kube-system", want: true},
-		"single char":                  {name: "a", want: true},
-		"single digit":                 {name: "1", want: true},
-		"digits only":                  {name: "123", want: true},
-		"alphanumeric mixed":           {name: "test-ns-42", want: true},
-		"max length 63":                {name: strings.Repeat("a", 63), want: true},
-		"starts with digit":            {name: "0abc", want: true},
-		"ends with digit":              {name: "abc0", want: true},
-		"multiple consecutive hyphens": {name: "a--b", want: true},
+	query, makeArgs := buildPurgeDeleteQuery()
 
-		// Invalid labels.
-		"empty string":            {name: "", want: false},
-		"too long 64":             {name: strings.Repeat("a", 64), want: false},
-		"leading hyphen":          {name: "-abc", want: false},
-		"trailing hyphen":         {name: "abc-", want: false},
-		"uppercase letter":        {name: "Abc", want: false},
-		"contains slash":          {name: "ns/evil", want: false},
-		"contains percent":        {name: "ns%evil", want: false},
-		"contains underscore":     {name: "ns_evil", want: false},
-		"contains dot":            {name: "ns.evil", want: false},
-		"contains space":          {name: "ns evil", want: false},
-		"contains backslash":      {name: `ns\evil`, want: false},
-		"single hyphen":           {name: "-", want: false},
-		"only hyphens":            {name: "---", want: false},
-		"unicode letter":          {name: "caf\u00e9", want: false},
-		"null byte":               {name: "ns\x00evil", want: false},
-		"sql injection semicolon": {name: "ns;DROP TABLE kine", want: false},
+	// The query must start with the baseline-ID filter.
+	if !strings.HasPrefix(query, "DELETE FROM kine WHERE id > ?") {
+		t.Fatalf("query does not start with expected prefix:\n%s", query)
 	}
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			got := isValidDNSLabel(tc.name)
-			if got != tc.want {
-				t.Errorf("isValidDNSLabel(%q) = %v, want %v", tc.name, got, tc.want)
-			}
-		})
+	// Build args with a sample baseline ID.
+	const baselineID int64 = 42
+	args := makeArgs(baselineID)
+
+	// Expected: 1 (baselineID) + len(systemNamespaces) exact paths + len(systemNamespaces) LIKE patterns.
+	wantArgCount := 1 + len(systemNamespaces)*2
+	if len(args) != wantArgCount {
+		t.Fatalf("got %d args, want %d", len(args), wantArgCount)
+	}
+
+	// First arg is the baseline ID.
+	if args[0] != baselineID {
+		t.Errorf("args[0] = %v, want %d", args[0], baselineID)
+	}
+
+	// Next batch: exact namespace paths (/registry/namespaces/<ns>).
+	for i, ns := range systemNamespaces {
+		idx := 1 + i
+		want := "/registry/namespaces/" + ns
+		if args[idx] != want {
+			t.Errorf("args[%d] = %v, want %q", idx, args[idx], want)
+		}
+	}
+
+	// Final batch: LIKE patterns (%/<ns>/%).
+	for i, ns := range systemNamespaces {
+		idx := 1 + len(systemNamespaces) + i
+		want := "%/" + ns + "/%"
+		if args[idx] != want {
+			t.Errorf("args[%d] = %v, want %q", idx, args[idx], want)
+		}
+	}
+
+	// Verify the query has the right number of exact-match and LIKE clauses.
+	exactCount := strings.Count(query, "AND name != ?")
+	if exactCount != len(systemNamespaces) {
+		t.Errorf("got %d exact-match clauses, want %d", exactCount, len(systemNamespaces))
+	}
+	likeCount := strings.Count(query, "AND name NOT LIKE ?")
+	if likeCount != len(systemNamespaces) {
+		t.Errorf("got %d LIKE clauses, want %d", likeCount, len(systemNamespaces))
 	}
 }

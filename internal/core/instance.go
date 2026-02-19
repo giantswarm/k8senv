@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -167,12 +168,13 @@ type Instance struct {
 	// stack is the kine + kube-apiserver process stack. Protected by startMu only.
 	stack *kubestack.Stack
 
-	// purge is a persistent SQLite connection and prepared statements for
-	// ReleasePurge operations. Opened lazily on first purge via ensurePurge,
-	// closed by closePurge (called from Stop). Only used when ReleaseStrategy
-	// is ReleasePurge. Access is safe without synchronization: the pool
-	// contract guarantees at most one goroutine holds the instance between
-	// Acquire and Release.
+	// purge is a persistent SQLite connection and prepared DELETE statement
+	// for ReleasePurge operations. Opened eagerly during startup (after
+	// system namespaces are verified) to capture the baseline ID before any
+	// test data exists. Closed by closePurge (called from Stop). Only used
+	// when ReleaseStrategy is ReleasePurge. Access is safe without
+	// synchronization: the pool contract guarantees at most one goroutine
+	// holds the instance between Acquire and Release.
 	purge *purgeHandle
 
 	// log is the instance-scoped logger.
@@ -216,26 +218,6 @@ func (i *Instance) tryRelease(token uint64) bool {
 // still performed via tryRelease (CAS) after side effects complete.
 func (i *Instance) isCurrentToken(token uint64) bool {
 	return i.gen.Load() == token
-}
-
-// ensurePurge returns the persistent purge handle for SQLite operations,
-// opening the connection and preparing statements on first call. Keeping the
-// handle open amortizes connection setup and query compilation across many
-// release cycles (~0.5-1ms saved per call with modernc.org/sqlite).
-//
-// SAFETY: called only while instance is acquired (single goroutine).
-func (i *Instance) ensurePurge() (*purgeHandle, error) {
-	if i.purge != nil {
-		return i.purge, nil
-	}
-
-	h, err := openPurgeHandle(i.sqlitePath)
-	if err != nil {
-		return nil, err
-	}
-
-	i.purge = h
-	return h, nil
 }
 
 // closePurge closes the persistent purge handle if open.
@@ -397,6 +379,18 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 	if err := i.waitForSystemNamespaces(ctx); err != nil {
 		i.teardownFailedAttempt(cancel, stack, attempt, err)
 		return false, err
+	}
+
+	// Open the purge handle eagerly so the baseline ID (MAX(id)) is captured
+	// before any test data exists. This must happen after waitForSystemNamespaces
+	// (system rows are committed) and before started=true (no test writes yet).
+	if i.cfg.ReleaseStrategy == ReleasePurge {
+		h, err := openPurgeHandle(i.sqlitePath)
+		if err != nil {
+			i.teardownFailedAttempt(cancel, stack, attempt, err)
+			return true, fmt.Errorf("open purge handle: %w", err)
+		}
+		i.purge = h
 	}
 
 	// Install process handles under startMu (already held by caller),
@@ -777,15 +771,14 @@ func (i *Instance) releasePurge(token uint64) error {
 		return nil
 	}
 
-	h, err := i.ensurePurge()
-	if err != nil {
-		return i.failRelease(token, "open purge handle during release", err)
+	if i.purge == nil {
+		return i.failRelease(token, "purge handle not initialized", errors.New("nil purge handle (programming error)"))
 	}
 
 	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
 	defer cleanCancel()
 
-	if err := h.purge(cleanCtx, i.log); err != nil {
+	if err := i.purge.purge(cleanCtx, i.log); err != nil {
 		return i.failRelease(token, "SQLite purge during release", err)
 	}
 
