@@ -53,6 +53,15 @@ const cleanupConfirmDelay = 10 * time.Millisecond
 // which is ACID-compliant — reads are immediately consistent after writes.
 const cleanupConfirmations = 1
 
+// cleanupQPS is the client-side QPS limit for cleanup clients. Set high to
+// effectively disable throttling — the target is a local, ephemeral
+// kube-apiserver so there is no shared infrastructure to overwhelm.
+const cleanupQPS = 10_000
+
+// cleanupBurst is the client-side burst limit for cleanup clients, matching
+// cleanupQPS for the same reason.
+const cleanupBurst = 10_000
+
 // gvrCleanupConcurrency is the maximum number of GVR types cleaned
 // concurrently by cleanNamespacedResources. Matches the limit used by
 // cleanNamespaces (errgroup.SetLimit(10)) and crdApplyConcurrency.
@@ -500,8 +509,8 @@ func getOrBuildCachedClient[T any](
 		var zero T
 		return zero, fmt.Errorf("build config for %s: %w", name, err)
 	}
-	cfg.QPS = 10_000
-	cfg.Burst = 10_000
+	cfg.QPS = cleanupQPS
+	cfg.Burst = cleanupBurst
 
 	v, err := build(cfg)
 	if err != nil {
