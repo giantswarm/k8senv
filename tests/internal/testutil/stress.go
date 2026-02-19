@@ -277,7 +277,11 @@ func StressWorker(ctx context.Context, t *testing.T, mgr k8senv.Manager, workerI
 	rng := rand.New(rand.NewPCG(uint64(workerID), 0)) //nolint:gosec // deterministic PRNG for reproducibility
 
 	inst, client := AcquireWithClient(ctx, t, mgr)
-	defer inst.Release() //nolint:errcheck // safe to ignore in defer; on failure instance is removed from pool
+	defer func() {
+		if err := inst.Release(); err != nil {
+			t.Logf("release error: %v", err)
+		}
+	}()
 
 	StressVerifyCleanInstance(ctx, t, client)
 
