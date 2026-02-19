@@ -2,10 +2,13 @@ package k8senv
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/giantswarm/k8senv/internal/core"
 	"k8s.io/client-go/rest"
@@ -14,12 +17,13 @@ import (
 // Singleton state for NewManager. The first call creates the manager;
 // subsequent calls return the same instance and log a warning.
 //
-// singletonMu protects both singletonMgr and singletonCreated so that
-// resetForTesting (used in tests) is concurrency-safe with NewManager.
+// singletonMu protects singletonMgr, singletonCreated, and singletonCfg
+// so that resetForTesting (used in tests) is concurrency-safe with NewManager.
 var (
 	singletonMu      sync.Mutex
 	singletonMgr     Manager
 	singletonCreated bool
+	singletonCfg     managerConfig
 )
 
 // Compile-time interface satisfaction checks.
@@ -142,14 +146,18 @@ func resetForTesting() {
 
 	singletonMgr = nil
 	singletonCreated = false
+	singletonCfg = managerConfig{}
 }
 
 // NewManager returns the process-level singleton Manager.
 //
 // The first call creates the manager with the given options and stores it.
-// Subsequent calls return the same instance — options are ignored and a
-// warning is logged. This performs no I/O operations; call Initialize
-// before Acquire.
+// Subsequent calls return the same instance and log a warning. If the
+// subsequent call provides options that produce a different configuration
+// than the stored singleton, the warning includes which fields differ so
+// the caller can identify the conflict.
+//
+// This performs no I/O operations; call Initialize before Acquire.
 //
 // The singleton is never reset after Shutdown; callers that need a fresh
 // manager must restart the process (or, in tests, use a separate test binary).
@@ -168,9 +176,82 @@ func NewManager(opts ...ManagerOption) Manager {
 			opt(&cfg)
 		}
 		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.toCoreConfig())}
+		singletonCfg = cfg
 		singletonCreated = true
 	} else {
-		core.Logger().Warn("NewManager called more than once; returning existing singleton (options ignored)")
+		logDuplicateNewManager(opts)
 	}
 	return singletonMgr
+}
+
+// logDuplicateNewManager logs a warning when NewManager is called after the
+// singleton has already been created. If opts are provided, it applies them
+// to a fresh default config and compares against the stored config, listing
+// any fields that differ so the caller can identify conflicting options.
+func logDuplicateNewManager(opts []ManagerOption) {
+	if len(opts) == 0 {
+		core.Logger().Warn("NewManager called more than once; returning existing singleton (options ignored)")
+		return
+	}
+
+	incoming := defaultManagerConfig()
+	for _, opt := range opts {
+		opt(&incoming)
+	}
+
+	diffs := configDiffs(singletonCfg, incoming)
+	if len(diffs) == 0 {
+		core.Logger().Warn("NewManager called more than once; returning existing singleton (options ignored)")
+		return
+	}
+
+	core.Logger().Warn(
+		"NewManager called more than once with different options; returning existing singleton (options ignored)",
+		"conflicts", strings.Join(diffs, ", "),
+	)
+}
+
+// configDiffs compares two managerConfig values and returns a human-readable
+// description of each field that differs. Returns nil if the configs are equal.
+func configDiffs(stored, incoming managerConfig) []string {
+	var diffs []string
+
+	diffInt := func(name string, a, b int) {
+		if a != b {
+			diffs = append(diffs, fmt.Sprintf("%s: %d != %d", name, a, b))
+		}
+	}
+
+	diffStr := func(name, a, b string) {
+		if a != b {
+			diffs = append(diffs, fmt.Sprintf("%s: %q != %q", name, a, b))
+		}
+	}
+
+	diffDur := func(name string, a, b time.Duration) {
+		if a != b {
+			diffs = append(diffs, fmt.Sprintf("%s: %s != %s", name, a, b))
+		}
+	}
+
+	diffInt("PoolSize", stored.PoolSize, incoming.PoolSize)
+	if stored.ReleaseStrategy != incoming.ReleaseStrategy {
+		diffs = append(
+			diffs,
+			fmt.Sprintf("ReleaseStrategy: %s != %s", stored.ReleaseStrategy, incoming.ReleaseStrategy),
+		)
+	}
+	diffStr("KineBinary", stored.KineBinary, incoming.KineBinary)
+	diffStr("KubeAPIServerBinary", stored.KubeAPIServerBinary, incoming.KubeAPIServerBinary)
+	diffDur("AcquireTimeout", stored.AcquireTimeout, incoming.AcquireTimeout)
+	diffStr("PrepopulateDBPath", stored.PrepopulateDBPath, incoming.PrepopulateDBPath)
+	diffStr("BaseDataDir", stored.BaseDataDir, incoming.BaseDataDir)
+	diffStr("CRDDir", stored.CRDDir, incoming.CRDDir)
+	diffDur("CRDCacheTimeout", stored.CRDCacheTimeout, incoming.CRDCacheTimeout)
+	diffDur("InstanceStartTimeout", stored.InstanceStartTimeout, incoming.InstanceStartTimeout)
+	diffDur("InstanceStopTimeout", stored.InstanceStopTimeout, incoming.InstanceStopTimeout)
+	diffDur("CleanupTimeout", stored.CleanupTimeout, incoming.CleanupTimeout)
+	diffDur("ShutdownDrainTimeout", stored.ShutdownDrainTimeout, incoming.ShutdownDrainTimeout)
+
+	return diffs
 }
