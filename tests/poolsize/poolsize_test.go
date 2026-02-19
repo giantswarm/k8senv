@@ -5,11 +5,12 @@ package k8senv_poolsize_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // Pool-size tests are NOT marked as t.Parallel() because they share a bounded
@@ -72,17 +73,18 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 		t.Fatalf("Failed to acquire second instance: %v", err)
 	}
 
-	// Track whether inst2 was released on the happy path. The cleanup
-	// guard ensures release on any failure path without risking a
-	// double-release panic on the happy path.
-	inst2Released := false
-	t.Cleanup(func() {
-		if !inst2Released {
+	// Guard inst2 release with sync.Once so the t.Cleanup safety net and
+	// the explicit release below are both safe to call without risking a
+	// double-release panic.
+	var inst2Once sync.Once
+	releaseInst2 := func() {
+		inst2Once.Do(func() {
 			if relErr := inst2.Release(); relErr != nil {
 				t.Logf("release error: %v", relErr)
 			}
-		}
-	})
+		})
+	}
+	t.Cleanup(releaseInst2)
 
 	// Release one instance in a goroutine. The readyCh gate ensures the
 	// goroutine does not call Release before the test is ready, but there is
@@ -121,10 +123,7 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 	t.Log("Acquire unblocked after release")
 
 	// Clean up inst2.
-	if relErr := inst2.Release(); relErr != nil {
-		t.Logf("release error: %v", relErr)
-	}
-	inst2Released = true
+	releaseInst2()
 }
 
 // TestPoolBoundedInstanceReuse verifies that a bounded pool reuses instances
@@ -137,41 +136,15 @@ func TestPoolBoundedInstanceReuse(t *testing.T) {
 	// Acquire and release 6 times sequentially on a pool of size 2.
 	// At most 2 unique instance IDs should appear.
 	for i := range 6 {
-		inst, acqErr := sharedManager.Acquire(ctx)
-		if acqErr != nil {
-			t.Fatalf("Acquire %d failed: %v", i, acqErr)
-		}
-
-		// Track whether the instance was released on the happy path.
-		// The cleanup guard ensures release on any failure path without
-		// risking a double-release panic on the happy path.
-		released := false
-		t.Cleanup(func() {
-			if !released {
-				if relErr := inst.Release(); relErr != nil {
-					t.Logf("release error: %v", relErr)
-				}
-			}
-		})
+		inst, client, release := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 
 		// Verify the instance works.
-		cfg, cfgErr := inst.Config()
-		if cfgErr != nil {
-			t.Fatalf("Config %d failed: %v", i, cfgErr)
-		}
-		client, clientErr := kubernetes.NewForConfig(cfg)
-		if clientErr != nil {
-			t.Fatalf("NewForConfig %d failed: %v", i, clientErr)
-		}
 		if _, listErr := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{}); listErr != nil {
 			t.Fatalf("List namespaces %d failed: %v", i, listErr)
 		}
 
 		seen[inst.ID()]++
-		if relErr := inst.Release(); relErr != nil {
-			t.Logf("release error: %v", relErr)
-		}
-		released = true
+		release()
 	}
 
 	if len(seen) > 2 {
