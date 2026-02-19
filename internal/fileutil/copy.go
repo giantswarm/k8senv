@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // ErrEmptySrc is returned when a source path is empty.
@@ -66,15 +67,20 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 
-	// closed tracks whether dstFile.Close has been called explicitly.
-	// The defer is a safety net for early returns; it skips the close
-	// if the file was already closed in the normal path below.
-	closed := false
+	// closeDst ensures dstFile.Close is called exactly once. The deferred
+	// call acts as a safety net for early returns; the explicit call in the
+	// normal path captures the close error for the caller.
+	var closeOnce sync.Once
+	var closeErr error
+	closeDst := func() {
+		closeOnce.Do(func() {
+			closeErr = dstFile.Close()
+		})
+	}
 	defer func() {
-		if !closed {
-			if closeErr := dstFile.Close(); closeErr != nil && retErr == nil {
-				retErr = fmt.Errorf("close destination: %w", closeErr)
-			}
+		closeDst()
+		if closeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("close destination: %w", closeErr)
 		}
 		if retErr != nil {
 			_ = os.Remove(writePath)
@@ -96,9 +102,9 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	}
 
 	// Close explicitly before rename so the file content is flushed.
-	closed = true
-	if err := dstFile.Close(); err != nil {
-		return fmt.Errorf("close destination: %w", err)
+	closeDst()
+	if closeErr != nil {
+		return fmt.Errorf("close destination: %w", closeErr)
 	}
 
 	// Atomic: rename temp file to final destination.
