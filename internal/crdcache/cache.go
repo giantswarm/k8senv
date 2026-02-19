@@ -115,7 +115,9 @@ func EnsureCache(ctx context.Context, cfg Config) (*Result, error) {
 		return nil, fmt.Errorf("stat cache file %s: %w", cachePath, err)
 	}
 
-	// Acquire file lock to prevent concurrent cache creation
+	// Acquire file lock for inter-process coordination.
+	// In-process serialization is guaranteed by the caller (manager initialization
+	// runs once via sync.Once).
 	lockPath := cachePath + ".lock"
 	logger.Debug("acquiring cache lock", "lock_path", lockPath)
 	lock, err := acquireFileLock(ctx, lockPath)
