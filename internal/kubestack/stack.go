@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"time"
 
 	"github.com/giantswarm/k8senv/internal/apiserver"
@@ -89,9 +90,13 @@ func (c Config) validate() error {
 
 	if c.KineBinary == "" {
 		errs = append(errs, errors.New("kine binary path must not be empty"))
+	} else if _, err := exec.LookPath(c.KineBinary); err != nil {
+		errs = append(errs, fmt.Errorf("kine binary not found: %w", err))
 	}
 	if c.APIServerBinary == "" {
 		errs = append(errs, errors.New("api server binary path must not be empty"))
+	} else if _, err := exec.LookPath(c.APIServerBinary); err != nil {
+		errs = append(errs, fmt.Errorf("api server binary not found: %w", err))
 	}
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data dir must not be empty"))
