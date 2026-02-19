@@ -220,12 +220,11 @@ func (p *Pool) Release(i *Instance, token uint64) {
 
 // ReleaseFailed marks an Instance as permanently failed. The instance is
 // stopped but remains in the all slice for Shutdown cleanup.
-//
-// tryRelease is used (rather than a direct store) for consistency with Pool.Release,
-// ensuring both release paths clear the generation counter through the same atomic mechanism.
+// The token must match the generation value returned by Acquire; if the token
+// is stale (instance was re-acquired), ReleaseFailed panics (double-release).
 func (p *Pool) ReleaseFailed(i *Instance, token uint64) {
 	if !i.tryRelease(token) {
-		Logger().Debug("ReleaseFailed: instance generation did not match token", "id", i.ID())
+		panic("k8senv: double-release of instance " + i.ID())
 	}
 
 	// Attempt cleanup of partially started processes.
