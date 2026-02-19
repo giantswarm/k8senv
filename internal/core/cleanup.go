@@ -21,21 +21,24 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// systemNamespaceCount is the number of namespaces created by kube-apiserver
-// that must never be deleted during cleanup. Keep in sync with
-// isSystemNamespace.
-const systemNamespaceCount = 4
+// systemNamespaces lists the namespaces created by kube-apiserver that must
+// never be deleted during cleanup. This slice is the single source of truth;
+// systemNamespaceCount and isSystemNamespace are derived from it.
+var systemNamespaces = []string{
+	"default",
+	"kube-system",
+	"kube-public",
+	"kube-node-lease",
+}
+
+// systemNamespaceCount is the number of system namespaces.
+var systemNamespaceCount = len(systemNamespaces)
 
 // isSystemNamespace reports whether name is a namespace created by
 // kube-apiserver that must never be deleted during cleanup. These namespaces
 // are required for the instance to function correctly on reuse.
 func isSystemNamespace(name string) bool {
-	switch name {
-	case "default", "kube-system", "kube-public", "kube-node-lease":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(systemNamespaces, name)
 }
 
 // cleanupConfirmDelay is the short delay before a confirmation re-list when no
