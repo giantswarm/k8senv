@@ -205,8 +205,10 @@ func applyYAMLFiles(
 		return fmt.Errorf("build rest mapper: %w", err)
 	}
 
-	// Parse all documents from all files upfront.
-	var crdDocs, otherDocs []parsedDoc
+	// Parse all documents from all files upfront. Pre-allocate with
+	// len(files) as a reasonable estimate (one doc per file in most cases).
+	crdDocs := make([]parsedDoc, 0, len(files))
+	otherDocs := make([]parsedDoc, 0, len(files))
 	for _, f := range files {
 		relPath, relErr := filepath.Rel(dirPath, f.path)
 		if relErr != nil {
