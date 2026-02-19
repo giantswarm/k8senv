@@ -16,6 +16,9 @@ func walkYAMLFiles(dirPath string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
+			if path != dirPath && strings.HasPrefix(d.Name(), ".") {
+				return fs.SkipDir
+			}
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
