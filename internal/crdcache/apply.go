@@ -34,6 +34,7 @@ const ErrMissingKind = sentinel.Error("missing kind in document")
 // ErrTooManyYAMLFiles is returned when a CRD directory contains more files than maxYAMLFiles.
 const ErrTooManyYAMLFiles = sentinel.Error("too many YAML files in directory")
 
+// Discovery retry constants control polling for CRD registration propagation.
 const (
 	// discoveryRetryCount is the number of attempts for CRD registration propagation.
 	discoveryRetryCount = 5
@@ -42,7 +43,10 @@ const (
 	// 100ms strikes a balance between responsiveness and avoiding unnecessary
 	// CPU cycles polling the localhost API server for CRD registration.
 	discoveryRetryDelay = 100 * time.Millisecond
+)
 
+// YAML parsing constants control document decoding and file limits.
+const (
 	// yamlDecoderBufferSize is the initial buffer size in bytes for the
 	// YAML/JSON decoder used when parsing CRD documents.
 	yamlDecoderBufferSize = 4096
@@ -51,7 +55,11 @@ const (
 	// applyYAMLFiles will process. This guards against misconfigured
 	// directories containing an unreasonable number of files.
 	maxYAMLFiles = 1000
+)
 
+// Concurrency and rate-limiting constants for CRD apply against the local
+// ephemeral kube-apiserver.
+const (
 	// crdApplyConcurrency is the maximum number of CRD documents applied
 	// in parallel during phase 1. CRDs use the pre-registered
 	// apiextensions.k8s.io/v1 mapping, so concurrent RESTMapping calls
