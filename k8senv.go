@@ -14,12 +14,12 @@ import (
 // Singleton state for NewManager. The first call creates the manager;
 // subsequent calls return the same instance and log a warning.
 //
-// singletonMu protects both singletonMgr and singletonOnce so that
+// singletonMu protects both singletonMgr and singletonCreated so that
 // resetForTesting (used in tests) is concurrency-safe with NewManager.
 var (
-	singletonMu   sync.Mutex
-	singletonMgr  Manager
-	singletonOnce sync.Once
+	singletonMu      sync.Mutex
+	singletonMgr     Manager
+	singletonCreated bool
 )
 
 // Compile-time interface satisfaction checks.
@@ -137,7 +137,7 @@ func resetForTesting() {
 	defer singletonMu.Unlock()
 
 	singletonMgr = nil
-	singletonOnce = sync.Once{}
+	singletonCreated = false
 }
 
 // NewManager returns the process-level singleton Manager.
@@ -158,19 +158,14 @@ func NewManager(opts ...ManagerOption) Manager {
 	singletonMu.Lock()
 	defer singletonMu.Unlock()
 
-	// created is written inside the Do closure and read after Do returns.
-	// sync.Once guarantees the closure completes (happens-before) Do returns,
-	// so the write is visible here without additional synchronization.
-	created := false
-	singletonOnce.Do(func() {
+	if !singletonCreated {
 		cfg := defaultManagerConfig()
 		for _, opt := range opts {
 			opt(&cfg)
 		}
 		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.toCoreConfig())}
-		created = true
-	})
-	if !created {
+		singletonCreated = true
+	} else {
 		core.Logger().Warn("NewManager called more than once; returning existing singleton (options ignored)")
 	}
 	return singletonMgr
