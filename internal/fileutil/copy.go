@@ -131,7 +131,7 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, e
 		writePath := tmpFile.Name()
 		if err := tmpFile.Chmod(mode); err != nil {
 			_ = tmpFile.Close()
-			_ = os.Remove(writePath)
+			_ = os.Remove(writePath) //nolint:gosec // G703: writePath is from os.CreateTemp, not user input.
 			return nil, "", fmt.Errorf("chmod temp file: %w", err)
 		}
 		return tmpFile, writePath, nil
