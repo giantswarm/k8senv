@@ -15,32 +15,49 @@ import (
 // ReleasePurge operations. It is created lazily on first purge and kept open
 // for the lifetime of the instance to amortize connection setup and query
 // compilation across many release cycles.
+//
+// findArgs holds the fixed bind parameters for findStmt (the system namespace
+// paths used in the NOT IN clause). They are constant for the lifetime of the
+// handle and stored here so callers do not need to reconstruct them on every
+// invocation.
 type purgeHandle struct {
 	db       *sql.DB
 	findStmt *sql.Stmt
+	findArgs []any
 }
 
-// findUserNamespacesQuery discovers non-deleted, non-system namespace names.
+// buildFindUserNamespacesQuery constructs the SQL query that discovers
+// non-deleted, non-system namespace names. The NOT IN clause is built
+// dynamically from the systemNamespaces slice so there is a single source of
+// truth — adding a namespace to systemNamespaces automatically excludes it
+// from purge without requiring a manual SQL update.
+//
 // Kine is append-only: the row with the highest id for a given name is the
 // current state. We filter system namespaces server-side to avoid client-side
 // allocation per row. The query returns just the namespace name (suffix after
 // the /registry/namespaces/ prefix, which is 21 characters).
-const findUserNamespacesQuery = `
+//
+// The second return value holds the query arguments (one per system namespace).
+func buildFindUserNamespacesQuery() (query string, args []any) {
+	placeholders := make([]string, len(systemNamespaces))
+	args = make([]any, len(systemNamespaces))
+	for i, ns := range systemNamespaces {
+		placeholders[i] = "?"
+		args[i] = "/registry/namespaces/" + ns
+	}
+	query = fmt.Sprintf(`
 	SELECT SUBSTR(k.name, 22) FROM kine k
 	INNER JOIN (
 		SELECT name, MAX(id) AS max_id FROM kine
-		WHERE name LIKE '/registry/namespaces/%'
-		AND name NOT LIKE '/registry/namespaces/%/%'
+		WHERE name LIKE '/registry/namespaces/%%'
+		AND name NOT LIKE '/registry/namespaces/%%/%%'
 		GROUP BY name
 	) latest ON k.name = latest.name AND k.id = latest.max_id
 	WHERE k.deleted = 0
-	AND k.name NOT IN (
-		'/registry/namespaces/default',
-		'/registry/namespaces/kube-system',
-		'/registry/namespaces/kube-public',
-		'/registry/namespaces/kube-node-lease'
-	)
-`
+	AND k.name NOT IN (%s)
+`, strings.Join(placeholders, ", "))
+	return query, args
+}
 
 // openPurgeHandle opens a SQLite connection configured for purge operations and
 // prepares the reusable find query. The connection uses WAL mode (matching kine),
@@ -62,13 +79,14 @@ func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 	// contention with kine's own connection.
 	db.SetMaxOpenConns(1)
 
-	findStmt, err := db.Prepare(findUserNamespacesQuery)
+	query, findArgs := buildFindUserNamespacesQuery()
+	findStmt, err := db.Prepare(query)
 	if err != nil {
 		db.Close() //nolint:errcheck,gosec // best-effort cleanup on prepare failure
 		return nil, fmt.Errorf("prepare find-namespaces: %w", err)
 	}
 
-	return &purgeHandle{db: db, findStmt: findStmt}, nil
+	return &purgeHandle{db: db, findStmt: findStmt, findArgs: findArgs}, nil
 }
 
 // Close releases the prepared statement and closes the database connection.
@@ -114,9 +132,10 @@ func (h *purgeHandle) purge(ctx context.Context, log *slog.Logger) error {
 }
 
 // findUserNamespaces returns the names of non-system namespaces present in the
-// kine database using the prepared query.
+// kine database using the prepared query. The system namespace paths are bound
+// via h.findArgs, which were computed once at handle creation time.
 func (h *purgeHandle) findUserNamespaces(ctx context.Context) ([]string, error) {
-	rows, err := h.findStmt.QueryContext(ctx)
+	rows, err := h.findStmt.QueryContext(ctx, h.findArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query user namespaces: %w", err)
 	}
