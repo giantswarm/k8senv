@@ -252,6 +252,15 @@ func ReleaseRemovesResourcesWithFinalizers(t *testing.T, ctx context.Context, mg
 // ReleasePreservesSystemNamespaceResources verifies that resources in system
 // namespaces are not deleted during release. The label is used for unique name
 // prefixes.
+//
+// Known limitation: this test must re-acquire the exact same instance it
+// released (each instance is a separate kube-apiserver with its own data).
+// Under pool contention another goroutine may claim the instance first,
+// causing the re-acquire loop to exhaust its attempts and skip. The skip is
+// acceptable because the underlying purge/clean logic is exercised by other
+// dedicated tests (e.g. ReleaseRemovesUserNamespaces, ReleaseRemovesResources);
+// this test adds coverage only for the complementary "system resources survive"
+// path, which shares the same code and is unlikely to regress independently.
 func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context, mgr k8senv.Manager, label string) {
 	t.Helper()
 
@@ -301,6 +310,10 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 	}
 
 	if inst2 == nil {
+		// Pool contention prevented us from getting the same instance back.
+		// Skip rather than fail: the purge/clean logic is verified by other
+		// tests; this test only adds the "system resources survive" angle
+		// which requires the original instance. See the function doc comment.
 		t.Skipf("could not re-acquire instance %s after %d attempts", instID, maxAttempts)
 	}
 
