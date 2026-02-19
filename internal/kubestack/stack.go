@@ -303,19 +303,13 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	startTime := time.Now()
 	s.log.Debug("starting kube stack")
 
-	// 1. Ensure db directory
 	if err := fileutil.EnsureDirForFile(s.config.SQLitePath); err != nil {
 		return fmt.Errorf("create db dir: %w", err)
 	}
 
-	// 2. Allocate ports (registered in the injected port registry)
-	kinePort, apiPort, err := s.ports.AllocatePortPair()
-	if err != nil {
-		return fmt.Errorf("allocate ports: %w", err)
+	if err := s.allocatePorts(); err != nil {
+		return err
 	}
-	s.kinePort = kinePort
-	s.apiPort = apiPort
-	s.log.Debug("ports allocated", "kine_port", kinePort, "api_port", apiPort)
 
 	// Cleanup all resources on any error during Start. A single defer
 	// consolidates cleanup for ports, kine, and apiserver. Resources are
@@ -324,23 +318,46 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	// regardless of which resources were successfully initialized.
 	defer func() {
 		if retErr != nil {
-			cleanupTimeout := s.config.stopTimeout()
-			if err := process.StopCloseAndNil(&s.apiserver, cleanupTimeout); err != nil {
-				s.log.Warn("cleanup apiserver after start failure", "error", err)
-			}
-			if err := process.StopCloseAndNil(&s.kine, cleanupTimeout); err != nil {
-				s.log.Warn("cleanup kine after start failure", "error", err)
-			}
-			s.releasePorts()
+			s.cleanupAfterStartFailure()
 		}
 	}()
 
-	// 3. Create kine process object
+	if err := s.createProcesses(); err != nil {
+		return err
+	}
+
+	if err := s.startAndWaitForReady(processCtx, readyCtx); err != nil {
+		return err
+	}
+
+	s.started = true
+	s.log.Debug("kube stack started", "elapsed", time.Since(startTime))
+	return nil
+}
+
+// allocatePorts reserves a pair of ports from the shared port registry
+// and stores them on the stack for use by kine and kube-apiserver.
+func (s *Stack) allocatePorts() error {
+	kinePort, apiPort, err := s.ports.AllocatePortPair()
+	if err != nil {
+		return fmt.Errorf("allocate ports: %w", err)
+	}
+	s.kinePort = kinePort
+	s.apiPort = apiPort
+	s.log.Debug("ports allocated", "kine_port", kinePort, "api_port", apiPort)
+	return nil
+}
+
+// createProcesses builds the kine and apiserver process objects and
+// generates the kubeconfig file. No OS processes are started; this only
+// prepares the configuration so that startAndWaitForReady can launch both
+// concurrently.
+func (s *Stack) createProcesses() error {
 	kineProc, err := kine.New(kine.Config{
 		Binary:       s.config.KineBinary,
 		DataDir:      s.config.DataDir,
 		SQLitePath:   s.config.SQLitePath,
-		Port:         kinePort,
+		Port:         s.kinePort,
 		CachedDBPath: s.config.CachedDBPath,
 		Logger:       s.log,
 	})
@@ -349,12 +366,12 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	}
 	s.kine = kineProc
 
-	// 4. Create apiserver process object. Endpoint() only needs the port
-	// number, not a running kine process, so this is safe to call now.
+	// Endpoint() only needs the port number, not a running kine process,
+	// so this is safe to call before kine starts.
 	apiserverProc, err := apiserver.New(apiserver.Config{
 		Binary:         s.config.APIServerBinary,
 		DataDir:        s.config.DataDir,
-		Port:           apiPort,
+		Port:           s.apiPort,
 		EtcdEndpoint:   s.kine.Endpoint(),
 		KubeconfigPath: s.config.KubeconfigPath,
 		Logger:         s.log,
@@ -364,20 +381,24 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	}
 	s.apiserver = apiserverProc
 
-	// 5. Generate kubeconfig before starting processes (only needs port)
 	s.log.Debug("generating kubeconfig")
 	if err := s.apiserver.WriteKubeconfig(); err != nil {
 		return fmt.Errorf("write kubeconfig: %w", err)
 	}
+	return nil
+}
 
-	// 6. Start both processes concurrently and wait for readiness.
-	// The apiserver has built-in etcd retry logic, so it tolerates kine
-	// not being ready yet. This removes kine's startup time from the
-	// critical path.
-	// errgroup.WithContext derives a child context that is canceled when any
-	// goroutine returns an error. Using gCtx for readiness checks ensures that
-	// if one process fails to start, the other's readiness poll is canceled
-	// immediately rather than waiting for the full timeout.
+// startAndWaitForReady launches kine and kube-apiserver concurrently under
+// processCtx and waits for both to report readiness within readyCtx.
+//
+// The apiserver has built-in etcd retry logic, so it tolerates kine not
+// being ready yet. This removes kine's startup time from the critical path.
+//
+// errgroup.WithContext derives a child context (gCtx) that is canceled when
+// any goroutine returns an error. Using gCtx for readiness checks ensures
+// that if one process fails to start, the other's readiness poll is
+// canceled immediately rather than waiting for the full timeout.
+func (s *Stack) startAndWaitForReady(processCtx, readyCtx context.Context) error {
 	g, gCtx := errgroup.WithContext(readyCtx)
 
 	g.Go(func() error {
@@ -409,10 +430,22 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("start processes: %w", err)
 	}
-
-	s.started = true
-	s.log.Debug("kube stack started", "elapsed", time.Since(startTime))
 	return nil
+}
+
+// cleanupAfterStartFailure releases all resources acquired during a failed
+// Start call. Resources are cleaned in reverse creation order (apiserver,
+// kine, ports). StopCloseAndNil handles nil pointers gracefully, so this
+// is safe regardless of which resources were successfully initialized.
+func (s *Stack) cleanupAfterStartFailure() {
+	cleanupTimeout := s.config.stopTimeout()
+	if err := process.StopCloseAndNil(&s.apiserver, cleanupTimeout); err != nil {
+		s.log.Warn("cleanup apiserver after start failure", "error", err)
+	}
+	if err := process.StopCloseAndNil(&s.kine, cleanupTimeout); err != nil {
+		s.log.Warn("cleanup kine after start failure", "error", err)
+	}
+	s.releasePorts()
 }
 
 // Stop stops both processes (apiserver first, then kine) and releases
