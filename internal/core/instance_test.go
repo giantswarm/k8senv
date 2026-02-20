@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,14 +65,7 @@ func requirePanicContains(t *testing.T, fn func(), wantSubstr string) {
 		t.Fatal("expected panic, got none")
 	}
 
-	found := false
-	for i := range len(recovered) - len(wantSubstr) + 1 {
-		if recovered[i:i+len(wantSubstr)] == wantSubstr {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !strings.Contains(recovered, wantSubstr) {
 		t.Errorf("panic message %q does not contain %q", recovered, wantSubstr)
 	}
 }
