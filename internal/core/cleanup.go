@@ -25,7 +25,7 @@ import (
 // never be deleted during cleanup. Declared as a fixed-size array to prevent
 // accidental append via the built-in append function, which requires a slice.
 // isSystemNamespace and SystemNamespaceNames are derived from it.
-var systemNamespaces = [4]string{
+var systemNamespaces = [...]string{
 	"default",
 	"kube-system",
 	"kube-public",
