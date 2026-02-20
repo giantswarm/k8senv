@@ -104,7 +104,7 @@ const baselineQueryBackoff = 100 * time.Millisecond
 // The busy_timeout pragma is ordered first so it is active before
 // journal_mode(WAL), which may itself trigger SQLITE_BUSY if kine holds
 // a write lock during connection setup.
-func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
+func openPurgeHandle(ctx context.Context, sqlitePath string) (*purgeHandle, error) {
 	dsn := fmt.Sprintf(
 		"file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(OFF)",
 		sqlitePath, sqliteBusyTimeoutMs,
@@ -133,7 +133,12 @@ func openPurgeHandle(sqlitePath string) (*purgeHandle, error) {
 			break
 		}
 		if attempt < baselineQueryRetries-1 {
-			time.Sleep(backoff)
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				db.Close() //nolint:errcheck,gosec // best-effort cleanup on context cancellation
+				return nil, fmt.Errorf("open purge handle retry: %w", ctx.Err())
+			}
 			backoff *= 2
 		}
 	}

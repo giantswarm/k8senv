@@ -379,7 +379,7 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 	// before any test data exists. This must happen after waitForSystemNamespaces
 	// (system rows are committed) and before started=true (no test writes yet).
 	if i.cfg.ReleaseStrategy == ReleasePurge {
-		h, err := openPurgeHandle(i.sqlitePath)
+		h, err := openPurgeHandle(ctx, i.sqlitePath)
 		if err != nil {
 			i.teardownFailedAttempt(cancel, stack, attempt, err)
 			return false, fmt.Errorf("open purge handle: %w", err)
