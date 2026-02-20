@@ -20,14 +20,14 @@ import (
 )
 
 const (
-	// StressMaxNS is the maximum number of namespaces created per stress subtest.
-	StressMaxNS = 3
+	// stressMaxNS is the maximum number of namespaces created per stress subtest.
+	stressMaxNS = 3
 
-	// StressMaxRes is the maximum number of resources created per namespace.
-	StressMaxRes = 5
+	// stressMaxRes is the maximum number of resources created per namespace.
+	stressMaxRes = 5
 
-	// StressResTypes is the number of distinct resource types that can be created.
-	StressResTypes = 5
+	// stressResTypes is the number of distinct resource types that can be created.
+	stressResTypes = 5
 
 	// defaultStressSubtests is the default number of stress subtests to run.
 	defaultStressSubtests = 100
@@ -114,7 +114,7 @@ func StressCreateRandomResource(
 ) {
 	t.Helper()
 
-	resType := rng.IntN(StressResTypes)
+	resType := rng.IntN(stressResTypes)
 
 	switch resType {
 	case 0:
@@ -128,7 +128,7 @@ func StressCreateRandomResource(
 	case 4:
 		StressCreateServiceAccount(ctx, t, client, ns, idx)
 	default:
-		t.Fatalf("unhandled resource type %d; update switch to match StressResTypes=%d", resType, StressResTypes)
+		t.Fatalf("unhandled resource type %d; update switch to match stressResTypes=%d", resType, stressResTypes)
 	}
 }
 
@@ -365,15 +365,15 @@ func StressWorker(ctx context.Context, t *testing.T, mgr k8senv.Manager, workerI
 	StressVerifyCleanInstance(ctx, t, client)
 	StressVerifyNoCanary(ctx, t, client)
 
-	nsCount := rng.IntN(StressMaxNS) + 1
+	nsCount := rng.IntN(stressMaxNS) + 1
 
 	for n := range nsCount {
 		nsName := UniqueName(nsPrefix)
 		StressCreateNamespace(ctx, t, client, nsName)
 
-		resCount := rng.IntN(StressMaxRes) + 1
+		resCount := rng.IntN(stressMaxRes) + 1
 		for r := range resCount {
-			idx := n*StressMaxRes + r
+			idx := n*stressMaxRes + r
 			StressCreateRandomResource(ctx, t, client, nsName, idx, rng)
 		}
 	}
