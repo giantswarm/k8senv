@@ -127,15 +127,21 @@ func openPurgeHandle(ctx context.Context, sqlitePath string) (*purgeHandle, erro
 	var baselineID int64
 	var queryErr error
 	backoff := baselineQueryBackoff
+	// Single timer reused via Reset to avoid per-iteration time.After leaks.
+	retryTimer := time.NewTimer(backoff)
+	retryTimer.Stop()
+	defer retryTimer.Stop()
 	for attempt := range baselineQueryRetries {
 		queryErr = db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM kine").Scan(&baselineID)
 		if queryErr == nil {
 			break
 		}
 		if attempt < baselineQueryRetries-1 {
+			retryTimer.Reset(backoff)
 			select {
-			case <-time.After(backoff):
+			case <-retryTimer.C:
 			case <-ctx.Done():
+				retryTimer.Stop()
 				db.Close() //nolint:errcheck,gosec // best-effort cleanup on context cancellation
 				return nil, fmt.Errorf("open purge handle retry: %w", ctx.Err())
 			}
