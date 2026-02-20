@@ -224,9 +224,10 @@ func StartWithRetry(
 	return nil, fmt.Errorf("start kubestack after %d attempts: %w", maxRetries, lastErr)
 }
 
-// validateContextPair checks that processCtx and readyCtx are both non-nil
-// and distinct. It is shared by Start and validateStartWithRetryArgs to
-// avoid duplicating the same three-line guard in both call sites.
+// validateContextPair checks that processCtx and readyCtx are both non-nil,
+// not already canceled, and distinct. It is shared by Start and
+// validateStartWithRetryArgs to avoid duplicating the same guard in both
+// call sites.
 //
 // Best-effort guard: catches the most common mistake of passing the same
 // variable for both contexts. Cannot detect logically equivalent but
@@ -234,6 +235,9 @@ func StartWithRetry(
 func validateContextPair(processCtx, readyCtx context.Context) error {
 	if processCtx == nil {
 		return errors.New("processCtx must not be nil")
+	}
+	if processCtx.Err() != nil {
+		return fmt.Errorf("processCtx already canceled: %w", processCtx.Err())
 	}
 	if readyCtx == nil {
 		return errors.New("readyCtx must not be nil")
