@@ -33,7 +33,7 @@ type BaseProcess struct {
 	cmd         *exec.Cmd
 	waitDone    <-chan error    // receives cmd.Wait result; started once in SetupAndStart
 	exited      <-chan struct{} // closed when process exits; readable by multiple goroutines
-	logFiles    LogFiles
+	logFiles    *LogFiles
 	name        string        // Process name for logging (e.g., "kine", "kube-apiserver")
 	log         *slog.Logger  // Logger for operational messages
 	stopTimeout time.Duration // Timeout for auto-stop in Close; zero uses DefaultStopTimeout
@@ -108,7 +108,9 @@ func (b *BaseProcess) Close() {
 				"process", b.name, "error", err)
 		}
 	}
-	b.logFiles.Close()
+	if b.logFiles != nil {
+		b.logFiles.Close()
+	}
 }
 
 // Logger returns the logger used by this process.

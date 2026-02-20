@@ -10,8 +10,27 @@ import (
 	"time"
 )
 
+// noCopy prevents LogFiles from being copied after it holds open file handles.
+// Embedding this type causes go vet's copylocks checker to report any value
+// copy of LogFiles, which would alias the underlying *os.File fields and allow
+// one copy to close the other's file descriptors.
+//
+// This technique is the same pattern used by sync.Mutex and strings.Builder in
+// the standard library.
+type noCopy struct{}
+
+// Lock is a no-op that satisfies sync.Locker, making go vet's copylocks
+// analyzer treat any type embedding noCopy as uncopyable.
+func (*noCopy) Lock() {}
+
+// Unlock is a no-op required to satisfy sync.Locker.
+func (*noCopy) Unlock() {}
+
 // LogFiles manages stdout/stderr file handles for a process.
+// LogFiles must not be copied after creation; use a pointer when passing or
+// storing it to avoid aliasing the underlying file descriptors.
 type LogFiles struct {
+	noCopy     noCopy // sentinel: go vet copylocks flags any copy of this struct
 	stdoutFile *os.File
 	stderrFile *os.File
 	dataDir    string
@@ -60,14 +79,15 @@ func (l *LogFiles) StderrPath() string {
 
 // NewLogFiles creates and initializes log files for a process.
 // The processName is used to generate log file names (e.g., "kine" -> "kine-stdout.log").
-func NewLogFiles(dataDir, processName string) (LogFiles, error) {
-	l := LogFiles{
+// Returns a pointer to prevent copying the file handles.
+func NewLogFiles(dataDir, processName string) (*LogFiles, error) {
+	l := &LogFiles{
 		dataDir:    dataDir,
 		stdoutName: processName + "-stdout.log",
 		stderrName: processName + "-stderr.log",
 	}
 	if err := l.create(); err != nil {
-		return LogFiles{}, err
+		return nil, err
 	}
 	return l, nil
 }
@@ -233,10 +253,11 @@ func expectSignalExit(err error, name string) error {
 
 // StartCmd creates log files, sets up stdout/stderr, and starts the command.
 // On success, caller owns the LogFiles. On failure, log files are closed automatically.
-func StartCmd(cmd *exec.Cmd, dataDir, processName string) (LogFiles, error) {
+// Returns a pointer to prevent copying the file handles.
+func StartCmd(cmd *exec.Cmd, dataDir, processName string) (*LogFiles, error) {
 	logFiles, err := NewLogFiles(dataDir, processName)
 	if err != nil {
-		return LogFiles{}, fmt.Errorf("create %s logs: %w", processName, err)
+		return nil, fmt.Errorf("create %s logs: %w", processName, err)
 	}
 
 	cmd.Stdout = logFiles.stdoutFile
@@ -244,7 +265,7 @@ func StartCmd(cmd *exec.Cmd, dataDir, processName string) (LogFiles, error) {
 
 	if err := cmd.Start(); err != nil {
 		logFiles.Close()
-		return LogFiles{}, fmt.Errorf("start %s process: %w", processName, err)
+		return nil, fmt.Errorf("start %s process: %w", processName, err)
 	}
 
 	return logFiles, nil
