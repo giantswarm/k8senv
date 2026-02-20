@@ -718,6 +718,9 @@ func (i *Instance) Release(token uint64) error {
 		panic("k8senv: double-release of instance " + i.id)
 	}
 
+	// Each strategy handler returns nil on success (continuing to ReleaseToPool
+	// below) or calls failRelease and returns non-nil (failRelease already
+	// called ReleaseFailed, so ReleaseToPool is skipped).
 	switch i.cfg.ReleaseStrategy {
 	case ReleaseNone:
 		// Skip all cleanup — return to pool immediately.
