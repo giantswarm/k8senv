@@ -417,7 +417,7 @@ func TestSetupAndStart_AlreadyStarted(t *testing.T) {
 	bp := NewBaseProcess("test-proc", nil, 0)
 
 	// Start a real process so bp.cmd becomes non-nil.
-	cmd := exec.Command("sleep", "60")
+	cmd := exec.Command("sleep", "10")
 	if err := bp.SetupAndStart(cmd, dataDir); err != nil {
 		t.Fatalf("first SetupAndStart failed: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestSetupAndStart_AlreadyStarted(t *testing.T) {
 	})
 
 	// Attempt a second start while the process is still running.
-	cmd2 := exec.Command("sleep", "60")
+	cmd2 := exec.Command("sleep", "10")
 	err := bp.SetupAndStart(cmd2, dataDir)
 	if err == nil {
 		t.Fatal("expected error for already started process, got nil")
