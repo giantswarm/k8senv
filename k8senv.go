@@ -183,8 +183,9 @@ func resetForTesting() error {
 //
 // This performs no I/O operations; call Initialize before Acquire.
 //
-// The singleton is never reset after Shutdown; callers that need a fresh
-// manager must restart the process (or, in tests, use a separate test binary).
+// The singleton is never reset after Shutdown in production code; callers
+// that need a fresh manager must restart the process. Test packages can use
+// the ResetForTesting helper exported from export_test.go.
 //
 // Panics if any option receives an invalid value. See individual With*
 // functions for constraints.
