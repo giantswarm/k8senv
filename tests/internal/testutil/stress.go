@@ -32,6 +32,10 @@ const (
 	// defaultStressSubtests is the default number of stress subtests to run.
 	defaultStressSubtests = 100
 
+	// Canary names are intentionally static (not unique-per-worker). Each stress
+	// worker acquires its own exclusive kube-apiserver instance from the pool, so
+	// there is no cross-worker collision. The static names let StressVerifyNoCanary
+	// confirm that the previous release actually cleaned up these resources.
 	stressCanaryNS  = "stress-canary"
 	stressCanaryCM  = "canary-cm"
 	stressCanaryPod = "canary-pod"
