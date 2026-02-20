@@ -313,6 +313,11 @@ func (m *Manager) Acquire(ctx context.Context) (*Instance, uint64, error) {
 	// pool.Instances(). When Shutdown iterates pool.Instances() it will
 	// call Stop on this instance again. This is a harmless no-op because
 	// Instance.Stop is idempotent.
+	//
+	// No double-release conflict: stopInstanceDuringShutdown calls
+	// tryRelease (which clears the busy flag) before stopping the instance.
+	// Shutdown's iteration calls inst.Stop directly — it never calls
+	// tryRelease — so the two paths do not conflict on the busy flag.
 	if m.loadState() == managerShuttingDown {
 		// Use a fresh context with the configured stop timeout instead of
 		// acquireCtx, which may have little remaining time after the pool
