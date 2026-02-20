@@ -23,7 +23,8 @@ var (
 	singletonMu      sync.Mutex
 	singletonMgr     Manager
 	singletonCreated bool
-	singletonCfg     managerConfig
+	// singletonCfg is only valid when singletonCreated == true.
+	singletonCfg managerConfig
 )
 
 // Compile-time interface satisfaction checks.
