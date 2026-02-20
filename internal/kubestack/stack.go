@@ -461,6 +461,9 @@ func (s *Stack) createProcesses() error {
 func (s *Stack) startAndWaitForReady(processCtx, readyCtx context.Context) error {
 	g, gCtx := errgroup.WithContext(readyCtx)
 
+	// Each goroutine operates on a distinct Process instance (s.kine vs
+	// s.apiserver), so concurrent calls to Start are safe despite
+	// BaseProcess not being goroutine-safe.
 	g.Go(func() error {
 		s.log.Debug("starting kine")
 		if err := s.kine.Start(processCtx); err != nil {
