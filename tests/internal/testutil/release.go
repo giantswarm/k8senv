@@ -292,35 +292,10 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 	var client2 kubernetes.Interface
 
 	for attempt := range maxAttempts {
-		candidate, candidateClient := AcquireWithClient(ctx, t, mgr)
-
-		if candidate.ID() != instID {
-			t.Logf("attempt %d: got instance %s, want %s; releasing and retrying",
-				attempt+1, candidate.ID(), instID)
-
-			if err := candidate.Release(); err != nil {
-				t.Logf("release error during retry: %v", err)
-			}
-
-			continue
+		inst2, client2 = acquireTargetInstance(ctx, t, mgr, instID, attempt+1)
+		if inst2 != nil {
+			break
 		}
-
-		// Found the target instance. Register cleanup immediately via
-		// t.Cleanup so the instance is always released, even if the test
-		// skips, fatals, or panics after this point.
-		inst2 = candidate
-		client2 = candidateClient
-		t.Logf("re-acquired same instance on attempt %d", attempt+1)
-
-		t.Cleanup(func() {
-			// Clean up the system namespace ConfigMap we created.
-			_ = client2.CoreV1().ConfigMaps("kube-system").Delete(ctx, cmName, metav1.DeleteOptions{})
-			if err := inst2.Release(); err != nil {
-				t.Logf("release error: %v", err)
-			}
-		})
-
-		break
 	}
 
 	if inst2 == nil {
@@ -331,6 +306,16 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 		t.Skipf("could not re-acquire instance %s after %d attempts", instID, maxAttempts)
 	}
 
+	// Register cleanup now that inst2 and client2 are confirmed non-nil.
+	// t.Cleanup runs even if the test skips, fatals, or panics after this point.
+	t.Cleanup(func() {
+		// Clean up the system namespace ConfigMap we created.
+		_ = client2.CoreV1().ConfigMaps("kube-system").Delete(ctx, cmName, metav1.DeleteOptions{})
+		if err := inst2.Release(); err != nil {
+			t.Logf("release error: %v", err)
+		}
+	})
+
 	// Verify the kube-system ConfigMap still exists.
 	got, err := client2.CoreV1().ConfigMaps("kube-system").Get(ctx, cmName, metav1.GetOptions{})
 	if err != nil {
@@ -339,4 +324,58 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 	if got.Data["key"] != "preserved" {
 		t.Errorf("configMap data mismatch: got %v", got.Data)
 	}
+}
+
+// acquireTargetInstance acquires an instance from mgr and returns it (with its
+// client) only if its ID matches targetID. If a non-matching instance is
+// acquired it is released immediately without creating a client, avoiding REST
+// transport leaks. Returns (nil, nil) when the wrong instance is acquired.
+//
+//nolint:ireturn // Test helper returns Instance and kubernetes.Interface matching the public API.
+func acquireTargetInstance(
+	ctx context.Context,
+	t *testing.T,
+	mgr k8senv.Manager,
+	targetID string,
+	attempt int,
+) (k8senv.Instance, kubernetes.Interface) {
+	t.Helper()
+
+	candidate, err := mgr.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("attempt %d: acquire failed: %v", attempt, err)
+	}
+
+	if candidate.ID() != targetID {
+		t.Logf("attempt %d: got instance %s, want %s; releasing and retrying",
+			attempt, candidate.ID(), targetID)
+
+		if relErr := candidate.Release(); relErr != nil {
+			t.Logf("release error during retry: %v", relErr)
+		}
+
+		return nil, nil
+	}
+
+	// Found the target instance. Create the client only now to avoid
+	// leaking REST transports for instances we immediately release.
+	cfg, cfgErr := candidate.Config()
+	if cfgErr != nil {
+		if relErr := candidate.Release(); relErr != nil {
+			t.Logf("release error: %v", relErr)
+		}
+		t.Fatalf("get config for target instance: %v", cfgErr)
+	}
+
+	client, clientErr := kubernetes.NewForConfig(cfg)
+	if clientErr != nil {
+		if relErr := candidate.Release(); relErr != nil {
+			t.Logf("release error: %v", relErr)
+		}
+		t.Fatalf("create client for target instance: %v", clientErr)
+	}
+
+	t.Logf("re-acquired target instance on attempt %d", attempt)
+
+	return candidate, client
 }
