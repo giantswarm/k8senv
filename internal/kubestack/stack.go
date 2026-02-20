@@ -224,21 +224,32 @@ func StartWithRetry(
 	return nil, fmt.Errorf("start kubestack after %d attempts: %w", maxRetries, lastErr)
 }
 
-// validateStartWithRetryArgs validates the non-config arguments to
-// StartWithRetry. Config validation is performed separately.
-func validateStartWithRetryArgs(procCtx, readyCtx context.Context, maxRetries int) error {
-	if procCtx == nil {
-		return errors.New("procCtx must not be nil")
+// validateContextPair checks that processCtx and readyCtx are both non-nil
+// and distinct. It is shared by Start and validateStartWithRetryArgs to
+// avoid duplicating the same three-line guard in both call sites.
+//
+// Best-effort guard: catches the most common mistake of passing the same
+// variable for both contexts. Cannot detect logically equivalent but
+// distinct context values.
+func validateContextPair(processCtx, readyCtx context.Context) error {
+	if processCtx == nil {
+		return errors.New("processCtx must not be nil")
 	}
 	if readyCtx == nil {
 		return errors.New("readyCtx must not be nil")
 	}
-	// Best-effort guard: catches the most common mistake of passing the same
-	// variable for both contexts. Cannot detect logically equivalent but
-	// distinct context values.
-	if procCtx == readyCtx {
-		return errors.New("procCtx and readyCtx must be different contexts; " +
-			"procCtx governs process lifetime, readyCtx governs startup timeout")
+	if processCtx == readyCtx {
+		return errors.New("processCtx and readyCtx must be different contexts; " +
+			"processCtx governs process lifetime, readyCtx governs startup timeout")
+	}
+	return nil
+}
+
+// validateStartWithRetryArgs validates the non-config arguments to
+// StartWithRetry. Config validation is performed separately.
+func validateStartWithRetryArgs(procCtx, readyCtx context.Context, maxRetries int) error {
+	if err := validateContextPair(procCtx, readyCtx); err != nil {
+		return err
 	}
 	if maxRetries < 1 {
 		return fmt.Errorf("maxRetries must be >= 1, got %d", maxRetries)
@@ -329,18 +340,8 @@ func isPermanentStartError(err error) bool {
 // Stop) are not called concurrently on the same Stack. In practice, each Stack
 // is owned by a single Instance whose startMu serializes lifecycle calls.
 func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
-	if processCtx == nil {
-		return errors.New("processCtx must not be nil")
-	}
-	if readyCtx == nil {
-		return errors.New("readyCtx must not be nil")
-	}
-	// Best-effort guard: catches the most common mistake of passing the same
-	// variable for both contexts. Cannot detect logically equivalent but
-	// distinct context values.
-	if processCtx == readyCtx {
-		return errors.New("processCtx and readyCtx must be different contexts; " +
-			"processCtx governs process lifetime, readyCtx governs startup timeout")
+	if err := validateContextPair(processCtx, readyCtx); err != nil {
+		return err
 	}
 	if s.started {
 		return process.ErrAlreadyStarted
