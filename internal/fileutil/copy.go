@@ -26,6 +26,9 @@ type CopyFileOptions struct {
 // If opts is nil, uses default behavior (no chmod, no sync, no atomic).
 // It returns an error if src or dst is empty.
 //
+// If src and dst resolve to the same absolute path, CopyFile returns nil
+// without performing any I/O (copying a file onto itself is a no-op).
+//
 // The destination file is created with the target permissions atomically via
 // os.OpenFile, avoiding a window where the file has broader permissions than
 // intended. If opts.Mode is set, that mode is used; otherwise defaults to 0644.
@@ -39,6 +42,16 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	}
 	if dst == "" {
 		return ErrEmptyDst
+	}
+
+	// Guard against copying a file onto itself. On the non-atomic path,
+	// opening dst with O_TRUNC would truncate src before reading it.
+	same, err := sameAbsPath(src, dst)
+	if err != nil {
+		return err
+	}
+	if same {
+		return nil
 	}
 
 	// Ensure parent directory exists.
@@ -115,6 +128,20 @@ func resolveFileMode(opts *CopyFileOptions) os.FileMode {
 		return *opts.Mode
 	}
 	return 0o644
+}
+
+// sameAbsPath reports whether a and b resolve to the same absolute path.
+// It returns an error if either path cannot be resolved.
+func sameAbsPath(a, b string) (bool, error) {
+	absA, err := filepath.Abs(a)
+	if err != nil {
+		return false, fmt.Errorf("resolve source path: %w", err)
+	}
+	absB, err := filepath.Abs(b)
+	if err != nil {
+		return false, fmt.Errorf("resolve destination path: %w", err)
+	}
+	return absA == absB, nil
 }
 
 // openDstFile opens the destination file for writing. When atomic is true, it
