@@ -637,6 +637,32 @@ func (i *Instance) failRelease(token uint64, msg string, err error) error {
 	return wrapped
 }
 
+// guardReleasePanic guarantees the pool slot is returned even if cleanup panics.
+//
+// Without this guard, a panic inside releaseClean/releasePurge/releaseRestart
+// would unwind the stack before tryRelease or returnSlot are called,
+// permanently leaking the semaphore token and reducing the effective pool
+// capacity for the lifetime of the process.
+//
+// The recovery checks isCurrentToken before acting: if tryRelease was
+// already called (inside ReleaseToPool or ReleaseFailed) before the panic,
+// the token is stale and no further action is needed. If the token is
+// still current, ReleaseFailed is called to advance the generation counter
+// and return the semaphore slot, then the original panic is re-raised so
+// callers still observe the failure.
+//
+// Intended use: defer i.guardReleasePanic(token)
+func (i *Instance) guardReleasePanic(token uint64) {
+	if r := recover(); r != nil {
+		if i.isCurrentToken(token) {
+			i.log.Error("panic during Release cleanup; marking instance as failed to return pool slot",
+				"id", i.id, "panic", r)
+			i.releaser.ReleaseFailed(i, token)
+		}
+		panic(r)
+	}
+}
+
 // Release marks the Instance as free and returns it to the pool.
 //
 // The behavior depends on the ReleaseStrategy configured on the Manager:
@@ -676,29 +702,7 @@ func (i *Instance) Release(token uint64) error {
 		panic("k8senv: Release called on instance with nil releaser")
 	}
 
-	// Guarantee the pool slot is returned even if cleanup panics.
-	//
-	// Without this guard, a panic inside releaseClean/releasePurge/releaseRestart
-	// would unwind the stack before tryRelease or returnSlot are called,
-	// permanently leaking the semaphore token and reducing the effective pool
-	// capacity for the lifetime of the process.
-	//
-	// The recovery checks isCurrentToken before acting: if tryRelease was
-	// already called (inside ReleaseToPool or ReleaseFailed) before the panic,
-	// the token is stale and no further action is needed. If the token is
-	// still current, ReleaseFailed is called to advance the generation counter
-	// and return the semaphore slot, then the original panic is re-raised so
-	// callers still observe the failure.
-	defer func() {
-		if r := recover(); r != nil {
-			if i.isCurrentToken(token) {
-				i.log.Error("panic during Release cleanup; marking instance as failed to return pool slot",
-					"id", i.id, "panic", r)
-				i.releaser.ReleaseFailed(i, token)
-			}
-			panic(r)
-		}
-	}()
+	defer i.guardReleasePanic(token)
 
 	// Validate the token before performing any side effects. A stale token
 	// means this release is from a prior acquisition — the instance has
