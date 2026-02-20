@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/giantswarm/k8senv"
 	"github.com/giantswarm/k8senv/tests/internal/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -88,13 +89,15 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 	defer cancel()
 
 	// The goroutine attempts Acquire on the exhausted pool. It signals on
-	// readyCh just before calling Acquire so the main goroutine knows it is
-	// about to block. The main goroutine waits for that signal before calling
-	// Release, ensuring the Release always happens after the goroutine is
-	// already waiting — eliminating the scheduling race.
+	// readyCh just before calling Acquire so the main goroutine knows the
+	// goroutine is about to call Acquire. The main goroutine waits for that
+	// signal before calling Release. This reduces (but does not eliminate) the
+	// scheduling race: the goroutine may not yet be blocked in the pool's wait
+	// queue when Release fires. The test still passes because the released slot
+	// remains available for the subsequent Acquire call.
 	readyCh := make(chan struct{})
 	acquireCh := make(chan error, 1)
-	var inst3 interface{ Release() error }
+	var inst3 k8senv.Instance
 
 	go func() {
 		close(readyCh) // signal: about to call Acquire
