@@ -58,21 +58,26 @@ type Process struct {
 }
 
 // validate checks that all required Config fields are set and returns an error
-// describing the first missing or invalid field.
+// describing every violation found. It uses errors.Join to report multiple
+// issues at once, allowing callers to fix all problems in a single pass rather
+// than playing whack-a-mole with one error at a time.
 func (c Config) validate() error {
+	var errs []error
+
 	if c.Binary == "" {
-		return errors.New("binary path must not be empty")
+		errs = append(errs, errors.New("binary path must not be empty"))
 	}
 	if c.DataDir == "" {
-		return errors.New("data dir must not be empty")
+		errs = append(errs, errors.New("data dir must not be empty"))
 	}
 	if c.SQLitePath == "" {
-		return errors.New("sqlite path must not be empty")
+		errs = append(errs, errors.New("sqlite path must not be empty"))
 	}
 	if c.Port <= 0 || c.Port > 65535 {
-		return errors.New("port must be between 1 and 65535")
+		errs = append(errs, errors.New("port must be between 1 and 65535"))
 	}
-	return nil
+
+	return errors.Join(errs...)
 }
 
 // New creates a new kine Process with the given configuration.
