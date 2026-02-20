@@ -158,7 +158,7 @@ func TestAPIServerOnlyMode(t *testing.T) {
 		// by the time cleanup runs, and we must not block indefinitely.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = client.CoreV1().Namespaces().Delete(cleanupCtx, nsName, metav1.DeleteOptions{})
+		_ = client.CoreV1().Namespaces().Delete(cleanupCtx, nsName, metav1.DeleteOptions{}) // best-effort
 	})
 
 	// Subtests are intentionally sequential (no t.Parallel) because they share

@@ -13,7 +13,7 @@ import (
 
 	"github.com/giantswarm/k8senv"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
@@ -44,7 +44,7 @@ const (
 var (
 	stressSubtestsOnce  sync.Once
 	stressSubtestsCount int
-	stressSubtestsErr   string
+	errStressSubtests   error
 )
 
 // StressSubtestCount returns the number of stress subtests to run, reading
@@ -58,7 +58,7 @@ func StressSubtestCount(t *testing.T) int {
 		if v := os.Getenv("K8SENV_STRESS_SUBTESTS"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil || n <= 0 {
-				stressSubtestsErr = fmt.Sprintf("invalid K8SENV_STRESS_SUBTESTS=%q: must be a positive integer", v)
+				errStressSubtests = fmt.Errorf("invalid K8SENV_STRESS_SUBTESTS=%q: must be a positive integer", v)
 				return
 			}
 
@@ -66,8 +66,8 @@ func StressSubtestCount(t *testing.T) int {
 		}
 	})
 
-	if stressSubtestsErr != "" {
-		t.Fatalf("%s", stressSubtestsErr)
+	if errStressSubtests != nil {
+		t.Fatalf("%s", errStressSubtests)
 	}
 
 	return stressSubtestsCount
@@ -80,12 +80,12 @@ func isRetryable(err error) bool {
 	// IsNotFound is retryable because in tests the API server's admission
 	// controller namespace cache may not have caught up yet after a namespace
 	// is created, causing namespaced creates to transiently return NotFound.
-	return errors.IsNotFound(err) ||
-		errors.IsTimeout(err) ||
-		errors.IsServerTimeout(err) ||
-		errors.IsTooManyRequests(err) ||
-		errors.IsInternalError(err) ||
-		errors.IsServiceUnavailable(err)
+	return k8serrors.IsNotFound(err) ||
+		k8serrors.IsTimeout(err) ||
+		k8serrors.IsServerTimeout(err) ||
+		k8serrors.IsTooManyRequests(err) ||
+		k8serrors.IsInternalError(err) ||
+		k8serrors.IsServiceUnavailable(err)
 }
 
 // StressCreateNamespace creates a namespace and fails the test on error.
@@ -285,7 +285,7 @@ func StressVerifyNoCanary(ctx context.Context, t *testing.T, client kubernetes.I
 	t.Helper()
 
 	_, err := client.CoreV1().Namespaces().Get(ctx, stressCanaryNS, metav1.GetOptions{})
-	if !errors.IsNotFound(err) {
+	if !k8serrors.IsNotFound(err) {
 		t.Fatalf("canary namespace %q still exists (err=%v)", stressCanaryNS, err)
 	}
 }

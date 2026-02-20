@@ -77,7 +77,7 @@ func TestPoolConcurrentAccess(t *testing.T) {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		t.Errorf("concurrent acquire/release failed: %v", err)
+		t.Fatalf("concurrent acquire/release failed: %v", err)
 	}
 }
 

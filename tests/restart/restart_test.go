@@ -4,6 +4,7 @@ package k8senv_restart_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,13 +38,14 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 		t.Fatalf("cycle %d: acquire failed: %v", cycle, err)
 	}
 
-	// released tracks whether the explicit Release (the behavior under test)
-	// has already been called, so the deferred safety net can skip it.
-	released := false
+	// releaseOnce ensures the instance is released exactly once. The explicit
+	// Release call below is the behavior under test; the deferred call is a
+	// safety net that fires only if the test exits early (e.g. via t.Fatalf).
+	var releaseOnce sync.Once
 	defer func() {
-		if !released {
+		releaseOnce.Do(func() {
 			inst.Release() //nolint:errcheck,gosec // safety net on test failure
-		}
+		})
 	}()
 
 	// Verify the instance works.
@@ -64,9 +66,9 @@ func runRestartCycle(t *testing.T, ctx context.Context, cycle int) {
 
 	// Release — ReleaseRestart stops the instance.
 	// This is the core behavior under test; a failure here must fail the test.
-	if err := inst.Release(); err != nil {
-		t.Errorf("cycle %d: release error: %v", cycle, err)
-	}
-
-	released = true
+	releaseOnce.Do(func() {
+		if err := inst.Release(); err != nil {
+			t.Errorf("cycle %d: release error: %v", cycle, err)
+		}
+	})
 }
