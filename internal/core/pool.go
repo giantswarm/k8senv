@@ -277,6 +277,11 @@ func (p *Pool) returnSlot() {
 		// Semaphore is full. After Close() this is expected because no
 		// Acquire will drain tokens. During normal operation it indicates
 		// a bug: more releases than acquires.
+		// TOCTOU note: there is a brief window between the failed send above
+		// and this check where Close() could set p.closed but not yet close
+		// closeCh. This is benign: Close() closes closeCh immediately after
+		// setting p.closed (both under mu), so any racing goroutine will see
+		// closeCh closed on its next iteration.
 		select {
 		case <-p.closeCh:
 			Logger().Debug("returnSlot: semaphore full after pool close, token dropped (expected)")

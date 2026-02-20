@@ -280,7 +280,7 @@ func (m *Manager) instanceFactory(baseDataDir string, cfg InstanceConfig) Instan
 // Returns ErrNotInitialized if Initialize has not been called.
 // Returns ErrShuttingDown if the Manager is shutting down.
 func (m *Manager) Acquire(ctx context.Context) (*Instance, uint64, error) {
-	// Fast path: single atomic load replaces the former two-mutex acquirePreChecks.
+	// Fast path: two atomic loads (state + pool) replace the former two-mutex acquirePreChecks.
 	switch m.loadState() {
 	case managerShuttingDown:
 		return nil, 0, ErrShuttingDown
