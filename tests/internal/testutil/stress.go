@@ -278,24 +278,15 @@ func StressVerifyCleanInstance(ctx context.Context, t *testing.T, client kuberne
 	}
 }
 
-// StressVerifyNoCanary asserts that the canary namespace and its resources do
-// not exist, confirming cleanup removed them.
+// StressVerifyNoCanary asserts that the canary namespace does not exist,
+// confirming cleanup removed it. Resources inside the namespace are necessarily
+// gone when the namespace itself is gone, so no further checks are needed.
 func StressVerifyNoCanary(ctx context.Context, t *testing.T, client kubernetes.Interface) {
 	t.Helper()
 
 	_, err := client.CoreV1().Namespaces().Get(ctx, stressCanaryNS, metav1.GetOptions{})
 	if !errors.IsNotFound(err) {
 		t.Fatalf("canary namespace %q still exists (err=%v)", stressCanaryNS, err)
-	}
-
-	_, err = client.CoreV1().ConfigMaps(stressCanaryNS).Get(ctx, stressCanaryCM, metav1.GetOptions{})
-	if !errors.IsNotFound(err) {
-		t.Fatalf("canary ConfigMap %s/%s still exists (err=%v)", stressCanaryNS, stressCanaryCM, err)
-	}
-
-	_, err = client.CoreV1().Pods(stressCanaryNS).Get(ctx, stressCanaryPod, metav1.GetOptions{})
-	if !errors.IsNotFound(err) {
-		t.Fatalf("canary Pod %s/%s still exists (err=%v)", stressCanaryNS, stressCanaryPod, err)
 	}
 }
 
