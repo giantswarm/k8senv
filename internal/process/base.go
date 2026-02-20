@@ -62,6 +62,11 @@ func NewBaseProcess(name string, logger *slog.Logger, stopTimeout time.Duration)
 // Safe to call when cmd is nil or cmd.Process is nil (e.g., if Start was
 // never called, the OS failed to assign a process, or Stop was already
 // called); returns nil immediately in those cases.
+//
+// IMPORTANT: Stop does not close log file handles. Callers MUST call Close
+// after Stop to release the log file descriptors. Failing to call Close after
+// Stop will leak the log file handles opened by SetupAndStart. All callers
+// should use the StopCloseAndNil helper, which calls both Stop and Close.
 func (b *BaseProcess) Stop(timeout time.Duration) error {
 	if b.cmd == nil || b.cmd.Process == nil {
 		b.cmd = nil
