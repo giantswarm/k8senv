@@ -1,6 +1,7 @@
 package fileutil
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -130,18 +131,42 @@ func resolveFileMode(opts *CopyFileOptions) os.FileMode {
 	return 0o644
 }
 
-// sameAbsPath reports whether a and b resolve to the same absolute path.
-// It returns an error if either path cannot be resolved.
+// sameAbsPath reports whether a and b refer to the same file system path.
+// It resolves symlinks via filepath.EvalSymlinks so that a symlink and its
+// target are considered the same path. If a path does not exist yet (e.g. dst
+// before the first copy), EvalSymlinks fails with os.ErrNotExist; in that case
+// the function falls back to filepath.Abs, which is sufficient because a
+// non-existent destination cannot be the same file as an existing source.
 func sameAbsPath(a, b string) (bool, error) {
-	absA, err := filepath.Abs(a)
+	resolvedA, err := resolvePathForComparison(a)
 	if err != nil {
 		return false, fmt.Errorf("resolve source path: %w", err)
 	}
-	absB, err := filepath.Abs(b)
+	resolvedB, err := resolvePathForComparison(b)
 	if err != nil {
 		return false, fmt.Errorf("resolve destination path: %w", err)
 	}
-	return absA == absB, nil
+	return resolvedA == resolvedB, nil
+}
+
+// resolvePathForComparison returns the canonical form of p for equality checks.
+// It calls filepath.EvalSymlinks to dereference symlinks. If the path does not
+// exist, EvalSymlinks returns an error wrapping os.ErrNotExist; in that case
+// filepath.Abs is used as a fallback so that non-existent paths can still be
+// compared by their lexical absolute form.
+func resolvePathForComparison(p string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(p)
+	if err == nil {
+		return resolved, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		abs, absErr := filepath.Abs(p)
+		if absErr != nil {
+			return "", fmt.Errorf("abs: %w", absErr)
+		}
+		return abs, nil
+	}
+	return "", fmt.Errorf("eval symlinks: %w", err)
 }
 
 // openDstFile opens the destination file for writing. When atomic is true, it

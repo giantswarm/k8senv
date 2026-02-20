@@ -269,6 +269,33 @@ func TestCopyFile_OverwritesExisting(t *testing.T) {
 	}
 }
 
+func TestCopyFile_SameFileViaSymlink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Create the real file.
+	src := createTestFile(t, dir, "source.txt", "original")
+
+	// Create a symlink directory that points at the same directory.
+	symlinkDir := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, symlinkDir); err != nil {
+		t.Skipf("symlinks not supported on this platform: %v", err)
+	}
+
+	// dst is the same inode as src, but reached through the symlink.
+	dst := filepath.Join(symlinkDir, "source.txt")
+
+	// CopyFile should detect the same underlying file and return nil without
+	// performing any I/O, preserving the original content.
+	if err := CopyFile(src, dst, nil); err != nil {
+		t.Fatalf("CopyFile() error: %v", err)
+	}
+
+	if got := readDst(t, src); got != "original" {
+		t.Errorf("content after self-copy = %q, want %q", got, "original")
+	}
+}
+
 func TestCopyFile_AtomicNoTempFiles(t *testing.T) {
 	t.Parallel()
 	srcDir := t.TempDir()
