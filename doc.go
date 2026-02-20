@@ -55,7 +55,11 @@
 //	        }
 //	        // Use t.Cleanup instead of defer so Release runs when the
 //	        // subtest completes, not when the outer function returns.
-//	        t.Cleanup(func() { _ = inst.Release() })
+//	        t.Cleanup(func() {
+//	            if err := inst.Release(); err != nil {
+//	                t.Logf("release: %v", err)
+//	            }
+//	        })
 //	        // Use unique namespaces for isolation
 //	    })
 //	}
