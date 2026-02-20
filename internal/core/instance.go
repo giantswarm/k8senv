@@ -171,10 +171,11 @@ type Instance struct {
 	// purge is a persistent SQLite connection and prepared DELETE statement
 	// for ReleasePurge operations. Opened eagerly during startup (after
 	// system namespaces are verified) to capture the baseline ID before any
-	// test data exists. Closed by closePurge (called from Stop). Only used
-	// when ReleaseStrategy is ReleasePurge. Access is safe without
-	// synchronization: the pool contract guarantees at most one goroutine
-	// holds the instance between Acquire and Release.
+	// test data exists. Extracted and closed by Stop outside startMu to
+	// avoid holding the lock during I/O. Only used when ReleaseStrategy is
+	// ReleasePurge. Access is safe without synchronization: the pool
+	// contract guarantees at most one goroutine holds the instance between
+	// Acquire and Release.
 	purge *purgeHandle
 
 	// log is the instance-scoped logger.
@@ -218,16 +219,6 @@ func (i *Instance) tryRelease(token uint64) bool {
 // still performed via tryRelease (CAS) after side effects complete.
 func (i *Instance) isCurrentToken(token uint64) bool {
 	return i.gen.Load() == token
-}
-
-// closePurge closes the persistent purge handle if open.
-func (i *Instance) closePurge() {
-	if i.purge != nil {
-		if err := i.purge.Close(); err != nil {
-			i.log.Warn("purge: close persistent sqlite", "error", err)
-		}
-		i.purge = nil
-	}
 }
 
 // Err returns the last error that occurred on this instance.
@@ -562,15 +553,28 @@ func (i *Instance) Stop(ctx context.Context) error {
 	// lock before performing the expensive stack.Stop I/O. After unlock,
 	// started is false and stack is nil, so concurrent Start creates a new
 	// stack independently and concurrent Stop returns immediately.
+	// purge is also extracted and cleared under the lock so its Close I/O
+	// runs after the lock is released, matching the same pattern used for
+	// stack and cancel.
 	stack := i.stack
 	cancel := i.cancel
+	purge := i.purge
 	i.stack = nil
 	i.cancel = nil
+	i.purge = nil
 	i.clients.Store(nil)
-	i.closePurge()
 	i.started.Store(false)
 
 	i.startMu.Unlock()
+
+	// Close the purge handle outside the lock. purgeHandle.Close performs
+	// I/O (closing a prepared SQL statement and a database connection) that
+	// must not run under startMu to avoid blocking concurrent Start calls.
+	if purge != nil {
+		if err := purge.Close(); err != nil {
+			i.log.Warn("purge: close persistent sqlite", "error", err)
+		}
+	}
 
 	if stack == nil {
 		if cancel != nil {
