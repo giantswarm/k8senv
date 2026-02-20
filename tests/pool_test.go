@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/giantswarm/k8senv"
 	"github.com/giantswarm/k8senv/tests/internal/testutil"
@@ -174,16 +173,4 @@ func parallelAcquisitionSubtest(t *testing.T, mgr k8senv.Manager, mu *sync.Mutex
 	if err != nil {
 		t.Fatalf("failed to create namespace: %v", err)
 	}
-	// t.Cleanup runs after the subtest function returns (and its defers
-	// have fired), so inst.Release() in the defer above completes before
-	// this cleanup deletes the namespace. This ordering is guaranteed by
-	// the testing package: defers run on function exit, then t.Cleanup
-	// callbacks run in LIFO order before the parent test proceeds.
-	t.Cleanup(func() {
-		// Use a fresh context with timeout because the test's ctx may be canceled
-		// by the time cleanup runs, and we must not block indefinitely.
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = client.CoreV1().Namespaces().Delete(cleanupCtx, nsName, metav1.DeleteOptions{})
-	})
 }
