@@ -40,7 +40,7 @@ type WaitReadyConfig struct {
 	Interval      time.Duration   // Poll interval
 	Timeout       time.Duration   // Overall timeout
 	Name          string          // For logging (e.g., "kine", "apiserver")
-	Port          int             // For logging context
+	Port          int             // For logging context only; not validated
 	Logger        *slog.Logger    // Optional logger (defaults to slog.Default())
 	ProcessExited <-chan struct{} // If non-nil, abort immediately when closed (process died)
 }
