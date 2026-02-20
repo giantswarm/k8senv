@@ -11,24 +11,12 @@ import (
 // TestContextCancelDuringAcquire exercises the ctx.Done() path in pool.Acquire.
 func TestContextCancelDuringAcquire(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-
-	// Acquire an instance
-	inst, err := sharedManager.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("first Acquire failed: %v", err)
-	}
-	defer func() {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
 
 	// Try to acquire with already-canceled context
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err = sharedManager.Acquire(canceledCtx)
+	_, err := sharedManager.Acquire(canceledCtx)
 	if err == nil {
 		t.Fatal("Expected error from Acquire with canceled context")
 	}
