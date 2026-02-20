@@ -211,6 +211,23 @@ func TestBaseProcess_StopWhenNotStarted(t *testing.T) {
 	}
 }
 
+func TestBaseProcess_StopWhenCmdProcessIsNil(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a state where cmd is set but cmd.Process is nil — this can
+	// occur if the OS failed to assign a process after cmd.Start was called
+	// (e.g., a partial failure between log file setup and actual launch).
+	// Stop must not dereference cmd.Process in this case.
+	bp := NewBaseProcess("test", nil, 0)
+	bp.cmd = &exec.Cmd{} // cmd is non-nil, but cmd.Process is nil
+	if err := bp.Stop(time.Second); err != nil {
+		t.Fatalf("Stop with nil cmd.Process should return nil, got %v", err)
+	}
+	if bp.IsStarted() {
+		t.Error("IsStarted should return false after Stop clears cmd")
+	}
+}
+
 func TestBaseProcess_CloseWhenNotStarted(t *testing.T) {
 	t.Parallel()
 

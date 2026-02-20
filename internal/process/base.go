@@ -59,10 +59,14 @@ func NewBaseProcess(name string, logger *slog.Logger, stopTimeout time.Duration)
 // Stop terminates the process with the given timeout.
 // After Stop returns, IsStarted reports false regardless of whether the stop
 // succeeded, because the process is no longer in a known-running state.
-// Safe to call when cmd is nil (e.g., if Start was never called or Stop was
-// already called); returns nil immediately.
+// Safe to call when cmd is nil or cmd.Process is nil (e.g., if Start was
+// never called, the OS failed to assign a process, or Stop was already
+// called); returns nil immediately in those cases.
 func (b *BaseProcess) Stop(timeout time.Duration) error {
-	if b.cmd == nil {
+	if b.cmd == nil || b.cmd.Process == nil {
+		b.cmd = nil
+		b.waitDone = nil
+		b.exited = nil
 		return nil
 	}
 	pid := b.cmd.Process.Pid
