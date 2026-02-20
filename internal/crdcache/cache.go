@@ -364,16 +364,17 @@ func findPendingCRDs(crdList *apiextensionsv1.CustomResourceDefinitionList) []st
 }
 
 // logCRDEstablishmentProgress logs warnings and debug messages about pending
-// CRDs. It sets *warned to true after the first warning is emitted.
+// CRDs. It returns true after the first warning has been emitted, allowing
+// the caller to suppress duplicate warnings across loop iterations.
 func logCRDEstablishmentProgress(
 	ctx context.Context,
 	logger *slog.Logger,
 	pending []string,
 	startTime time.Time,
-	warned *bool,
-) {
-	if !*warned && time.Since(startTime) >= longWaitThreshold {
-		*warned = true
+	warned bool,
+) bool {
+	if !warned && time.Since(startTime) >= longWaitThreshold {
+		warned = true
 		// Clone pending before passing to slog: the caller reuses the slice
 		// across loop iterations, so an async log handler could observe
 		// mutated contents without a defensive copy.
@@ -389,6 +390,8 @@ func logCRDEstablishmentProgress(
 			"pending_crds", slices.Clone(pending),
 		)
 	}
+
+	return warned
 }
 
 // waitForCRDsEstablished polls until all CRDs in the cluster have the
@@ -436,7 +439,7 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 			return nil
 		}
 
-		logCRDEstablishmentProgress(ctx, logger, pending, startTime, &warned)
+		warned = logCRDEstablishmentProgress(ctx, logger, pending, startTime, warned)
 
 		select {
 		case <-ctx.Done():
