@@ -21,15 +21,7 @@ func TestCRDDirCaching(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, err := sharedManager.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("failed to acquire instance: %v", err)
-	}
-	defer func() {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
+	inst, _, _ := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 
 	verifyCRDExists(ctx, t, inst, "widgets.example.com")
 }
@@ -39,15 +31,7 @@ func TestCRDDirWithMultipleCRDs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, err := sharedManager.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("failed to acquire instance: %v", err)
-	}
-	defer func() {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
+	inst, _, _ := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 
 	verifyCRDExists(ctx, t, inst, "gadgets.example.com")
 	verifyCRDExists(ctx, t, inst, "gizmos.example.com")
@@ -58,15 +42,7 @@ func TestCRDDirWithEstablishedCondition(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, err := sharedManager.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("failed to acquire instance: %v", err)
-	}
-	defer func() {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
+	inst, _, _ := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 
 	// Verify the CRD API is available
 	cfg, err := inst.Config()
@@ -104,12 +80,7 @@ func TestCRDDirWithMultiDocumentYAML(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
-	defer func() {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
+	inst, client, _ := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 
 	// Verify the multi-doc CRD was applied
 	verifyCRDExists(ctx, t, inst, "thingamajigs.example.com")
@@ -129,15 +100,7 @@ func TestCRDDirWithYmlExtension(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, err := sharedManager.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("acquire failed: %v", err)
-	}
-	defer func() {
-		if err := inst.Release(); err != nil {
-			t.Logf("release error: %v", err)
-		}
-	}()
+	inst, _, _ := testutil.AcquireWithGuardedRelease(ctx, t, sharedManager)
 
 	// The sprocket CRD comes from a .yml file
 	verifyCRDExists(ctx, t, inst, "sprockets.example.com")
