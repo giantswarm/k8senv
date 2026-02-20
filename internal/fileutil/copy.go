@@ -67,7 +67,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 	defer func() {
-		if retErr != nil {
+		if retErr != nil && writePath != dst {
 			_ = os.Remove(writePath)
 		}
 	}()
