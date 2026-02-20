@@ -58,19 +58,15 @@ func TestCRDDirWithEstablishedCondition(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	inst, client := testutil.AcquireWithClient(ctx, t, sharedManager)
+	inst, err := sharedManager.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("failed to acquire instance: %v", err)
+	}
 	defer func() {
 		if err := inst.Release(); err != nil {
 			t.Logf("release error: %v", err)
 		}
 	}()
-
-	// Create a test namespace
-	nsName := testutil.UniqueName("test-widgets")
-	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
-	if _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("failed to create namespace: %v", err)
-	}
 
 	// Verify the CRD API is available
 	cfg, err := inst.Config()
@@ -147,11 +143,10 @@ func TestCRDDirWithYmlExtension(t *testing.T) {
 	verifyCRDExists(ctx, t, inst, "sprockets.example.com")
 }
 
-// TestReleaseCleanupCRDResources verifies that Release() removes CRD
-// instances in non-system namespaces. This exercises the dynamic-client
-// resource cleanup path for custom resource types that are not known at
-// compile time.
-func TestReleaseCleanupCRDResources(t *testing.T) {
+// TestCRDResourcesRemovedAfterRelease verifies that Release() removes CRD
+// instances in non-system namespaces. After releasing and re-acquiring an
+// instance, any Widget CRs created in user namespaces must be absent.
+func TestCRDResourcesRemovedAfterRelease(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
