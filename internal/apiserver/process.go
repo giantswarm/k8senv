@@ -127,6 +127,7 @@ type startFiles struct {
 // Start launches the kube-apiserver process. It prepares token, certificate,
 // and auth config files in parallel before starting the process.
 func (p *Process) Start(ctx context.Context) error {
+	// Fast-path: avoid expensive file prep if already started.
 	if p.base.IsStarted() {
 		return process.ErrAlreadyStarted
 	}

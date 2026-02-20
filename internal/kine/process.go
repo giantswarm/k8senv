@@ -92,6 +92,7 @@ func New(cfg Config) (*Process, error) {
 // Start launches the kine process. If CachedDBPath is set in the
 // configuration, Start prepopulates the SQLite database before launching.
 func (p *Process) Start(ctx context.Context) error {
+	// Fast-path: avoid expensive file prep if already started.
 	if p.base.IsStarted() {
 		return process.ErrAlreadyStarted
 	}
