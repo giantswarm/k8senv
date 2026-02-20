@@ -107,8 +107,9 @@ func TestParallelAcquisition(t *testing.T) {
 
 		if totalUses != 10 {
 			t.Errorf(
-				"expected 10 total acquisitions, got %d",
+				"expected 10 total acquisitions, got %d (usage: %v)",
 				totalUses,
+				instanceUsage,
 			)
 		}
 	})
