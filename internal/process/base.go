@@ -110,6 +110,7 @@ func (b *BaseProcess) Close() {
 	}
 	if b.logFiles != nil {
 		b.logFiles.Close()
+		b.logFiles = nil
 	}
 }
 
