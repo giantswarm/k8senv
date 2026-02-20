@@ -144,6 +144,7 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, uint64, error) {
 	// LIFO: pop from end of free stack if available.
 	if n := len(p.free); n > 0 {
 		inst := p.free[n-1]
+		p.free[n-1] = nil // nil the slot before reslicing so the GC can collect it
 		p.free = p.free[:n-1]
 		p.mu.Unlock()
 		// Safe without the mutex: the instance was just removed from p.free
