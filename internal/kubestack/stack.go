@@ -208,7 +208,7 @@ func StartWithRetry(
 
 		if err := stack.Start(procCtx, readyCtx); err != nil {
 			lastErr = err
-			logFailedStartAttempt(log, stack, cfg, err, attempt, maxRetries)
+			cleanupFailedStartAttempt(log, stack, cfg, err, attempt, maxRetries)
 			if isPermanentStartError(err) {
 				return nil, fmt.Errorf("permanent start failure (not retried): %w", err)
 			}
@@ -257,9 +257,10 @@ func validateStartWithRetryArgs(procCtx, readyCtx context.Context, maxRetries in
 	return nil
 }
 
-// logFailedStartAttempt logs a warning for a failed start attempt and cleans
-// up the partially-started stack.
-func logFailedStartAttempt(log *slog.Logger, stack *Stack, cfg Config, err error, attempt, maxRetries int) {
+// cleanupFailedStartAttempt logs a warning for a failed start attempt and
+// stops the partially-started stack to release any allocated ports or
+// processes before the next retry.
+func cleanupFailedStartAttempt(log *slog.Logger, stack *Stack, cfg Config, err error, attempt, maxRetries int) {
 	log.Warn("kubestack start attempt failed",
 		"attempt", attempt,
 		"max_retries", maxRetries,
@@ -293,8 +294,8 @@ var permanentStartErrors = []error{
 	context.DeadlineExceeded,
 }
 
-// isPermanentStartError reports whether err is a permanent failure that will
-// not resolve on retry.
+// isPermanentStartError reports whether err matches any entry in
+// permanentStartErrors using errors.Is semantics.
 func isPermanentStartError(err error) bool {
 	for _, target := range permanentStartErrors {
 		if errors.Is(err, target) {
