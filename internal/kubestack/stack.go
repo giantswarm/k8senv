@@ -51,6 +51,10 @@ type Config struct {
 }
 
 // Stack manages a coordinated kine + kube-apiserver pair.
+//
+// Stack is not safe for concurrent use. Callers must serialize access to all
+// methods, including Start, Stop, and IsStarted. In practice, each Stack is
+// owned by a single Instance whose startMu mutex serializes lifecycle calls.
 type Stack struct {
 	// Immutable after New: configuration, logger, and shared port registry.
 	config Config
@@ -541,6 +545,11 @@ func (s *Stack) Stop(timeout time.Duration) error {
 	s.releasePorts()
 
 	return errors.Join(errs...)
+}
+
+// IsStarted reports whether the stack has been started and not yet stopped.
+func (s *Stack) IsStarted() bool {
+	return s.started
 }
 
 // releasePorts releases allocated ports back to the registry and zeroes
