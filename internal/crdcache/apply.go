@@ -126,11 +126,8 @@ func (dm *discoveryMapper) RESTMapping(gk schema.GroupKind, versions ...string) 
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 
-	mapping, err := dm.mapper.RESTMapping(gk, versions...)
-	if err != nil {
-		return nil, fmt.Errorf("rest mapping lookup: %w", err)
-	}
-	return mapping, nil
+	//nolint:wrapcheck // caller (discoverRESTMapping) always wraps with "get rest mapping for <gvk>: %w"
+	return dm.mapper.RESTMapping(gk, versions...)
 }
 
 // refresh rebuilds the cached RESTMapper from live API server discovery.
