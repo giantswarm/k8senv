@@ -426,6 +426,10 @@ func waitForCRDsEstablished(ctx context.Context, logger *slog.Logger, restCfg *r
 	defer ticker.Stop()
 
 	for {
+		if ctx.Err() != nil {
+			return fmt.Errorf("crd establishment did not complete: %w", ErrCRDEstablishTimeout)
+		}
+
 		crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("list CRDs: %w", err)
