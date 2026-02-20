@@ -60,7 +60,7 @@ func TestPoolTimeout(t *testing.T) {
 func TestPoolReleaseUnblocks(t *testing.T) {
 	ctx := context.Background()
 
-	// Acquire both instances.
+	// Acquire both instances to exhaust the pool (size = 2).
 	inst1, err := sharedManager.Acquire(ctx)
 	if err != nil {
 		t.Fatalf("failed to acquire first instance: %v", err)
@@ -84,39 +84,46 @@ func TestPoolReleaseUnblocks(t *testing.T) {
 	}
 	t.Cleanup(releaseInst2)
 
-	// Release one instance in a goroutine. The readyCh gate ensures the
-	// goroutine does not call Release before the test is ready, but there is
-	// no strict ordering between close(readyCh) and the Acquire call below —
-	// either may execute first. The test works because the 30-second timeout
-	// is long enough for the release to happen regardless of scheduling order.
-	readyCh := make(chan struct{})
-	releaseCh := make(chan error, 1)
-	go func() {
-		<-readyCh
-		releaseCh <- inst1.Release()
-	}()
-
-	// Ungate the goroutine and call the blocking Acquire.
-	close(readyCh)
-
 	acquireCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	inst3, err := sharedManager.Acquire(acquireCtx)
-	if err != nil {
-		t.Fatalf("expected Acquire to succeed after release, got: %v", err)
-	}
-	defer func() {
-		if relErr := inst3.Release(); relErr != nil {
-			t.Logf("release error: %v", relErr)
+	// The goroutine attempts Acquire on the exhausted pool. It signals on
+	// readyCh just before calling Acquire so the main goroutine knows it is
+	// about to block. The main goroutine waits for that signal before calling
+	// Release, ensuring the Release always happens after the goroutine is
+	// already waiting — eliminating the scheduling race.
+	readyCh := make(chan struct{})
+	acquireCh := make(chan error, 1)
+	var inst3 interface{ Release() error }
+
+	go func() {
+		close(readyCh) // signal: about to call Acquire
+		acquired, acquireErr := sharedManager.Acquire(acquireCtx)
+		if acquireErr == nil {
+			inst3 = acquired
 		}
+		acquireCh <- acquireErr
 	}()
 
-	// Check the goroutine's release result now that Acquire has returned
-	// (the goroutine must have completed for Acquire to unblock).
-	if relErr := <-releaseCh; relErr != nil {
-		t.Logf("release error from goroutine: %v", relErr)
+	// Wait until the goroutine has signaled it is about to block on Acquire,
+	// then release inst1 to free a pool slot.
+	<-readyCh
+	if relErr := inst1.Release(); relErr != nil {
+		t.Logf("release error: %v", relErr)
 	}
+
+	// Wait for the goroutine's Acquire to complete.
+	if acquireErr := <-acquireCh; acquireErr != nil {
+		t.Fatalf("expected Acquire to succeed after release, got: %v", acquireErr)
+	}
+
+	defer func() {
+		if inst3 != nil {
+			if relErr := inst3.Release(); relErr != nil {
+				t.Logf("release error: %v", relErr)
+			}
+		}
+	}()
 
 	// Clean up inst2.
 	releaseInst2()
