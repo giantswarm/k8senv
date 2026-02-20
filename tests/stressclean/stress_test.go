@@ -16,7 +16,7 @@ import (
 func TestStressClean(t *testing.T) {
 	t.Parallel()
 
-	for i := range testutil.StressSubtestCount() {
+	for i := range testutil.StressSubtestCount(t) {
 		t.Run(fmt.Sprintf("worker-%d", i), func(t *testing.T) {
 			t.Parallel()
 			testutil.StressWorker(context.Background(), t, sharedManager, i, "stress-clean")

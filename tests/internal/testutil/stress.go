@@ -44,22 +44,31 @@ const (
 var (
 	stressSubtestsOnce  sync.Once
 	stressSubtestsCount int
+	stressSubtestsErr   string
 )
 
 // StressSubtestCount returns the number of stress subtests to run, reading
-// K8SENV_STRESS_SUBTESTS on first call. Panics if the env var is set but invalid.
-func StressSubtestCount() int {
+// K8SENV_STRESS_SUBTESTS on first call. Calls t.Fatalf if the env var is set
+// but contains an invalid value.
+func StressSubtestCount(t *testing.T) int {
+	t.Helper()
+
 	stressSubtestsOnce.Do(func() {
 		stressSubtestsCount = defaultStressSubtests
 		if v := os.Getenv("K8SENV_STRESS_SUBTESTS"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil || n <= 0 {
-				panic(fmt.Sprintf("invalid K8SENV_STRESS_SUBTESTS=%q: must be a positive integer", v))
+				stressSubtestsErr = fmt.Sprintf("invalid K8SENV_STRESS_SUBTESTS=%q: must be a positive integer", v)
+				return
 			}
 
 			stressSubtestsCount = n
 		}
 	})
+
+	if stressSubtestsErr != "" {
+		t.Fatalf("%s", stressSubtestsErr)
+	}
 
 	return stressSubtestsCount
 }
