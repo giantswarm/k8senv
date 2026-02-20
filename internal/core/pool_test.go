@@ -151,7 +151,7 @@ func TestPoolAcquireBoundedBlocksAndUnblocksOnClose(t *testing.T) {
 	// Launch a goroutine that will block on the second Acquire.
 	errCh := make(chan error, 1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_, _, acquireErr := pool.Acquire(ctx)
 		errCh <- acquireErr
@@ -160,16 +160,12 @@ func TestPoolAcquireBoundedBlocksAndUnblocksOnClose(t *testing.T) {
 	// Close the pool while the goroutine is blocked. This should unblock it.
 	pool.Close()
 
-	// The blocking Acquire should now return either ErrPoolClosed or context timeout.
+	// The blocking Acquire should now return ErrPoolClosed, proving that Close
+	// unblocked the waiter (not merely a context timeout racing ahead).
 	select {
 	case err := <-errCh:
-		if err == nil {
-			t.Error("blocked Acquire returned nil after Close, want an error")
-		}
-		// Accept ErrPoolClosed or context timeout — both are valid depending on
-		// whether Close fires before the context deadline.
-		if !errors.Is(err, ErrPoolClosed) && !errors.Is(err, context.DeadlineExceeded) {
-			t.Errorf("blocked Acquire error = %v, want ErrPoolClosed or DeadlineExceeded", err)
+		if !errors.Is(err, ErrPoolClosed) {
+			t.Errorf("blocked Acquire error = %v, want ErrPoolClosed", err)
 		}
 	case <-time.After(3 * time.Second):
 		t.Error("blocked Acquire did not unblock within 3s after Close")
