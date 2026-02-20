@@ -37,11 +37,11 @@ const maxNamespaceRetries = 3
 // instanceQPS is the client-side QPS limit for user-facing rest.Config.
 // Set well above client-go's defaults (QPS=5, Burst=10) because each
 // instance has a dedicated, local kube-apiserver with no external consumers.
-const instanceQPS = 1000
+const instanceQPS float32 = 1000
 
 // instanceBurst is the client-side burst limit for user-facing rest.Config,
 // allowing short request spikes above instanceQPS.
-const instanceBurst = 2000
+const instanceBurst int = 2000
 
 // ErrInstanceReleased is returned by Config when called on an instance that has
 // been released back to the pool. After Release, the instance may be re-acquired

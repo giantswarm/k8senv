@@ -211,7 +211,7 @@ func (i *Instance) cleanNamespaces(ctx context.Context, initialUserNS []string) 
 // avoid allocation.
 func (i *Instance) refreshUserNamespaces(
 	ctx context.Context,
-	client *kubernetes.Clientset,
+	client kubernetes.Interface,
 	buf []string,
 ) ([]string, error) {
 	nsList, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})

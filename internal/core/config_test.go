@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestManagerConfig_Validate(t *testing.T) {
+func TestManagerConfigValidate(t *testing.T) {
 	t.Parallel()
 	validConfig := func() ManagerConfig {
 		return ManagerConfig{
