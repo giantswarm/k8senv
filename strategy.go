@@ -2,6 +2,22 @@ package k8senv
 
 import "github.com/giantswarm/k8senv/internal/core"
 
+// releaseStrategyAPI is the exact public method set that ReleaseStrategy
+// exposes through the type alias. The compile-time check below ensures
+// core.ReleaseStrategy still satisfies this interface; if a method is renamed
+// or removed the build will fail immediately.
+//
+// This interface is intentionally unexported — it exists solely as a
+// compile-time guard, not as an abstraction for callers to use.
+type releaseStrategyAPI interface {
+	IsValid() bool
+	String() string
+}
+
+// Compile-time assertion: ReleaseStrategy must satisfy releaseStrategyAPI.
+// This catches renames or removals of IsValid or String on core.ReleaseStrategy.
+var _ releaseStrategyAPI = ReleaseStrategy(0)
+
 // ReleaseStrategy controls what happens when an Instance is released back to
 // the pool. See the individual constant documentation for details on each
 // strategy's behavior and trade-offs.
@@ -16,7 +32,8 @@ import "github.com/giantswarm/k8senv/internal/core"
 // the public package needing to redeclare these methods.
 //
 // Audit: new methods added to core.ReleaseStrategy automatically become
-// part of the public API through this alias.
+// part of the public API through this alias. The TestReleaseStrategyMethodCount
+// test in strategy_test.go will catch any unintended additions.
 type ReleaseStrategy = core.ReleaseStrategy
 
 const (
