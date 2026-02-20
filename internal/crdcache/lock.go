@@ -41,15 +41,13 @@ func acquireFileLock(ctx context.Context, lockPath string) (*flock.Flock, error)
 // releaseFileLock releases the file lock and closes the file descriptor.
 // The lock file is intentionally left on disk to avoid a race where removing
 // it could invalidate a lock concurrently acquired by another process.
+// Close() calls Unlock() internally, so no explicit Unlock is needed.
 // Errors are logged at debug level to aid troubleshooting; this is
 // best-effort cleanup so errors are not returned.
 func releaseFileLock(logger *slog.Logger, fl *flock.Flock) {
 	if fl != nil {
-		if err := fl.Unlock(); err != nil {
-			logger.Debug("failed to unlock file lock", "path", fl.Path(), "err", err)
-		}
 		if err := fl.Close(); err != nil {
-			logger.Debug("failed to close file lock", "path", fl.Path(), "err", err)
+			logger.Debug("failed to release file lock", "path", fl.Path(), "err", err)
 		}
 	}
 }
