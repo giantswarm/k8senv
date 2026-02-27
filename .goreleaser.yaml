@@ -1,0 +1,22 @@
+---
+# yamllint disable rule:truthy
+# .goreleaser.yaml
+# GoReleaser config for k8senv (Go library).
+# No binary builds — only creates GitHub releases with changelog.
+version: 2
+
+# Library: no binaries to build
+builds: []
+
+changelog:
+  # Use GitHub's native release notes generation.
+  # Automatically uses PRs merged since the last tag.
+  use: github-native
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+
+# Modelines
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj

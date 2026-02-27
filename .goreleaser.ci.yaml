@@ -1,0 +1,16 @@
+---
+# yamllint disable rule:truthy
+# .goreleaser.ci.yaml
+# Minimal GoReleaser config for CI dry-run validation.
+# Validates the release config works without creating anything.
+version: 2
+
+# Library: no binaries to build
+builds: []
+
+# Skip changelog generation in CI — not needed for validation
+changelog:
+  disable: true
+
+# Modelines
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
