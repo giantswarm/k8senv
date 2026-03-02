@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 k8senv is a lightweight Kubernetes testing framework powered by kube-apiserver and kine, similar to `envtest` but with on-demand instance creation and SQLite backing for efficient parallel test execution. The library manages kube-apiserver instances backed by kine (an etcd-compatible SQLite shim) with on-demand creation, allowing parallel tests to share instances while maintaining isolation through namespaces.
 
-**Stack**: Go 1.25, Kubernetes client-go v0.35.1, kine (SQLite etcd shim), kube-apiserver
+**Stack**: Go 1.25, Kubernetes client-go v0.35.2, kine (SQLite etcd shim), kube-apiserver
 **Structure**: Public API (root) → `internal/core` (manager/pool/instance) → `internal/kubestack` (process stack) → `internal/process` (base abstractions)
 
 For detailed architecture, module guide, and navigation, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
@@ -183,7 +183,7 @@ Benefits:
 
 Tests are organized across the root package (unit tests) and nine integration test packages under `tests/`. Integration tests share a singleton manager created in `TestMain` and require kine and kube-apiserver binaries. Different test packages use different `ReleaseStrategy` configurations to test specific behaviors.
 
-**Root package (`options_test.go`)** — Unit tests (no binaries required):
+**Root package** — Unit tests (no binaries required):
 - `TestWithAcquireTimeoutPanicsOnInvalid` - Panics on invalid timeout
 - `TestWithKineBinaryPanicsOnEmpty` - Panics on empty kine binary path
 - `TestWithPoolSizePanicsOnInvalid` - Panics on negative pool size
@@ -199,6 +199,15 @@ Tests are organized across the root package (unit tests) and nine integration te
 - `TestOptionApplicationOverrides` - Options override defaults
 - `TestOptionApplicationMultipleOptions` - Multiple options compose correctly
 - `TestOptionApplicationLastWriteWins` - Last option wins on conflict
+- `TestPublicErrorConstants` - All public error constants are non-nil
+- `TestPublicErrorConstantsAreDistinct` - Error constants have unique messages
+- `TestErrDoubleReleaseValue` - ErrDoubleRelease has expected value
+- `TestSystemNamespaceNames` - Returns expected system namespace list
+- `TestSystemNamespaceNamesReturnsCopy` - Returns a copy, not the original slice
+- `TestReleaseStrategyMethodNames` - Strategy String() returns expected names
+- `TestReleaseStrategyMethodCount` - All strategies have methods
+- `TestConfigSnapshotFieldCount` - Config snapshot field count matches expectations
+- `TestConfigDiffsCoversAllFields` - Config diff detection covers all fields
 
 **`tests/` (package `k8senv_test`)** — Core integration tests:
 
@@ -234,6 +243,9 @@ Tests are organized across the root package (unit tests) and nine integration te
 - `TestReleaseCleanupNamespaces` - Release() with ReleaseClean removes user namespaces before pool return
 - `TestReleasePreservesSystemNamespaces` - System namespaces survive cleanup
 - `TestReleaseCleanupWithNoUserNamespaces` - Fast path when no user namespaces exist
+- `TestReleaseCleanupNamespacedResources` - ConfigMaps/Secrets in user namespaces are deleted
+- `TestReleaseCleanupResourcesWithFinalizers` - Finalized resources are cleaned (API deletes despite finalizers)
+- `TestReleaseCleanupPreservesSystemNamespaceResources` - Resources in system namespaces survive cleanup
 
 **`tests/stress/` (package `k8senv_stress_test`)** — Stress tests (separate package, run sequentially after other tests):
 - `TestStress` - Spawns parallel subtests that verify instance cleanliness and create random resources (configurable via `K8SENV_STRESS_SUBTESTS`)
@@ -261,6 +273,7 @@ Tests are organized across the root package (unit tests) and nine integration te
 - `TestCRDDirWithEstablishedCondition` - Cached CRD is established on acquired instance
 - `TestCRDDirWithMultiDocumentYAML` - Multi-document YAML processing
 - `TestCRDDirWithYmlExtension` - .yml extension file support
+- `TestCRDResourcesRemovedAfterRelease` - CRD custom resources are cleaned on release
 
 Integration tests fail if kine or kube-apiserver binaries are not available (ensuring missing binaries are never silently ignored in CI).
 
