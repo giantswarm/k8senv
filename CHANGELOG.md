@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-03-02
+
 ### Added
 
 - Lightweight Kubernetes testing framework powered by kube-apiserver and kine.
@@ -16,4 +18,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite database prepopulation via `WithPrepopulateDB`.
 - Namespace-isolated parallel test execution.
 
-[Unreleased]: https://github.com/giantswarm/k8senv/tree/HEAD
+[Unreleased]: https://github.com/giantswarm/k8senv/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/giantswarm/k8senv/releases/tag/v0.0.4
