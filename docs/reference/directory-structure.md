@@ -191,7 +191,8 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `testutil.go` | `UniqueName`, `AcquireWithClient`, `RunTestMain`, `SetupTestLogging` |
+| `testutil.go` | `SetupAndRun`, `SetupAndRunWithHook`, `AcquireWithClient`, `AcquireWithGuardedRelease`, `RunTestMain`, `SetupTestLogging`, `RequireBinariesOrExit`, `UniqueName`, `CreateNamespace`, `SystemNamespaces`, `TestParallel` |
+| `release.go` | Shared release strategy assertions: `ReleaseRemovesUserNamespaces`, `ReleasePreservesSystemNamespaces`, `ReleaseWithNoUserNamespaces`, `ReleaseRemovesNamespacedResources`, `ReleaseRemovesResourcesWithFinalizers`, `ReleasePreservesSystemNamespaceResources` |
 | `stress.go` | Stress test helpers: `StressCreateRandomResource`, `StressSubtestCount` |
 
 ### Runtime Data Directory

@@ -112,7 +112,7 @@ func TestWithCRDs(t *testing.T) {
 
     mgr := k8senv.NewManager(
         k8senv.WithCRDDir("testdata/crds"),
-        k8senv.WithAcquireTimeout(3*time.Minute), // Cache creation can take time
+        k8senv.WithCRDCacheTimeout(10*time.Minute), // Cache creation can take time on first run
     )
     if err := mgr.Initialize(ctx); err != nil {
         t.Fatalf("Initialize failed: %v", err)
@@ -264,13 +264,13 @@ Or use `make clean` if available in your project.
 
 ## Timeout Considerations
 
-Cache creation requires starting a full kube-apiserver, applying CRDs, and waiting for them to become established. Set a longer acquire timeout:
+Cache creation requires starting a temporary kube-apiserver, applying CRDs, and waiting for them to become established. Set a longer CRD cache timeout if you have many CRDs:
 
 ```go
-k8senv.WithAcquireTimeout(3*time.Minute)
+k8senv.WithCRDCacheTimeout(10*time.Minute) // Default: 5 minutes
 ```
 
-After the cache is created, subsequent runs are much faster.
+After the cache is created, subsequent runs are much faster (cache hit is instant).
 
 ## Related
 

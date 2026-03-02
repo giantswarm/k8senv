@@ -141,7 +141,7 @@ tail -f /tmp/k8senv/inst-*/kube-apiserver-stderr.log
 
 2. Increase timeout for cache creation:
    ```go
-   k8senv.WithAcquireTimeout(3*time.Minute)
+   k8senv.WithCRDCacheTimeout(10*time.Minute) // Default: 5 minutes
    ```
 
 3. Check logs during initialization
