@@ -1,7 +1,7 @@
 ##@ Utilities
 
 KUBE_APISERVER_VERSION ?= v1.35.0
-GOLANGCI_LINT_VERSION  ?= v2.1.6
+GOLANGCI_LINT_VERSION  ?= v2.10.1
 CAPI_VERSION           ?= v1.11.2
 
 .PHONY: install-tools
