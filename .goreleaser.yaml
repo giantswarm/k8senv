@@ -6,7 +6,8 @@
 version: 2
 
 # Library: no binaries to build
-builds: []
+builds:
+  - skip: true
 
 changelog:
   # Use GitHub's native release notes generation.

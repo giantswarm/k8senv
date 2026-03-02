@@ -6,7 +6,8 @@
 version: 2
 
 # Library: no binaries to build
-builds: []
+builds:
+  - skip: true
 
 # Skip changelog generation in CI — not needed for validation
 changelog:
