@@ -19,6 +19,7 @@ flowchart TD
     Public --> errs["errors.go"]
     Public --> cfg["config.go"]
     Public --> log["log.go"]
+    Public --> ns["namespace.go"]
 
     Internal --> Core["core/"]
     Internal --> KubeStack["kubestack/"]
@@ -46,6 +47,7 @@ flowchart TD
 | `errors.go` | Sentinel error re-exports from internal/core |
 | `config.go` | Unexported `managerConfig` struct + conversion to `core.ManagerConfig` |
 | `log.go` | `SetLogger()` public logging API |
+| `namespace.go` | `SystemNamespaceNames()` returns system namespaces that must never be deleted during cleanup |
 
 ### internal/core/ — Orchestration
 
@@ -82,6 +84,8 @@ flowchart TD
 | File | Purpose |
 |------|---------|
 | `base.go` | `BaseProcess`: embeddable process lifecycle (setup, start, stop) |
+| `base_linux.go` | Linux-specific process group and signal handling |
+| `base_other.go` | Non-Linux (macOS, Windows) process signal handling |
 | `process.go` | `LogFiles` management, port conflict detection |
 | `stoppable.go` | `Stoppable` interface, cleanup helpers |
 | `wait.go` | Polling-based readiness checks with configurable intervals |
@@ -130,7 +134,7 @@ flowchart TD
 | File | Purpose |
 |------|---------|
 | `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleaseClean)` |
-| `cleanup_test.go` | System NS match, cleanup, preserve, no-user-NS fast path |
+| `cleanup_test.go` | System NS match, cleanup, preserve, namespaced resources, finalizers, no-user-NS fast path |
 
 ### tests/restart/ — Restart Strategy Tests (package `k8senv_restart_test`)
 
@@ -172,7 +176,7 @@ flowchart TD
 | File | Purpose |
 |------|---------|
 | `main_test.go` | `TestMain`: singleton with `WithCRDDir` |
-| `crd_test.go` | CRD caching, multi-CRD, multi-doc YAML, .yml extension |
+| `crd_test.go` | CRD caching, multi-CRD, multi-doc YAML, .yml extension, resource cleanup on release |
 | `helpers_test.go` | CRD-specific helpers + `verifyCRDExists` |
 | `testdata_test.go` | CRD YAML constants and `setupSharedCRDDir()` |
 
