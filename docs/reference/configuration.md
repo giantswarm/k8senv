@@ -159,6 +159,8 @@ Replace the package-level logger to integrate with your application's logging:
 ```go
 import (
     "log/slog"
+    "os"
+
     "github.com/giantswarm/k8senv"
 )
 

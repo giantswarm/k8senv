@@ -252,6 +252,15 @@ k8senv.WithBaseDataDir(fmt.Sprintf("/tmp/k8senv-%s", os.Getenv("CI_JOB_ID")))
 ### Graceful Skip in Local Development
 
 ```go
+import (
+    "context"
+    "fmt"
+    "os"
+    "testing"
+
+    "github.com/giantswarm/k8senv"
+)
+
 func TestMain(m *testing.M) {
     ctx := context.Background()
 
