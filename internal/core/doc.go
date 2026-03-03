@@ -8,5 +8,5 @@
 //   - [Instance]: lazy-started kube-apiserver wrapper with atomic state transitions,
 //     port-conflict retry, and configurable namespace cleanup on release.
 //   - [ManagerConfig] and [InstanceConfig]: validated, immutable configuration structs
-//     that control timeouts, pool size, release strategy, and binary paths.
+//     that control timeouts, pool size, and binary paths.
 package core

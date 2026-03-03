@@ -40,7 +40,7 @@ func ReleaseRemovesUserNamespaces(t *testing.T, ctx context.Context, mgr k8senv.
 			len(userNS)+len(SystemNamespaces()), len(nsList.Items))
 	}
 
-	// Release — strategy runs, instance returns to pool.
+	// Release — purge runs, instance returns to pool.
 	release()
 
 	// Re-acquire. We may get the same instance back or a different one
@@ -72,7 +72,7 @@ func ReleaseRemovesUserNamespaces(t *testing.T, ctx context.Context, mgr k8senv.
 func ReleasePreservesSystemNamespaces(t *testing.T, ctx context.Context, mgr k8senv.Manager, label string) {
 	t.Helper()
 
-	// Create a user namespace so the release strategy actually runs (not just the fast path).
+	// Create a user namespace so the purge actually runs (not just the fast path).
 	inst, client := AcquireWithClient(ctx, t, mgr)
 	CreateNamespace(ctx, t, client, UniqueName("preserve-"+label))
 
@@ -277,7 +277,7 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 		t.Fatalf("create ConfigMap in kube-system: %v", err)
 	}
 
-	// Also create a user namespace so the release strategy actually runs.
+	// Also create a user namespace so the purge actually runs.
 	userNS := UniqueName("trigger-" + label)
 	CreateNamespace(ctx, t, client, userNS)
 

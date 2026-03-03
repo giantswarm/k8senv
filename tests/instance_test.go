@@ -50,7 +50,7 @@ func TestInstanceReuse(t *testing.T) {
 		t.Fatalf("failed to list namespaces: %v", err)
 	}
 
-	// Release instance — behavior determined by manager's release strategy
+	// Release instance — purges non-system namespaces via SQLite
 	if err = inst1.Release(); err != nil {
 		t.Errorf("release error: %v", err)
 	}

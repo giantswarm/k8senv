@@ -9,9 +9,9 @@ import (
 	"github.com/giantswarm/k8senv/tests/internal/testutil"
 )
 
-// TestReleasePurgeNamespaces verifies that Release() with ReleasePurge
-// strategy removes all user-created namespaces so the next consumer gets
-// a clean instance.
+// TestReleasePurgeNamespaces verifies that Release() removes all
+// user-created namespaces via SQLite purge so the next consumer gets a
+// clean instance.
 func TestReleasePurgeNamespaces(t *testing.T) {
 	t.Parallel()
 	testutil.ReleaseRemovesUserNamespaces(t, context.Background(), sharedManager, "purge")
