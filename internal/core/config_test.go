@@ -79,14 +79,6 @@ func TestManagerConfigValidate(t *testing.T) {
 			modify:       func(c *ManagerConfig) { c.ShutdownDrainTimeout = 0 },
 			wantContains: "shutdown drain timeout",
 		},
-		"invalid release strategy": {
-			modify:       func(c *ManagerConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
-			wantContains: "release strategy",
-		},
-		"invalid release strategy boundary": {
-			modify:       func(c *ManagerConfig) { c.ReleaseStrategy = ReleaseStrategy(4) },
-			wantContains: "release strategy",
-		},
 	}
 
 	for name, tc := range tests {
@@ -194,14 +186,6 @@ func TestInstanceConfig_Validate(t *testing.T) {
 			modify:       func(c *InstanceConfig) { c.KubeAPIServerBinary = "" },
 			wantContains: "kube-apiserver binary",
 		},
-		"invalid release strategy": {
-			modify:       func(c *InstanceConfig) { c.ReleaseStrategy = ReleaseStrategy(99) },
-			wantContains: "release strategy",
-		},
-		"invalid release strategy boundary": {
-			modify:       func(c *InstanceConfig) { c.ReleaseStrategy = ReleaseStrategy(4) },
-			wantContains: "release strategy",
-		},
 	}
 
 	for name, tc := range tests {
@@ -262,71 +246,6 @@ func TestInstanceConfig_Validate(t *testing.T) {
 	})
 }
 
-func TestReleaseStrategy_String(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		strategy ReleaseStrategy
-		want     string
-	}{
-		"ReleaseRestart": {strategy: ReleaseRestart, want: "ReleaseRestart"},
-		"ReleaseClean":   {strategy: ReleaseClean, want: "ReleaseClean"},
-		"ReleaseNone":    {strategy: ReleaseNone, want: "ReleaseNone"},
-		"ReleasePurge":   {strategy: ReleasePurge, want: "ReleasePurge"},
-		"unknown positive": {
-			strategy: ReleaseStrategy(99),
-			want:     "ReleaseStrategy(99)",
-		},
-		"unknown negative": {
-			strategy: ReleaseStrategy(-1),
-			want:     "ReleaseStrategy(-1)",
-		},
-		"boundary just above valid range": {
-			strategy: ReleaseStrategy(4),
-			want:     "ReleaseStrategy(4)",
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			got := tc.strategy.String()
-			if got != tc.want {
-				t.Errorf("ReleaseStrategy(%d).String() = %q, want %q", int(tc.strategy), got, tc.want)
-			}
-		})
-	}
-}
-
-func TestReleaseStrategy_IsValid(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		strategy ReleaseStrategy
-		want     bool
-	}{
-		"ReleaseRestart":                  {strategy: ReleaseRestart, want: true},
-		"ReleaseClean":                    {strategy: ReleaseClean, want: true},
-		"ReleaseNone":                     {strategy: ReleaseNone, want: true},
-		"ReleasePurge":                    {strategy: ReleasePurge, want: true},
-		"negative value":                  {strategy: ReleaseStrategy(-1), want: false},
-		"boundary just above valid range": {strategy: ReleaseStrategy(4), want: false},
-		"large positive value":            {strategy: ReleaseStrategy(99), want: false},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			got := tc.strategy.IsValid()
-			if got != tc.want {
-				t.Errorf("ReleaseStrategy(%d).IsValid() = %v, want %v", int(tc.strategy), got, tc.want)
-			}
-		})
-	}
-}
-
 // TestManagerConfigFieldCount is a canary test that detects when fields are
 // added to ManagerConfig without updating the public API in the root package.
 //
@@ -335,7 +254,7 @@ func TestReleaseStrategy_IsValid(t *testing.T) {
 //  2. Update expectedFields below to match the new count
 func TestManagerConfigFieldCount(t *testing.T) {
 	t.Parallel()
-	const expectedFields = 13 // Update this when adding new fields to ManagerConfig.
+	const expectedFields = 12 // Update this when adding new fields to ManagerConfig.
 
 	actual := reflect.TypeFor[ManagerConfig]().NumField()
 	if actual != expectedFields {
@@ -354,7 +273,7 @@ func TestManagerConfigFieldCount(t *testing.T) {
 //  3. Update expectedFields below to match the new count
 func TestInstanceConfigFieldCount(t *testing.T) {
 	t.Parallel()
-	const expectedFields = 8 // Update this when adding new fields to InstanceConfig.
+	const expectedFields = 7 // Update this when adding new fields to InstanceConfig.
 
 	actual := reflect.TypeFor[InstanceConfig]().NumField()
 	if actual != expectedFields {

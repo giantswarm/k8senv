@@ -56,21 +56,14 @@ type Instance interface {
 	// underlying instance has its own generation guard as defense in depth.
 	Config() (*rest.Config, error)
 
-	// Release returns the instance to the pool. The behavior depends on the
-	// ReleaseStrategy configured on the Manager:
-	//
-	//   - ReleaseRestart (default): stops the instance. The next Acquire
-	//     starts fresh with the database restored from the cached template.
-	//   - ReleaseClean: deletes all non-system namespaces via the Kubernetes
-	//     API, keeps running.
-	//   - ReleasePurge: deletes all non-system namespaces via direct SQLite
-	//     queries, bypassing the API and finalizers. Fastest cleanup.
-	//   - ReleaseNone: returns immediately with no cleanup.
+	// Release returns the instance to the pool. Non-system namespace data
+	// is purged from kine's SQLite database, keeping the instance running
+	// for immediate reuse by the next Acquire.
 	//
 	// On success, returns nil. Using defer inst.Release() is safe.
-	// On error (cleanup or stop failure), the instance is marked as
-	// permanently failed and removed from the pool. The error is
-	// informational: no corrective action is required.
+	// On error (purge failure), the instance is marked as permanently
+	// failed and removed from the pool. The error is informational: no
+	// corrective action is required.
 	//
 	// Returns ErrDoubleRelease if called more than once on the same acquisition.
 	Release() error

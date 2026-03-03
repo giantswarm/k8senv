@@ -22,7 +22,6 @@ func validInstanceConfig() InstanceConfig {
 		MaxStartRetries:     defaultMaxStartRetries,
 		KineBinary:          "kine",
 		KubeAPIServerBinary: "kube-apiserver",
-		ReleaseStrategy:     ReleaseRestart,
 	}
 }
 

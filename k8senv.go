@@ -94,8 +94,9 @@ func (w *instanceWrapper) Config() (*rest.Config, error) {
 	return w.inst.Config()
 }
 
-// Release returns the instance to the pool. The behavior depends on the
-// ReleaseStrategy configured on the Manager (see WithReleaseStrategy).
+// Release returns the instance to the pool. Non-system namespace data is
+// purged from kine's SQLite database, keeping the instance running for
+// immediate reuse.
 //
 // Returns nil on success; using defer inst.Release() is safe. On error the
 // instance is already removed from the pool, so no corrective action is needed.
@@ -134,7 +135,6 @@ func (w *instanceWrapper) ID() string {
 func defaultManagerConfig() managerConfig {
 	return managerConfig{ManagerConfig: core.ManagerConfig{
 		PoolSize:             DefaultPoolSize,
-		ReleaseStrategy:      DefaultReleaseStrategy,
 		KineBinary:           DefaultKineBinary,
 		KubeAPIServerBinary:  DefaultKubeAPIServerBinary,
 		AcquireTimeout:       DefaultAcquireTimeout,
@@ -262,11 +262,6 @@ func configDiffs(stored, incoming managerConfig) []string {
 	}
 
 	diffInt("PoolSize", stored.PoolSize, incoming.PoolSize)
-
-	if stored.ReleaseStrategy != incoming.ReleaseStrategy {
-		diffs = append(diffs, fmt.Sprintf("ReleaseStrategy: %s != %s",
-			stored.ReleaseStrategy, incoming.ReleaseStrategy))
-	}
 	diffStr("KineBinary", stored.KineBinary, incoming.KineBinary)
 	diffStr("KubeAPIServerBinary", stored.KubeAPIServerBinary, incoming.KubeAPIServerBinary)
 	diffDur("AcquireTimeout", stored.AcquireTimeout, incoming.AcquireTimeout)

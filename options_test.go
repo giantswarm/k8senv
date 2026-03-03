@@ -108,27 +108,6 @@ func TestWithKubeAPIServerBinaryPanicsOnEmpty(t *testing.T) {
 	})
 }
 
-func TestWithReleaseStrategyPanicsOnInvalid(t *testing.T) {
-	t.Parallel()
-	runPanicTests(t, []panicTestCase{
-		{
-			name:     "negative",
-			panics:   true,
-			panicMsg: "k8senv: invalid release strategy: ReleaseStrategy(-1)",
-			fn:       func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(-1)) },
-		},
-		{
-			name:     "out_of_range",
-			panics:   true,
-			panicMsg: "k8senv: invalid release strategy: ReleaseStrategy(99)",
-			fn:       func() { k8senv.WithReleaseStrategy(k8senv.ReleaseStrategy(99)) },
-		},
-		{name: "restart", fn: func() { k8senv.WithReleaseStrategy(k8senv.ReleaseRestart) }},
-		{name: "clean", fn: func() { k8senv.WithReleaseStrategy(k8senv.ReleaseClean) }},
-		{name: "none", fn: func() { k8senv.WithReleaseStrategy(k8senv.ReleaseNone) }},
-	})
-}
-
 func TestWithCleanupTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
@@ -254,7 +233,6 @@ func TestOptionApplicationDefaults(t *testing.T) {
 	got := k8senv.ApplyOptionsForTesting()
 	want := k8senv.ConfigSnapshot{
 		PoolSize:             k8senv.DefaultPoolSize,
-		ReleaseStrategy:      k8senv.DefaultReleaseStrategy,
 		KineBinary:           k8senv.DefaultKineBinary,
 		KubeAPIServerBinary:  k8senv.DefaultKubeAPIServerBinary,
 		AcquireTimeout:       k8senv.DefaultAcquireTimeout,
@@ -294,20 +272,6 @@ func TestOptionApplicationOverrides(t *testing.T) {
 			field: "PoolSize",
 			got:   func(s k8senv.ConfigSnapshot) any { return s.PoolSize },
 			want:  0,
-		},
-		{
-			name:  "WithReleaseStrategy_clean",
-			opt:   k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
-			field: "ReleaseStrategy",
-			got:   func(s k8senv.ConfigSnapshot) any { return s.ReleaseStrategy },
-			want:  k8senv.ReleaseClean,
-		},
-		{
-			name:  "WithReleaseStrategy_none",
-			opt:   k8senv.WithReleaseStrategy(k8senv.ReleaseNone),
-			field: "ReleaseStrategy",
-			got:   func(s k8senv.ConfigSnapshot) any { return s.ReleaseStrategy },
-			want:  k8senv.ReleaseNone,
 		},
 		{
 			name:  "WithKineBinary",
@@ -404,7 +368,6 @@ func TestOptionApplicationMultipleOptions(t *testing.T) {
 
 	got := k8senv.ApplyOptionsForTesting(
 		k8senv.WithPoolSize(2),
-		k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
 		k8senv.WithKineBinary("/opt/kine"),
 		k8senv.WithKubeAPIServerBinary("/opt/kube-apiserver"),
 		k8senv.WithAcquireTimeout(1*time.Minute),
@@ -413,7 +376,6 @@ func TestOptionApplicationMultipleOptions(t *testing.T) {
 	)
 	want := k8senv.ConfigSnapshot{
 		PoolSize:             2,
-		ReleaseStrategy:      k8senv.ReleaseClean,
 		KineBinary:           "/opt/kine",
 		KubeAPIServerBinary:  "/opt/kube-apiserver",
 		AcquireTimeout:       1 * time.Minute,
@@ -455,9 +417,9 @@ func TestOptionApplicationLastWriteWins(t *testing.T) {
 func TestConfigSnapshotFieldCount(t *testing.T) {
 	t.Parallel()
 
-	// ConfigSnapshot must have 13 fields, matching core.ManagerConfig (see
+	// ConfigSnapshot must have 12 fields, matching core.ManagerConfig (see
 	// TestManagerConfigFieldCount in internal/core/config_test.go).
-	const expectedFields = 13
+	const expectedFields = 12
 
 	actual := reflect.TypeFor[k8senv.ConfigSnapshot]().NumField()
 	if actual != expectedFields {
@@ -483,7 +445,6 @@ func TestConfigDiffsCoversAllFields(t *testing.T) {
 	// to a non-default value so that configDiffs reports a diff for each one.
 	incomingOpts := []k8senv.ManagerOption{
 		k8senv.WithPoolSize(999),
-		k8senv.WithReleaseStrategy(k8senv.ReleaseClean),
 		k8senv.WithKineBinary("/canary/kine"),
 		k8senv.WithKubeAPIServerBinary("/canary/kube-apiserver"),
 		k8senv.WithAcquireTimeout(999 * time.Hour),

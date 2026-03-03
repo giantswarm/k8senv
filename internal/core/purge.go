@@ -21,7 +21,7 @@ import (
 const sqliteBusyTimeoutMs = 5000
 
 // purgeHandle holds a persistent SQLite connection and a prepared DELETE
-// statement for ReleasePurge operations. It is created eagerly during instance
+// statement for release purge operations. It is created eagerly during instance
 // startup (after system namespaces are verified) and kept open for the lifetime
 // of the instance to amortize connection setup and query compilation across
 // many release cycles.

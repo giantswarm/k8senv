@@ -146,14 +146,9 @@ func WithInstanceStopTimeout(d time.Duration) ManagerOption {
 	}
 }
 
-// WithCleanupTimeout sets the maximum time allowed for namespace cleanup
-// during release. This timeout covers API calls to list and delete non-system
-// namespaces, which may need more time than process shutdown (StopTimeout).
-//
-// This timeout is only used when the Manager's ReleaseStrategy is
-// [ReleaseClean]. It has no effect with [ReleaseRestart] (which stops the
-// instance instead of cleaning) or [ReleaseNone] (which skips cleanup
-// entirely).
+// WithCleanupTimeout sets the maximum time allowed for SQLite purge during
+// release. This timeout covers the SQL DELETE operations that clean non-system
+// namespace data from kine's database.
 //
 // Default: 30 seconds.
 //
@@ -181,27 +176,9 @@ func WithCRDDir(dirPath string) ManagerOption {
 	}
 }
 
-// WithReleaseStrategy sets the strategy used by Instance.Release().
-// See ReleaseStrategy constants for available strategies.
-//
-// Default: ReleaseRestart.
-//
-// Panics if strategy is not a recognized ReleaseStrategy value.
-func WithReleaseStrategy(strategy ReleaseStrategy) ManagerOption {
-	if !strategy.IsValid() {
-		panic(fmt.Sprintf("k8senv: invalid release strategy: %v", strategy))
-	}
-	return func(c *managerConfig) {
-		c.ReleaseStrategy = strategy
-	}
-}
-
 // WithShutdownDrainTimeout sets the maximum time Shutdown() waits for
 // in-flight ReleaseToPool operations to complete before proceeding with
-// instance teardown. If InstanceStopTimeout is configured larger than
-// this value, an in-flight release performing ReleaseRestart could still
-// be running when the drain fires — increase this timeout to at least
-// match the longest expected release duration.
+// instance teardown.
 //
 // Default: 30 seconds.
 //

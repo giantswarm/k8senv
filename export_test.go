@@ -44,7 +44,6 @@ func ResetForTesting() error { return resetForTesting() }
 // option closures actually mutate the config without accessing internals.
 type ConfigSnapshot struct {
 	PoolSize             int
-	ReleaseStrategy      ReleaseStrategy
 	KineBinary           string
 	KubeAPIServerBinary  string
 	AcquireTimeout       time.Duration
@@ -69,7 +68,6 @@ func ApplyOptionsForTesting(opts ...ManagerOption) ConfigSnapshot {
 
 	return ConfigSnapshot{
 		PoolSize:             cfg.PoolSize,
-		ReleaseStrategy:      cfg.ReleaseStrategy,
 		KineBinary:           cfg.KineBinary,
 		KubeAPIServerBinary:  cfg.KubeAPIServerBinary,
 		AcquireTimeout:       cfg.AcquireTimeout,

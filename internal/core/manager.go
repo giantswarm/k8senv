@@ -236,7 +236,6 @@ func (m *Manager) doInitialize(ctx context.Context) error {
 		CachedDBPath:        m.cachedDBPath,
 		KineBinary:          m.cfg.KineBinary,
 		KubeAPIServerBinary: m.cfg.KubeAPIServerBinary,
-		ReleaseStrategy:     m.cfg.ReleaseStrategy,
 	}
 
 	factory := m.instanceFactory(m.cfg.BaseDataDir, instCfg)

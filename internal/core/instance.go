@@ -14,9 +14,6 @@ import (
 	"github.com/giantswarm/k8senv/internal/kubestack"
 	"github.com/giantswarm/k8senv/internal/netutil"
 	"github.com/giantswarm/k8senv/internal/sentinel"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -84,9 +81,9 @@ type InstanceReleaser interface {
 	ReleaseFailed(i *Instance, token uint64)
 }
 
-// clientCache groups lazily-built Kubernetes clients and discovery data that
-// share the same lifecycle: all are created on demand and invalidated together
-// when the instance is stopped or a startup attempt fails.
+// clientCache groups lazily-built Kubernetes clients that share the same
+// lifecycle: all are created on demand and invalidated together when the
+// instance is stopped or a startup attempt fails.
 //
 // The struct is treated as immutable after construction. To add a new field,
 // copy the existing struct with the new field set and CAS the pointer on
@@ -97,26 +94,6 @@ type clientCache struct {
 	config *rest.Config
 	// clientset is the typed client for namespace operations.
 	clientset *kubernetes.Clientset
-	// discovery is the discovery client for resource enumeration.
-	discovery *discovery.DiscoveryClient
-	// dynamic is the dynamic client for resource deletion.
-	dynamic *dynamic.DynamicClient
-	// gvrs is the discovered set of deletable namespaced resource types.
-	//
-	// This field uses a pointer-to-slice (*[]T) rather than a plain slice
-	// ([]T) to distinguish "not yet discovered" (nil pointer) from
-	// "discovered, but zero resource types found" (non-nil pointer to an
-	// empty slice). A plain slice cannot make this distinction because its
-	// zero value is nil, which is also a valid discovery result. The cache-
-	// hit check in discoverDeletableGVRs relies on this: cache.gvrs != nil
-	// means the discovery has already run and the result can be reused,
-	// even if the result was an empty set.
-	//
-	// The other fields (config, clientset, discovery, dynamic) do not need
-	// this treatment because they are pointer types whose nil zero value
-	// unambiguously means "not yet built" — a successfully built client is
-	// never nil.
-	gvrs *[]schema.GroupVersionResource
 }
 
 // Instance represents a single kube-apiserver + kine test environment.
@@ -134,9 +111,7 @@ type clientCache struct {
 //     started.Store(true) after setting stack/cancel under startMu provides
 //     happens-before via the Go memory model. Stop extracts stack/cancel
 //     under the lock, clears them and publishes started=false, then releases
-//     the lock before performing the expensive stack.Stop I/O. This avoids
-//     holding startMu for the entire stop duration, reducing acquire latency
-//     under the ReleaseRestart strategy.
+//     the lock before performing the expensive stack.Stop I/O.
 type Instance struct {
 	cfg InstanceConfig
 
@@ -169,13 +144,12 @@ type Instance struct {
 	stack *kubestack.Stack
 
 	// purge is a persistent SQLite connection and prepared DELETE statement
-	// for ReleasePurge operations. Opened eagerly during startup (after
-	// system namespaces are verified) to capture the baseline ID before any
-	// test data exists. Extracted and closed by Stop outside startMu to
-	// avoid holding the lock during I/O. Only used when ReleaseStrategy is
-	// ReleasePurge. Access is safe without synchronization: the pool
-	// contract guarantees at most one goroutine holds the instance between
-	// Acquire and Release.
+	// for purge operations. Opened eagerly during startup (after system
+	// namespaces are verified) to capture the baseline ID before any test
+	// data exists. Extracted and closed by Stop outside startMu to avoid
+	// holding the lock during I/O. Access is safe without synchronization:
+	// the pool contract guarantees at most one goroutine holds the instance
+	// between Acquire and Release.
 	purge *purgeHandle
 
 	// log is the instance-scoped logger.
@@ -378,14 +352,12 @@ func (i *Instance) tryStartAttempt(ctx context.Context, attempt int) (bool, erro
 	// Open the purge handle eagerly so the baseline ID (MAX(id)) is captured
 	// before any test data exists. This must happen after waitForSystemNamespaces
 	// (system rows are committed) and before started=true (no test writes yet).
-	if i.cfg.ReleaseStrategy == ReleasePurge {
-		h, err := openPurgeHandle(ctx, i.sqlitePath)
-		if err != nil {
-			i.teardownFailedAttempt(cancel, stack, attempt, err)
-			return false, fmt.Errorf("open purge handle: %w", err)
-		}
-		i.purge = h
+	h, err := openPurgeHandle(ctx, i.sqlitePath)
+	if err != nil {
+		i.teardownFailedAttempt(cancel, stack, attempt, err)
+		return false, fmt.Errorf("open purge handle: %w", err)
 	}
+	i.purge = h
 
 	// Install process handles under startMu (already held by caller),
 	// then publish started=true. The atomic store creates a happens-before
@@ -639,7 +611,7 @@ func (i *Instance) failRelease(token uint64, msg string, err error) error {
 
 // guardReleasePanic guarantees the pool slot is returned even if cleanup panics.
 //
-// Without this guard, a panic inside releaseClean/releasePurge/releaseRestart
+// Without this guard, a panic inside releasePurge
 // would unwind the stack before tryRelease or returnSlot are called,
 // permanently leaking the semaphore token and reducing the effective pool
 // capacity for the lifetime of the process.
@@ -665,34 +637,18 @@ func (i *Instance) guardReleasePanic(token uint64) {
 
 // Release marks the Instance as free and returns it to the pool.
 //
-// The behavior depends on the ReleaseStrategy configured on the Manager:
+// On release, non-system namespace data is deleted directly from kine's
+// SQLite database, bypassing the Kubernetes API. Both kine and
+// kube-apiserver stay running; the next Acquire reuses the same warm
+// instance with zero startup delay. A few SQL DELETEs clean all user
+// data. System namespaces (default, kube-system, kube-public,
+// kube-node-lease), cluster-scoped resources, and resources within
+// system namespaces are preserved.
 //
-//   - ReleaseRestart: stops the instance. The next Acquire starts a fresh
-//     instance with the database restored from the cached template. No
-//     API-level cleanup is needed.
-//   - ReleaseClean: deletes all namespaced resources in non-system namespaces,
-//     then deletes the namespaces themselves before returning the running
-//     instance to the pool. Resource deletion precedes namespace deletion
-//     because k8senv runs in API-only mode (no kube-controller-manager),
-//     so namespace deletion does not cascade-delete contained resources.
-//     Faster than ReleaseRestart but relies on cleanup correctness.
-//   - ReleasePurge: deletes non-system namespace data directly from kine's
-//     SQLite database, bypassing the Kubernetes API. Both kine and
-//     kube-apiserver stay running. Fastest cleanup strategy — a few SQL
-//     DELETEs instead of ~20+ API round trips.
-//   - ReleaseNone: returns the instance to the pool immediately with no
-//     cleanup. Use only when tests use unique namespaces.
-//
-// Error semantics:
-//   - ReleaseNone always returns nil (no cleanup to fail).
-//   - ReleaseClean returns nil on success. If namespace cleanup fails, the
-//     instance is marked as permanently failed via ReleaseFailed and the
-//     error is returned. Using defer inst.Release() is safe.
-//   - ReleasePurge returns nil on success. If SQLite cleanup fails, the
-//     instance is marked as permanently failed via ReleaseFailed.
-//   - ReleaseRestart returns nil on success. If Stop fails, the instance
-//     is marked as permanently failed via ReleaseFailed. The error is
-//     informational: no corrective action is required.
+// On success, returns nil. Using defer inst.Release() is safe.
+// On error (purge failure), the instance is marked as permanently failed
+// and removed from the pool. The error is informational: no corrective
+// action is required.
 //
 // The shutdown check and pool release are performed atomically via
 // the InstanceReleaser to prevent a TOCTOU race. If the manager is shutting
@@ -707,9 +663,9 @@ func (i *Instance) Release(token uint64) error {
 	// Validate the token before performing any side effects. A stale token
 	// means this release is from a prior acquisition — the instance has
 	// already been released and re-acquired by another goroutine. Running
-	// cleanup (namespace deletion) with a stale token would corrupt the
-	// current holder's state. Panic immediately, matching the double-release
-	// panic contract from Pool.Release/tryRelease.
+	// cleanup with a stale token would corrupt the current holder's state.
+	// Panic immediately, matching the double-release panic contract from
+	// Pool.Release/tryRelease.
 	//
 	// Token validity window: there is a gap between this isCurrentToken
 	// check and the eventual ReleaseToPool/ReleaseFailed call below. During
@@ -722,34 +678,9 @@ func (i *Instance) Release(token uint64) error {
 		panic("k8senv: double-release of instance " + i.id)
 	}
 
-	// Each strategy handler returns nil on success (continuing to ReleaseToPool
-	// below) or calls failRelease and returns non-nil (failRelease already
-	// called ReleaseFailed, so ReleaseToPool is skipped).
-	switch i.cfg.ReleaseStrategy {
-	case ReleaseNone:
-		// Skip all cleanup — return to pool immediately.
-
-	case ReleaseClean:
-		if err := i.releaseClean(token); err != nil {
-			return err
-		}
-
-	case ReleasePurge:
-		if err := i.releasePurge(token); err != nil {
-			return err
-		}
-
-	case ReleaseRestart:
-		if err := i.releaseRestart(token); err != nil {
-			return err
-		}
-
-	default:
-		// All valid strategies are handled above. An unknown value here
-		// indicates a programmer error — the strategy is validated at
-		// construction time by InstanceConfig.Validate, so this branch
-		// should be unreachable.
-		panic(fmt.Sprintf("k8senv: unknown release strategy: %v", i.cfg.ReleaseStrategy))
+	// Purge user data from kine's SQLite database.
+	if err := i.releasePurge(token); err != nil {
+		return err
 	}
 
 	// Atomically check shutdown state and release to pool. This eliminates
@@ -758,44 +689,6 @@ func (i *Instance) Release(token uint64) error {
 	if !i.releaser.ReleaseToPool(i, token) {
 		i.log.Debug("instance stopped during release: manager shutting down")
 	}
-	return nil
-}
-
-// releaseClean deletes all user namespaces and their resources via the
-// Kubernetes API before returning the running instance to the pool.
-// Resources are deleted before namespaces because k8senv runs in API-only
-// mode (no kube-controller-manager), so namespace deletion does not
-// cascade-delete contained resources. A single timeout covers the entire
-// cleanup sequence so worst-case duration is bounded to one CleanupTimeout.
-func (i *Instance) releaseClean(token uint64) error {
-	if !i.started.Load() {
-		return nil
-	}
-
-	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), i.cfg.CleanupTimeout)
-	defer cleanCancel()
-
-	// Fast path: skip the expensive resource sweep (~20+ cluster-wide
-	// List calls) when no user namespaces exist. This is common when
-	// tests use unique namespaces that were already cleaned up, or when
-	// no resources were created at all.
-	userNS, err := i.listUserNamespaces(cleanCtx)
-	if err != nil {
-		return i.failRelease(token, "user namespace check during release", err)
-	}
-
-	if len(userNS) == 0 {
-		return nil
-	}
-
-	if err = i.cleanNamespacedResources(cleanCtx, userNS); err != nil {
-		return i.failRelease(token, "resource cleanup during release", err)
-	}
-
-	if err = i.cleanNamespaces(cleanCtx, userNS); err != nil {
-		return i.failRelease(token, "namespace cleanup during release", err)
-	}
-
 	return nil
 }
 
@@ -818,20 +711,6 @@ func (i *Instance) releasePurge(token uint64) error {
 
 	if err := i.purge.purge(cleanCtx, i.log); err != nil {
 		return i.failRelease(token, "SQLite purge during release", err)
-	}
-
-	return nil
-}
-
-// releaseRestart stops the instance so the next Acquire starts fresh. Kine's
-// Start removes the old database (or restores from the cached template when
-// CRDs are configured), so no API-level cleanup is needed.
-func (i *Instance) releaseRestart(token uint64) error {
-	ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
-	defer cancel()
-
-	if err := i.Stop(ctx); err != nil {
-		return i.failRelease(token, "stop during release", err)
 	}
 
 	return nil
