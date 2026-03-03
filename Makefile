@@ -2,6 +2,7 @@
 
 include Makefile.*.mk
 
+# default goal 001
 .DEFAULT_GOAL := help
 
 .PHONY: clean
