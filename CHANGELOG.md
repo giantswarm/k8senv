@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-03
+
 ## [0.1.0] - 2026-03-02
 
 ## [0.1.0] - 2026-03-02
@@ -22,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite database prepopulation via `WithPrepopulateDB`.
 - Namespace-isolated parallel test execution.
 
-[Unreleased]: https://github.com/giantswarm/k8senv/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/giantswarm/k8senv/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/giantswarm/k8senv/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/giantswarm/k8senv/compare/v0.1.0...v0.1.0
 [0.1.0]: https://github.com/giantswarm/k8senv/compare/v0.0.4...v0.1.0
 [0.0.4]: https://github.com/giantswarm/k8senv/releases/tag/v0.0.4
