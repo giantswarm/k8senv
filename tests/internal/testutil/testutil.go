@@ -182,7 +182,7 @@ func RequireBinariesOrExit() {
 		hint string
 	}{
 		{"kine", "Install kine: go install github.com/k3s-io/kine/cmd/kine@latest"},
-		{"kube-apiserver", "Download from: https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver"},
+		{"kube-apiserver", "Download from: https://dl.k8s.io/v1.35.2/bin/linux/amd64/kube-apiserver"},
 	} {
 		if _, err := exec.LookPath(bin.name); err != nil {
 			fmt.Fprintf(os.Stderr, "%s binary not found in PATH\n%s\n", bin.name, bin.hint)

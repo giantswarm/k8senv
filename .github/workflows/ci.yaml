@@ -32,7 +32,7 @@ jobs:
 
       - name: Install kube-apiserver
         run: |
-          curl -fsSL "https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver" -o "$(go env GOPATH)/bin/kube-apiserver"
+          curl -fsSL "https://dl.k8s.io/v1.35.2/bin/linux/amd64/kube-apiserver" -o "$(go env GOPATH)/bin/kube-apiserver"
           chmod +x "$(go env GOPATH)/bin/kube-apiserver"
 
       - name: Run Checks (Lint & Test)

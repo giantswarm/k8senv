@@ -25,14 +25,14 @@ Download the binary for your platform:
 
 **Linux (amd64):**
 ```bash
-curl -LO https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver
+curl -LO https://dl.k8s.io/v1.35.2/bin/linux/amd64/kube-apiserver
 chmod +x kube-apiserver
 sudo mv kube-apiserver /usr/local/bin/
 ```
 
 **macOS (arm64):**
 ```bash
-curl -LO https://dl.k8s.io/v1.35.0/bin/darwin/arm64/kube-apiserver
+curl -LO https://dl.k8s.io/v1.35.2/bin/darwin/arm64/kube-apiserver
 chmod +x kube-apiserver
 sudo mv kube-apiserver /usr/local/bin/
 ```

@@ -46,7 +46,7 @@ make test
 - kine binary installed and in `$PATH`
 - kube-apiserver binary installed and in `$PATH`
 - Install kine: `go install github.com/k3s-io/kine/cmd/kine@latest`
-- Install kube-apiserver: Download from https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver (or use `make install-tools`)
+- Install kube-apiserver: Download from https://dl.k8s.io/v1.35.2/bin/linux/amd64/kube-apiserver (or use `make install-tools`)
 
 ### Running a Single Test
 ```bash
@@ -390,7 +390,7 @@ Run with: `go test -parallel=10 -tags=integration`
 - **Configure** the release strategy once in `TestMain` via `WithReleaseStrategy`. Available strategies: `ReleaseRestart` (default, stops instance), `ReleaseClean` (cleans namespaces via API, keeps running), `ReleasePurge` (cleans via direct SQLite deletion, fastest, keeps running), `ReleaseNone` (no cleanup)
 - **Check** that kine and kube-apiserver are installed before running integration tests:
   - `which kine` (install: `go install github.com/k3s-io/kine/cmd/kine@latest`)
-  - `which kube-apiserver` (download from https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver or use `make install-tools`)
+  - `which kube-apiserver` (download from https://dl.k8s.io/v1.35.2/bin/linux/amd64/kube-apiserver or use `make install-tools`)
 - The library logs process output to separate log files in each instance's data directory for debugging:
   - `kine-stdout.log` and `kine-stderr.log`
   - `kube-apiserver-stdout.log` and `kube-apiserver-stderr.log`

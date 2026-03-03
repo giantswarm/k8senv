@@ -21,7 +21,7 @@ k8senv gives your Go tests a real kube-apiserver backed by [kine](https://github
 go install github.com/k3s-io/kine/cmd/kine@latest
 
 # kube-apiserver (Linux amd64)
-curl -Lo kube-apiserver https://dl.k8s.io/v1.35.0/bin/linux/amd64/kube-apiserver
+curl -Lo kube-apiserver https://dl.k8s.io/v1.35.2/bin/linux/amd64/kube-apiserver
 chmod +x kube-apiserver
 sudo mv kube-apiserver /usr/local/bin/
 ```
