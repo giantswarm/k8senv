@@ -1,5 +1,6 @@
 ##@ Utilities
 
+KINE_VERSION           ?= v0.14.12
 KUBE_APISERVER_VERSION ?= v1.35.0
 GOLANGCI_LINT_VERSION  ?= v2.10.1
 CAPI_VERSION           ?= v1.11.2
@@ -7,7 +8,7 @@ CAPI_VERSION           ?= v1.11.2
 .PHONY: install-tools
 install-tools: ## Install required external tools (kine, kube-apiserver, golangci-lint, pkgsite)
 	@echo "Installing kine..."
-	go install github.com/k3s-io/kine/cmd/kine@latest
+	go install github.com/k3s-io/kine/cmd/kine@$(KINE_VERSION)
 	@echo "Installing kube-apiserver $(KUBE_APISERVER_VERSION)..."
 	@GOBIN=$$(go env GOPATH)/bin && \
 		curl -fsSL "https://dl.k8s.io/$(KUBE_APISERVER_VERSION)/bin/$$(go env GOOS)/$$(go env GOARCH)/kube-apiserver" -o "$$GOBIN/kube-apiserver" && \
