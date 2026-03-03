@@ -90,9 +90,13 @@ Instance logs are stored in the data directory:
 ├── kine-stderr.log            # kine standard error
 ├── kube-apiserver-stdout.log  # kube-apiserver standard output
 ├── kube-apiserver-stderr.log  # kube-apiserver standard error
-├── apiserver.crt              # Generated certificate
-├── apiserver.key              # Generated private key
-└── token-auth                 # Token authentication file
+├── kubeconfig.yaml            # Generated kubeconfig for this instance
+├── token.csv                  # Token authentication file
+├── auth-config.yaml           # Authentication configuration
+└── certs/                     # Certificate directory
+    ├── apiserver.crt           # Self-signed TLS certificate (auto-generated)
+    ├── apiserver.key           # TLS private key (auto-generated)
+    └── sa.key                  # Service account signing key
 ```
 
 ### Viewing Logs

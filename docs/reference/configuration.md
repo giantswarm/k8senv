@@ -19,7 +19,7 @@ mgr := k8senv.NewManager(
 |--------|---------|-------------|
 | `WithPoolSize(size)` | 4 | Max instances in pool; 0 = unlimited. Acquire blocks when all in use |
 | `WithCleanupTimeout(d)` | 30s | Timeout for SQLite namespace purge during release |
-| `WithAcquireTimeout(d)` | 30s | Timeout for instance startup during Acquire |
+| `WithAcquireTimeout(d)` | 30s | Total timeout for Acquire: pool wait time + instance startup |
 | `WithKineBinary(path)` | `"kine"` | Path to kine binary |
 | `WithKubeAPIServerBinary(path)` | `"kube-apiserver"` | Path to kube-apiserver binary |
 | `WithBaseDataDir(dir)` | `"/tmp/k8senv"` | Base directory for instance data |
@@ -55,13 +55,13 @@ Panics if size < 0.
 
 #### WithAcquireTimeout
 
-Sets the timeout for `Acquire()`, covering instance startup time.
+Sets the total timeout for `Acquire()`, covering both pool wait time (when all instances are in use) and instance startup time.
 
 ```go
 k8senv.WithAcquireTimeout(90*time.Second)
 ```
 
-Instance startup typically takes 5-15 seconds. The default of 30 seconds is sufficient for most scenarios.
+Instance startup typically takes 5-15 seconds. With a bounded pool (default: 4), `Acquire` may also block waiting for a free instance. The default of 30 seconds is sufficient for most scenarios. Increase if pool contention is expected.
 
 Panics if duration ≤ 0.
 

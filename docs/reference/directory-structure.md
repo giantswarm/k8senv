@@ -178,9 +178,13 @@ Instance data is created at runtime under the base data directory (default `/tmp
 │   ├── kine-stderr.log          # kine stderr
 │   ├── kube-apiserver-stdout.log
 │   ├── kube-apiserver-stderr.log
-│   ├── apiserver.crt            # Self-signed TLS certificate
-│   ├── apiserver.key            # TLS private key
-│   └── token-auth               # Token authentication file
+│   ├── kubeconfig.yaml          # Generated kubeconfig for this instance
+│   ├── token.csv                # Token authentication file
+│   ├── auth-config.yaml         # Authentication configuration
+│   └── certs/                   # Certificate directory
+│       ├── apiserver.crt        # Self-signed TLS certificate (auto-generated)
+│       ├── apiserver.key        # TLS private key (auto-generated)
+│       └── sa.key               # Service account signing key
 ```
 
 ## Related
