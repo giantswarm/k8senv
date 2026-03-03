@@ -1,7 +1,7 @@
 ##@ CI
 
 .PHONY: check
-check: lint test-integration ## Run lint and unit tests (used by CI)
+check: lint test-integration ## Run lint and integration tests (used by CI)
 
 .PHONY: govulncheck
 govulncheck: ## Scan for known vulnerabilities

@@ -25,6 +25,7 @@ import (
     "context"
     "fmt"
     "testing"
+    "time"
 
     "github.com/giantswarm/k8senv"
     v1 "k8s.io/api/core/v1"
