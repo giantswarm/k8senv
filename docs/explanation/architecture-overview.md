@@ -77,11 +77,11 @@ Orchestrates the pool lifecycle. Handles two-phase initialization (construction 
 
 ### Pool
 
-Instance management safe for concurrent use by multiple goroutines, with on-demand creation. `Acquire()` creates a new instance or reuses a previously released one, returning a token for double-release detection. `Release()` applies the configured `ReleaseStrategy` and returns the instance to the pool.
+Instance management safe for concurrent use by multiple goroutines, with on-demand creation. `Acquire()` creates a new instance or reuses a previously released one, returning a token for double-release detection. `Release()` purges non-system namespaces via SQLite and returns the instance to the pool.
 
 ### Instance
 
-Manages the lifecycle of a kine + kube-apiserver pair. Supports lazy start (first `Acquire()` triggers startup), port conflict retry, and strategy-based release (restart, API-based cleanup, SQL-based purge, or no-op).
+Manages the lifecycle of a kine + kube-apiserver pair. Supports lazy start (first `Acquire()` triggers startup), port conflict retry, and SQLite-based namespace purge on release.
 
 ### KubeStack
 
@@ -108,14 +108,13 @@ Hash-based caching system that pre-applies CRDs to a SQLite database during `Ini
 
 Scheduler and controller-manager are not run. Pods remain Pending and controllers don't reconcile, but this is ideal for testing CRDs, RBAC, namespaces, ConfigMaps, Secrets, and admission webhooks.
 
-### Release Strategies
+### SQLite Purge on Release
 
-Release behavior is configured once at the manager level via `WithReleaseStrategy()`, not per-call:
+When `Release()` is called, non-system namespaces and their resources are deleted via direct SQL DELETE operations on kine's SQLite database. This approach:
 
-- **`ReleaseRestart`** (default) — Stops the instance on release. Next `Acquire()` starts a fresh instance with the DB restored from template. Provides full isolation between tests.
-- **`ReleaseClean`** — Deletes non-system namespaces via the Kubernetes API but keeps the instance running. Faster reuse (~100ms vs ~5-15s restart), but shared state in system namespaces persists.
-- **`ReleasePurge`** — Deletes non-system namespaces via direct SQLite queries, bypassing the Kubernetes API and finalizers entirely. Fastest cleanup strategy; keeps the instance running.
-- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Tests must manage their own isolation.
+- **Bypasses the Kubernetes API and finalizers** — cleanup is fast and deterministic
+- **Keeps instances running** — no restart needed, enabling immediate reuse
+- **Preserves system namespaces** — `default`, `kube-system`, `kube-public`, and `kube-node-lease` survive cleanup
 
 ### Lazy Initialization
 

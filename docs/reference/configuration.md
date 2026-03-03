@@ -18,8 +18,7 @@ mgr := k8senv.NewManager(
 | Option | Default | Description |
 |--------|---------|-------------|
 | `WithPoolSize(size)` | 4 | Max instances in pool; 0 = unlimited. Acquire blocks when all in use |
-| `WithReleaseStrategy(s)` | `ReleaseRestart` | Strategy for `Release()`: `ReleaseRestart`, `ReleaseClean`, `ReleasePurge`, or `ReleaseNone` |
-| `WithCleanupTimeout(d)` | 30s | Timeout for namespace cleanup during release (used with `ReleaseClean` and `ReleasePurge`) |
+| `WithCleanupTimeout(d)` | 30s | Timeout for SQLite namespace purge during release |
 | `WithAcquireTimeout(d)` | 30s | Timeout for instance startup during Acquire |
 | `WithKineBinary(path)` | `"kine"` | Path to kine binary |
 | `WithKubeAPIServerBinary(path)` | `"kube-apiserver"` | Path to kube-apiserver binary |
@@ -33,26 +32,9 @@ mgr := k8senv.NewManager(
 
 ### Option Details
 
-#### WithReleaseStrategy
-
-Configures the behavior of `Instance.Release()` for all instances managed by this manager:
-
-- **`ReleaseRestart`** (default) — Stops the instance on release. Next `Acquire()` starts a fresh instance with the DB restored from template. Provides full isolation between tests.
-- **`ReleaseClean`** — Deletes non-system namespaces via the Kubernetes API but keeps the instance running. Faster reuse at the cost of shared state in system namespaces.
-- **`ReleasePurge`** — Deletes non-system namespaces via direct SQLite queries, bypassing the Kubernetes API entirely. Fastest cleanup strategy; keeps the instance running. Bypasses finalizers.
-- **`ReleaseNone`** — No cleanup. Returns the instance as-is. Tests must manage their own isolation.
-
-```go
-k8senv.WithReleaseStrategy(k8senv.ReleaseClean)   // Keep running, clean namespaces via API
-k8senv.WithReleaseStrategy(k8senv.ReleasePurge)    // Keep running, clean namespaces via SQL
-k8senv.WithReleaseStrategy(k8senv.ReleaseNone)     // No cleanup
-```
-
-Panics if strategy is invalid.
-
 #### WithCleanupTimeout
 
-Sets the timeout for namespace cleanup during release. Used when the release strategy is `ReleaseClean` or `ReleasePurge`.
+Sets the timeout for the SQLite namespace purge during `Release()`. This covers the direct SQL DELETE operations that remove non-system namespaces and their resources.
 
 ```go
 k8senv.WithCleanupTimeout(60*time.Second)
@@ -232,11 +214,10 @@ func TestWithFullConfig(t *testing.T) {
     mgr := k8senv.NewManager(
         // Pool configuration
         k8senv.WithPoolSize(4),                                    // Default: 4 (0 = unlimited)
-        k8senv.WithReleaseStrategy(k8senv.ReleaseClean),          // Default: ReleaseRestart
 
         // Timeout configuration
         k8senv.WithAcquireTimeout(90*time.Second),
-        k8senv.WithCleanupTimeout(60*time.Second),                // Default: 30s (ReleaseClean only)
+        k8senv.WithCleanupTimeout(60*time.Second),                // Default: 30s (SQLite purge timeout)
         k8senv.WithInstanceStartTimeout(3*time.Minute),
         k8senv.WithInstanceStopTimeout(30*time.Second),
         k8senv.WithShutdownDrainTimeout(2*time.Minute),         // Default: 30s

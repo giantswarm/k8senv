@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
     Root["k8senv/"] --> Public["Public API\n(root package)"]
-    Root --> Tests["tests/\n+ cleanup/ + restart/ + purge/\n+ stress/ + stressclean/ + stresspurge/\n+ crd/ + poolsize/"]
+    Root --> Tests["tests/\n+ purge/ + stress/\n+ crd/ + poolsize/"]
     Root --> Internal["internal/"]
     Root --> Docs["docs/"]
     Root --> CRDs["crds/"]
@@ -14,7 +14,6 @@ flowchart TD
     Public --> ifaces["interfaces.go"]
     Public --> factory["k8senv.go"]
     Public --> opts["options.go"]
-    Public --> strat["strategy.go"]
     Public --> defs["defaults.go"]
     Public --> errs["errors.go"]
     Public --> cfg["config.go"]
@@ -41,9 +40,8 @@ flowchart TD
 | `doc.go` | Package documentation with usage examples |
 | `interfaces.go` | `Manager` and `Instance` interfaces |
 | `k8senv.go` | `NewManager()` factory function, adapter wrappers |
-| `options.go` | Functional options: `WithReleaseStrategy`, `WithCRDDir`, `WithAcquireTimeout`, etc. |
-| `strategy.go` | `ReleaseStrategy` type alias + constants (`ReleaseRestart`, `ReleaseClean`, `ReleasePurge`, `ReleaseNone`) |
-| `defaults.go` | Exported default constants (timeouts, binary names, strategy) |
+| `options.go` | Functional options: `WithCRDDir`, `WithAcquireTimeout`, `WithPoolSize`, etc. |
+| `defaults.go` | Exported default constants (timeouts, binary names, pool size) |
 | `errors.go` | Sentinel error re-exports from internal/core |
 | `config.go` | Unexported `managerConfig` struct + conversion to `core.ManagerConfig` |
 | `log.go` | `SetLogger()` public logging API |
@@ -55,10 +53,10 @@ flowchart TD
 |------|---------|
 | `manager.go` | Manager implementation: pool lifecycle, two-phase init, Acquire returns token |
 | `pool.go` | Bounded instance pool (default 4), token-based double-release detection |
-| `instance.go` | Instance lifecycle: strategy-based Release(), start, stop, port conflict retry |
-| `cleanup.go` | Namespace cleanup via Kubernetes API: parallel deletion, finalizer removal |
+| `instance.go` | Instance lifecycle: Release() with SQLite purge, start, stop, port conflict retry |
+| `namespace.go` | System namespace definitions and helpers |
 | `purge.go` | Namespace cleanup via direct SQLite queries: bypasses API and finalizers |
-| `config.go` | `ManagerConfig`, `InstanceConfig`, `ReleaseStrategy` type with `Validate()` |
+| `config.go` | `ManagerConfig`, `InstanceConfig` with `Validate()` |
 | `log.go` | Package-level slog logger with atomic pointers |
 
 ### internal/kubestack/ — Process Stack
@@ -129,47 +127,19 @@ flowchart TD
 | `lifecycle_test.go` | Initialize idempotency and concurrency tests |
 | `context_test.go` | Context cancel coverage |
 
-### tests/cleanup/ — Namespace Cleanup Tests (package `k8senv_cleanup_test`)
-
-| File | Purpose |
-|------|---------|
-| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleaseClean)` |
-| `cleanup_test.go` | System NS match, cleanup, preserve, namespaced resources, finalizers, no-user-NS fast path |
-
-### tests/restart/ — Restart Strategy Tests (package `k8senv_restart_test`)
-
-| File | Purpose |
-|------|---------|
-| `main_test.go` | `TestMain`: singleton with default `ReleaseRestart` strategy |
-| `restart_test.go` | Release stops instance, next Acquire starts fresh |
-
 ### tests/stress/ — Stress Tests (package `k8senv_stress_test`)
 
 | File | Purpose |
 |------|---------|
-| `main_test.go` | `TestMain`: singleton with default strategy |
+| `main_test.go` | `TestMain`: singleton manager setup |
 | `stress_test.go` | 100+ parallel subtests with random resource creation |
 
 ### tests/purge/ — SQLite Purge Tests (package `k8senv_purge_test`)
 
 | File | Purpose |
 |------|---------|
-| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleasePurge)` |
+| `main_test.go` | `TestMain`: singleton manager setup |
 | `purge_test.go` | Purge namespaces, preserve system NS, namespaced resources, finalizer bypass |
-
-### tests/stressclean/ — Stress Tests with ReleaseClean (package `k8senv_stressclean_test`)
-
-| File | Purpose |
-|------|---------|
-| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleaseClean)` |
-| `stress_test.go` | Stress + verify clean instances on acquire |
-
-### tests/stresspurge/ — Stress Tests with ReleasePurge (package `k8senv_stresspurge_test`)
-
-| File | Purpose |
-|------|---------|
-| `main_test.go` | `TestMain`: singleton with `WithReleaseStrategy(ReleasePurge)` |
-| `stress_test.go` | Stress + verify purged instances on acquire |
 
 ### tests/crd/ — CRD Tests (package `k8senv_crd_test`)
 
@@ -192,7 +162,7 @@ flowchart TD
 | File | Purpose |
 |------|---------|
 | `testutil.go` | `SetupAndRun`, `SetupAndRunWithHook`, `AcquireWithClient`, `AcquireWithGuardedRelease`, `RunTestMain`, `SetupTestLogging`, `RequireBinariesOrExit`, `UniqueName`, `CreateNamespace`, `SystemNamespaces`, `TestParallel` |
-| `release.go` | Shared release strategy assertions: `ReleaseRemovesUserNamespaces`, `ReleasePreservesSystemNamespaces`, `ReleaseWithNoUserNamespaces`, `ReleaseRemovesNamespacedResources`, `ReleaseRemovesResourcesWithFinalizers`, `ReleasePreservesSystemNamespaceResources` |
+| `release.go` | Shared release assertions: `ReleaseRemovesUserNamespaces`, `ReleasePreservesSystemNamespaces`, `ReleaseWithNoUserNamespaces`, `ReleaseRemovesNamespacedResources`, `ReleaseRemovesResourcesWithFinalizers`, `ReleasePreservesSystemNamespaceResources` |
 | `stress.go` | Stress test helpers: `StressCreateRandomResource`, `StressSubtestCount` |
 
 ### Runtime Data Directory

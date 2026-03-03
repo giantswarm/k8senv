@@ -41,20 +41,9 @@ sequenceDiagram
     Note over Test: Create client,<br/>run test logic
 
     Test->>Instance: Release()
-    Note over Instance: Strategy from config
-
-    alt ReleaseRestart (default)
-        Instance->>Instance: Stop()
-        Instance->>Pool: Return (stopped)
-    else ReleaseClean
-        Instance->>Instance: cleanNamespaces()
-        Instance->>Pool: Return (running)
-    else ReleasePurge
-        Instance->>Instance: purgeViaSQL()
-        Instance->>Pool: Return (running)
-    else ReleaseNone
-        Instance->>Pool: Return (as-is)
-    end
+    Instance->>Instance: purgeViaSQL()
+    Note over Instance: DELETE non-system<br/>namespaces from SQLite
+    Instance->>Pool: Return (running)
 ```
 
 ## Instance Startup Sequence
@@ -112,29 +101,23 @@ stateDiagram-v2
     [*] --> Created: NewInstance()
     Created --> Started: First Acquire() triggers Start()
     Started --> Busy: Acquire() — token issued
-    Busy --> Free: Release() — ReleaseToPool (strategy applied)
+    Busy --> Free: Release() — purge via SQLite
     Free --> Busy: Acquire()
     Busy --> Failed: ReleaseFailed() — error during release
     Started --> Failed: Start error
     Failed --> [*]: Removed from pool
 
     note right of Busy
-        Strategy determines cleanup:
-        Restart → Stop()
-        Clean → cleanNamespaces()
-        Purge → purgeViaSQL()
-        None → no-op
+        Release purges non-system
+        namespaces via direct SQL DELETE,
+        keeping the instance running.
     end note
 ```
 
 The pool manages instances with a bounded capacity (default: 4):
 
 - **Acquire**: Returns a previously released instance if available, or creates a new one (up to the pool size limit). Blocks if all instances are in use. Returns a token for double-release detection.
-- **Release()**: Behavior depends on the manager's `ReleaseStrategy`:
-  - `ReleaseRestart` (default) — Stops instance. Next acquire starts fresh.
-  - `ReleaseClean` — Deletes non-system namespaces via Kubernetes API, keeps running.
-  - `ReleasePurge` — Deletes non-system namespaces via direct SQLite queries, keeps running. Fastest cleanup.
-  - `ReleaseNone` — No cleanup, returns as-is.
+- **Release()**: Purges non-system namespaces and their resources via direct SQLite queries, keeping the instance running for immediate reuse. Bypasses the Kubernetes API and finalizers.
 - **Failed**: Instance release or startup failed; instance is removed from the pool.
 
 ## Related

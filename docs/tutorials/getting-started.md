@@ -123,7 +123,7 @@ If binaries are not installed, tests will fail with an informative error message
 2. **Initialization**: `Initialize()` prepares directories and optional CRD caching
 3. **Acquire**: `Acquire()` gets an instance, starting it lazily if needed
 4. **Use**: Your test uses the `*rest.Config` to create clients and interact with the API
-5. **Release**: `Release()` returns the instance to the pool (behavior depends on `ReleaseStrategy`)
+5. **Release**: `Release()` purges non-system namespaces via SQLite and returns the instance to the pool
 6. **Shutdown**: `Shutdown()` stops all instances and cleans up
 
 ## API-Only Mode

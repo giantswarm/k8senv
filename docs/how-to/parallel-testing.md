@@ -8,7 +8,7 @@ The pool uses a bounded design (default: 4 instances):
 
 1. **Bounded capacity**: Up to `DefaultPoolSize` (4) instances are created; `Acquire()` blocks when all are in use. Use `WithPoolSize(0)` for unlimited.
 2. **Lazy start**: Instances start kube-apiserver only when first acquired
-3. **Instance reuse**: `Release()` returns instances for reuse by subsequent `Acquire()` calls (behavior depends on `ReleaseStrategy`)
+3. **Instance reuse**: `Release()` purges non-system namespaces via SQLite and returns instances for reuse by subsequent `Acquire()` calls
 
 Parallel tests share instances from the pool. When all instances are in use, `Acquire` blocks until one is released. Released instances are reused to minimize startup overhead.
 
@@ -253,7 +253,7 @@ Each instance consumes:
 - 2 file descriptors for processes
 - ~10-20MB disk for SQLite database
 
-With the default pool size of 4, at most 4 instances run concurrently. The default `ReleaseRestart` strategy stops instances on release. For faster reuse, use `WithReleaseStrategy(k8senv.ReleasePurge)` (cleans namespaces via direct SQLite, fastest) or `WithReleaseStrategy(k8senv.ReleaseClean)` (cleans namespaces via Kubernetes API). Adjust `WithPoolSize()` to match your resource budget.
+With the default pool size of 4, at most 4 instances run concurrently. On release, non-system namespaces are purged via direct SQLite queries, keeping instances running for immediate reuse. Adjust `WithPoolSize()` to match your resource budget.
 
 ## Complete Example: 10 Parallel Tests
 
