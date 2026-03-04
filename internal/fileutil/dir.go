@@ -26,5 +26,8 @@ func EnsureDir(path string) error {
 // EnsureDirForFile creates the parent directory of filePath if it does not
 // already exist, ensuring the file can be created without a missing-directory error.
 func EnsureDirForFile(filePath string) error {
+	if filePath == "" {
+		return ErrEmptyPath
+	}
 	return EnsureDir(filepath.Dir(filePath))
 }

@@ -82,17 +82,18 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	if err != nil {
 		return err
 	}
+
 	defer func() {
-		// Cleanup temp file on error. openDstFile handles its own cleanup
-		// for errors during temp file setup; this covers errors after setup.
+		// Cleanup temp file on error. Go's *os.File.Close is safe to call
+		// after a prior Close (poll.FD prevents double-close of the fd).
 		if retErr != nil && o.Atomic {
-			_ = dstFile.Close() // no-op if already closed
+			_ = dstFile.Close()
 			_ = os.Remove(writePath)
 		}
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		_ = dstFile.Close() // best-effort; copy error takes priority
+		_ = dstFile.Close()
 		return fmt.Errorf("copy: %w", err)
 	}
 
@@ -100,12 +101,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
-// On sync failure, dstFile is closed before returning the error.
 func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) error {
-	// Sync data to disk when explicitly requested or when performing an
-	// atomic write. For atomic writes, fsync before rename ensures data
-	// durability — without it, a crash could leave the renamed file with
-	// incomplete contents.
 	if doSync {
 		if err := dstFile.Sync(); err != nil {
 			_ = dstFile.Close()
@@ -113,12 +109,10 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) 
 		}
 	}
 
-	// Close explicitly before rename so the file content is flushed.
 	if err := dstFile.Close(); err != nil {
 		return fmt.Errorf("close destination: %w", err)
 	}
 
-	// Atomic: rename temp file to final destination.
 	if atomic {
 		if err := os.Rename(writePath, dst); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
@@ -148,7 +142,10 @@ func isSameFile(srcFile *os.File, dstPath string) (bool, error) {
 	}
 	dstInfo, err := os.Stat(dstPath)
 	if err != nil {
-		return false, nil //nolint:nilerr // dst not existing means files differ
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat destination: %w", err)
 	}
 	return os.SameFile(srcInfo, dstInfo), nil
 }
@@ -165,7 +162,7 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, e
 		writePath := tmpFile.Name()
 		if err := tmpFile.Chmod(mode); err != nil {
 			_ = tmpFile.Close()
-			_ = os.Remove(writePath) //nolint:gosec // G703: writePath is from os.CreateTemp, not user input.
+			_ = os.Remove(writePath) //nolint:gosec // G703: writePath is from os.CreateTemp, not user input
 			return nil, "", fmt.Errorf("chmod temp file: %w", err)
 		}
 		return tmpFile, writePath, nil
