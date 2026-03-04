@@ -1,6 +1,7 @@
 package fileutil
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -83,9 +84,12 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 
+	var dstClosed bool
 	defer func() {
 		if retErr != nil {
-			_ = dstFile.Close()
+			if !dstClosed {
+				_ = dstFile.Close()
+			}
 			// Only remove temp files; non-atomic partial files are left for
 			// the caller to handle (original content was already truncated).
 			if o.Atomic {
@@ -98,29 +102,34 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return fmt.Errorf("copy: %w", err)
 	}
 
-	return finalizeCopy(dstFile, writePath, dst, o.Sync, o.Atomic)
+	dstClosed, err = finalizeCopy(dstFile, writePath, dst, o.Sync, o.Atomic)
+	return err
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
-// On sync failure the caller's defer closes the file.
-func finalizeCopy(dstFile *os.File, writePath, dst string, sync, atomic bool) error {
-	if sync || atomic {
+// It returns true if the file was closed (even on error), so the caller's
+// defer can skip a redundant close.
+func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) (closed bool, _ error) {
+	if doSync || atomic {
 		if err := dstFile.Sync(); err != nil {
-			return fmt.Errorf("sync: %w", err)
+			return false, fmt.Errorf("sync: %w", err)
 		}
 	}
 
+	// Close before rename so the file content is flushed. On Linux close(2)
+	// always releases the fd, so report closed=true even on error to prevent
+	// a double-close in the caller's defer.
 	if err := dstFile.Close(); err != nil {
-		return fmt.Errorf("close destination: %w", err)
+		return true, fmt.Errorf("close destination: %w", err)
 	}
 
 	if atomic {
 		if err := os.Rename(writePath, dst); err != nil {
-			return fmt.Errorf("rename temp file to destination: %w", err)
+			return true, fmt.Errorf("rename temp file to destination: %w", err)
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 // resolveFileMode returns the given mode, defaulting to 0o644 when zero.
@@ -139,7 +148,7 @@ func resolveFileMode(mode os.FileMode) os.FileMode {
 func isSameFile(srcFile *os.File, dstPath string) (bool, error) {
 	dstInfo, err := os.Stat(dstPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, fmt.Errorf("stat destination: %w", err)
