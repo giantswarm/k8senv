@@ -58,33 +58,51 @@ func (r *PortRegistry) Release(port int) {
 	delete(r.ports, port)
 }
 
+// tryAllocate opens a listener to obtain an ephemeral port, reserves it in
+// the registry, and closes the listener. It returns the port on success, 0
+// when the port is already registered (caller should retry), or an error.
+func (r *PortRegistry) tryAllocate() (int, error) {
+	l, err := net.ListenTCP("tcp", loopbackAddr)
+	if err != nil {
+		return 0, fmt.Errorf("listen on tcp address: %w", err)
+	}
+	defer func() { _ = l.Close() }()
+
+	addr := l.Addr()
+	tcpAddr, ok := addr.(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("unexpected address type: %T", addr)
+	}
+
+	port := tcpAddr.Port
+	if r.reserve(port) {
+		return port, nil
+	}
+
+	slog.Default().Debug("port already in registry, retrying", "port", port)
+
+	return 0, nil
+}
+
 // getFreePortFromKernel asks the kernel for a free port, skipping any ports
 // already in the registry. On success it returns the assigned port number.
 // The port is registered in the registry; the caller must call
 // [PortRegistry.Release] to free it.
 func (r *PortRegistry) getFreePortFromKernel() (int, error) {
 	for range maxPortRetries {
-		l, err := net.ListenTCP("tcp", loopbackAddr)
+		port, err := r.tryAllocate()
 		if err != nil {
-			return 0, fmt.Errorf("listen on tcp address: %w", err)
+			return 0, err
 		}
-		tcpAddr, ok := l.Addr().(*net.TCPAddr)
-		if !ok {
-			_ = l.Close()
-			return 0, fmt.Errorf("unexpected address type: %T", l.Addr())
-		}
-		port := tcpAddr.Port
-		if r.reserve(port) {
-			_ = l.Close()
+		if port != 0 {
 			return port, nil
 		}
-		// Port already in registry, close and retry to get a different one.
-		_ = l.Close()
-		slog.Default().Debug("port already in registry, retrying", "port", port)
 	}
+
 	r.mu.Lock()
 	n := len(r.ports)
 	r.mu.Unlock()
+
 	return 0, fmt.Errorf(
 		"allocate unique port: exhausted %d attempts (%d ports in registry)",
 		maxPortRetries, n,
