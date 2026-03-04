@@ -297,6 +297,9 @@ func TestPortRegistry_AllocateMultiplePairs(t *testing.T) {
 		if seen[p2] {
 			t.Errorf("pair %d: port2 %d already seen", i, p2)
 		}
+		if p1 == p2 {
+			t.Errorf("pair %d: ports should differ: p1=%d, p2=%d", i, p1, p2)
+		}
 		seen[p1] = true
 		seen[p2] = true
 	}

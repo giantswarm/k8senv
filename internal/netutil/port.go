@@ -18,7 +18,10 @@ var loopbackAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 // PortRegistry tracks ports currently reserved by this process to prevent
 // the TOCTOU race where two concurrent AllocatePortPair calls receive the
 // same port from the kernel (because the first caller closed its listener
-// before the second caller opened theirs).
+// before the second caller opened theirs). A small external-process TOCTOU
+// window remains between the listener close and the consumer bind; this is
+// inherent to the listen-then-close pattern and acceptable for ephemeral
+// test ports.
 //
 // The singleton Manager creates one PortRegistry and shares it via dependency
 // injection with all instances and temporary stacks (e.g., CRD cache creation).
@@ -84,11 +87,11 @@ func (r *PortRegistry) tryAllocate() (int, error) {
 	return 0, nil
 }
 
-// getFreePortFromKernel asks the kernel for a free port, skipping any ports
-// already in the registry. On success it returns the assigned port number.
+// allocatePort asks the kernel for a free port, skipping any ports already
+// in the registry. On success it returns the assigned port number.
 // The port is registered in the registry; the caller must call
 // [PortRegistry.Release] to free it.
-func (r *PortRegistry) getFreePortFromKernel() (int, error) {
+func (r *PortRegistry) allocatePort() (int, error) {
 	for range maxPortRetries {
 		port, err := r.tryAllocate()
 		if err != nil {
@@ -115,12 +118,12 @@ func (r *PortRegistry) getFreePortFromKernel() (int, error) {
 // concurrent callers. Callers must call Release for each port when no longer
 // needed.
 func (r *PortRegistry) AllocatePortPair() (port1, port2 int, err error) {
-	p1, err := r.getFreePortFromKernel()
+	p1, err := r.allocatePort()
 	if err != nil {
 		return 0, 0, fmt.Errorf("allocate first port: %w", err)
 	}
 
-	p2, err := r.getFreePortFromKernel()
+	p2, err := r.allocatePort()
 	if err != nil {
 		r.Release(p1)
 		return 0, 0, fmt.Errorf("allocate second port: %w", err)
