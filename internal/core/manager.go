@@ -536,11 +536,5 @@ func stopAllInstances(instances []*Instance, timeout time.Duration) error {
 	}
 	wg.Wait()
 
-	var errs []error
-	for _, err := range stopErrs {
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	return errors.Join(stopErrs...)
 }
