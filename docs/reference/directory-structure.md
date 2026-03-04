@@ -18,7 +18,6 @@ flowchart TD
     Public --> errs["errors.go"]
     Public --> cfg["config.go"]
     Public --> log["log.go"]
-    Public --> ns["namespace.go"]
 
     Internal --> Core["core/"]
     Internal --> KubeStack["kubestack/"]
@@ -45,7 +44,6 @@ flowchart TD
 | `errors.go` | Sentinel error re-exports from internal/core |
 | `config.go` | Unexported `managerConfig` struct + conversion to `core.ManagerConfig` |
 | `log.go` | `SetLogger()` public logging API |
-| `namespace.go` | `SystemNamespaceNames()` returns system namespaces that must never be deleted during cleanup |
 
 ### internal/core/ — Orchestration
 
