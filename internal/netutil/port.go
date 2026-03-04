@@ -55,35 +55,34 @@ func (r *PortRegistry) Release(port int) {
 }
 
 // getFreePortFromKernel asks the kernel for a free port, skipping any ports
-// already in the registry. On success it returns an open [net.TCPListener] and
-// the assigned port number. The port is registered in the registry; the caller
-// must call [PortRegistry.Release] to free it. The caller should close the
-// listener when it is no longer needed (typically immediately, since the registry
-// entry prevents duplicate allocation).
-func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
+// already in the registry. On success it returns the assigned port number.
+// The port is registered in the registry; the caller must call
+// [PortRegistry.Release] to free it.
+func (r *PortRegistry) getFreePortFromKernel() (int, error) {
 	addr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 
 	for range maxPortRetries {
 		l, err := net.ListenTCP("tcp", addr)
 		if err != nil {
-			return nil, 0, fmt.Errorf("listen on tcp address: %w", err)
+			return 0, fmt.Errorf("listen on tcp address: %w", err)
 		}
 		tcpAddr, ok := l.Addr().(*net.TCPAddr)
 		if !ok {
 			_ = l.Close()
-			return nil, 0, fmt.Errorf("unexpected address type: %T", l.Addr())
+			return 0, fmt.Errorf("unexpected address type: %T", l.Addr())
 		}
-		if r.reserve(tcpAddr.Port) {
-			return l, tcpAddr.Port, nil
-		}
-		// Port already in registry, close and retry to get a different one.
-		slog.Default().Debug("port already in registry, retrying", "port", tcpAddr.Port)
+		port := tcpAddr.Port
 		_ = l.Close()
+		if r.reserve(port) {
+			return port, nil
+		}
+		// Port already in registry, retry to get a different one.
+		slog.Default().Debug("port already in registry, retrying", "port", port)
 	}
 	r.mu.Lock()
 	n := len(r.ports)
 	r.mu.Unlock()
-	return nil, 0, fmt.Errorf(
+	return 0, fmt.Errorf(
 		"allocate unique port: exhausted %d attempts (%d ports in registry)",
 		maxPortRetries, n,
 	)
@@ -92,29 +91,19 @@ func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
 // AllocatePortPair allocates two distinct free ports.
 //
 // Ports are registered in the registry to prevent duplicate allocation across
-// concurrent callers. Each listener is closed as soon as the port is registered,
-// since the registry entry (not the open listener) is the TOCTOU guard. Callers
-// must call Release for each port when no longer needed.
+// concurrent callers. Callers must call Release for each port when no longer
+// needed.
 func (r *PortRegistry) AllocatePortPair() (port1, port2 int, err error) {
-	l1, p1, err := r.getFreePortFromKernel()
+	p1, err := r.getFreePortFromKernel()
 	if err != nil {
 		return 0, 0, fmt.Errorf("allocate first port: %w", err)
 	}
-	closeListener(l1, p1)
 
-	l2, p2, err := r.getFreePortFromKernel()
+	p2, err := r.getFreePortFromKernel()
 	if err != nil {
 		r.Release(p1)
 		return 0, 0, fmt.Errorf("allocate second port: %w", err)
 	}
-	closeListener(l2, p2)
 
 	return p1, p2, nil
-}
-
-// closeListener closes a TCP listener and logs a warning on failure.
-func closeListener(l *net.TCPListener, port int) {
-	if err := l.Close(); err != nil {
-		slog.Default().Warn("close listener after port allocation", "port", port, "error", err)
-	}
 }
