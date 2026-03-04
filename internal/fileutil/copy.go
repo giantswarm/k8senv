@@ -74,7 +74,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		o.Mode = defaultFileMode
 	}
 
-	dstFile, err := openDstFile(dst, o.Mode, o.Atomic)
+	dstFile, err := openDstFile(dst, o)
 	if err != nil {
 		return fmt.Errorf("open destination: %w", err)
 	}
@@ -84,7 +84,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		// O_TRUNC already destroyed the original content — removing
 		// the partial file would lose any data that was written.
 		if retErr != nil && o.Atomic {
-			_ = os.Remove(dstFile.Name()) //nolint:gosec // G703: path is from os.CreateTemp, not user input
+			_ = os.Remove(dstFile.Name()) //nolint:gosec // path is from os.CreateTemp, not user input
 		}
 	}()
 
@@ -112,7 +112,7 @@ func finalizeCopy(dstFile *os.File, dst string, opts CopyFileOptions) error {
 	}
 
 	if opts.Atomic {
-		if err := os.Rename( //nolint:gosec // G703: path is from os.CreateTemp, not user input
+		if err := os.Rename( //nolint:gosec // path is from os.CreateTemp, not user input
 			dstFile.Name(),
 			dst,
 		); err != nil {
@@ -143,16 +143,16 @@ func isSameFile(srcFile *os.File, dstPath string) (bool, error) {
 	return os.SameFile(srcInfo, dstInfo), nil
 }
 
-// openDstFile opens the destination file for writing. When atomic is true, it
-// creates a temp file in the same directory as dst (with the correct permissions)
-// to enable an atomic rename after writing. Callers can retrieve the actual
-// write path via the returned file's Name method.
-func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, error) {
+// openDstFile opens the destination file for writing. When opts.Atomic is true,
+// it creates a temp file in the same directory as dst (with the correct
+// permissions) to enable an atomic rename after writing. Callers can retrieve
+// the actual write path via the returned file's Name method.
+func openDstFile(dst string, opts CopyFileOptions) (*os.File, error) {
 	var (
 		f   *os.File
 		err error
 	)
-	if atomic {
+	if opts.Atomic {
 		f, err = os.CreateTemp(filepath.Dir(dst), ".tmp-copy-*")
 		if err != nil {
 			return nil, fmt.Errorf("create temp file: %w", err)
@@ -161,7 +161,7 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, error) {
 		f, err = os.OpenFile( //nolint:gosec // G304: paths are from controlled sources
 			dst,
 			os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
-			mode,
+			opts.Mode,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create destination: %w", err)
@@ -170,10 +170,10 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, error) {
 
 	// Both paths need an explicit Chmod: CreateTemp applies a restrictive
 	// default, and OpenFile applies umask. Chmod sets the exact bits.
-	if err := f.Chmod(mode); err != nil {
+	if err := f.Chmod(opts.Mode); err != nil {
 		_ = f.Close()
-		if atomic {
-			_ = os.Remove(f.Name()) //nolint:gosec // G703: path is from os.CreateTemp, not user input
+		if opts.Atomic {
+			_ = os.Remove(f.Name()) //nolint:gosec // path is from os.CreateTemp, not user input
 		}
 		return nil, fmt.Errorf("chmod destination: %w", err)
 	}

@@ -18,13 +18,18 @@ func createTestFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
-func readDst(t *testing.T, path string) string {
+func readDstBytes(t *testing.T, path string) []byte {
 	t.Helper()
 	got, err := os.ReadFile(path) //nolint:gosec // G304: path is test-controlled
 	if err != nil {
 		t.Fatalf("read destination: %v", err)
 	}
-	return string(got)
+	return got
+}
+
+func readDst(t *testing.T, path string) string {
+	t.Helper()
+	return string(readDstBytes(t, path))
 }
 
 func TestCopyFile_EmptyPaths(t *testing.T) {
@@ -228,10 +233,7 @@ func TestCopyFile_LargeContent(t *testing.T) {
 		t.Fatalf("CopyFile() error: %v", err)
 	}
 
-	got, err := os.ReadFile(dst) //nolint:gosec // G304: path is test-controlled
-	if err != nil {
-		t.Fatalf("read destination: %v", err)
-	}
+	got := readDstBytes(t, dst)
 	if !bytes.Equal(got, content) {
 		t.Errorf("content mismatch: got %d bytes, want %d bytes", len(got), len(content))
 	}
