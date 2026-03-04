@@ -66,16 +66,6 @@ func (l *LogFiles) Close() {
 	}
 }
 
-// StdoutPath returns the absolute path to the stdout log file.
-func (l *LogFiles) StdoutPath() string {
-	return l.stdoutPath
-}
-
-// StderrPath returns the absolute path to the stderr log file.
-func (l *LogFiles) StderrPath() string {
-	return l.stderrPath
-}
-
 // newLogFiles creates and initializes log files for a process.
 // The processName is used to generate log file names (e.g., "kine" -> "kine-stdout.log").
 // Returns a pointer to prevent copying the file handles.

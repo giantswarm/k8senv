@@ -250,28 +250,6 @@ func TestBaseProcess_Exited(t *testing.T) {
 	}
 }
 
-func TestLogFiles_Paths(t *testing.T) {
-	t.Parallel()
-
-	t.Run("stdout path", func(t *testing.T) {
-		t.Parallel()
-		lf := LogFiles{stdoutPath: "/tmp/k8senv/inst-1/kine-stdout.log"}
-		want := "/tmp/k8senv/inst-1/kine-stdout.log"
-		if got := lf.StdoutPath(); got != want {
-			t.Errorf("StdoutPath() = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("stderr path", func(t *testing.T) {
-		t.Parallel()
-		lf := LogFiles{stderrPath: "/tmp/k8senv/inst-1/kine-stderr.log"}
-		want := "/tmp/k8senv/inst-1/kine-stderr.log"
-		if got := lf.StderrPath(); got != want {
-			t.Errorf("StderrPath() = %q, want %q", got, want)
-		}
-	})
-}
-
 func TestLogFiles_CloseNilHandles(t *testing.T) {
 	t.Parallel()
 
