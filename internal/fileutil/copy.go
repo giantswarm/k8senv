@@ -30,9 +30,9 @@ type CopyFileOptions struct {
 // If src and dst resolve to the same absolute path, CopyFile returns nil
 // without performing any I/O (copying a file onto itself is a no-op).
 //
-// The destination file is created with the target permissions atomically via
-// os.OpenFile, avoiding a window where the file has broader permissions than
-// intended. If opts.Mode is set, that mode is used; otherwise defaults to 0644.
+// The destination file is created with the target permissions via os.OpenFile,
+// avoiding a window where the file has broader permissions than intended.
+// If opts.Mode is set, that mode is used; otherwise defaults to 0644.
 //
 // When opts.Atomic is true, data is written to a temporary file in the same
 // directory as dst, then renamed to dst. On POSIX systems rename is atomic,
