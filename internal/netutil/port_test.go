@@ -39,7 +39,7 @@ func TestPortRegistry_reserve(t *testing.T) {
 			port:   9090,
 			wantOK: false,
 		},
-		"reserve different ports": {
+		"reserve with non-empty registry": {
 			setup: func(r *PortRegistry) {
 				r.reserve(8080)
 			},
@@ -71,33 +71,18 @@ func TestPortRegistry_Release(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		setup         func(r *PortRegistry)
-		port          int
-		wantAvailable bool // whether the port should be available after release
-		otherPort     int  // another port that should remain reserved (0 means none)
-		otherReserved bool // whether otherPort should remain reserved
+		setup func(r *PortRegistry)
+		port  int
 	}{
 		"release existing port": {
 			setup: func(r *PortRegistry) {
 				r.reserve(8080)
 			},
-			port:          8080,
-			wantAvailable: true,
+			port: 8080,
 		},
 		"release non-existent port": {
-			setup:         func(_ *PortRegistry) {},
-			port:          8080,
-			wantAvailable: true, // port was never reserved, so reserve should succeed
-		},
-		"release one of multiple": {
-			setup: func(r *PortRegistry) {
-				r.reserve(8080)
-				r.reserve(9090)
-			},
-			port:          8080,
-			wantAvailable: true,
-			otherPort:     9090,
-			otherReserved: true,
+			setup: func(_ *PortRegistry) {},
+			port:  8080,
 		},
 	}
 
@@ -110,21 +95,27 @@ func TestPortRegistry_Release(t *testing.T) {
 
 			r.Release(tc.port)
 
-			// Verify the released port is now available by reserving it.
-			if tc.wantAvailable {
-				if !r.reserve(tc.port) {
-					t.Errorf("port %d should be available after release, but reserve failed", tc.port)
-				}
-				r.Release(tc.port) // clean up
-			}
-
-			// Verify that other ports remain reserved.
-			if tc.otherPort != 0 && tc.otherReserved {
-				if r.reserve(tc.otherPort) {
-					t.Errorf("port %d should still be reserved, but reserve succeeded", tc.otherPort)
-				}
+			if !r.reserve(tc.port) {
+				t.Errorf("port %d should be available after release, but reserve failed", tc.port)
 			}
 		})
+	}
+}
+
+func TestPortRegistry_ReleasePreservesOtherPorts(t *testing.T) {
+	t.Parallel()
+
+	r := NewPortRegistry()
+	r.reserve(8080)
+	r.reserve(9090)
+
+	r.Release(8080)
+
+	if !r.reserve(8080) {
+		t.Error("released port 8080 should be available, but reserve failed")
+	}
+	if r.reserve(9090) {
+		t.Error("port 9090 should still be reserved, but reserve succeeded")
 	}
 }
 
