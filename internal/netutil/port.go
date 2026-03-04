@@ -121,24 +121,17 @@ func (r *PortRegistry) AllocatePortPair() (port1, port2 int, err error) {
 
 	// Success path: close both listeners. Order does not matter here since
 	// both ports remain registered and protected from reallocation.
-	if closeErr := l1.Close(); closeErr != nil {
-		r.log.Warn(
-			"close listener after port allocation; port may remain bound until kernel timeout",
-			"port",
-			p1,
-			"error",
-			closeErr,
-		)
+	closeListener := func(l *net.TCPListener, port int) {
+		if closeErr := l.Close(); closeErr != nil {
+			r.log.Warn(
+				"close listener after port allocation; port may remain bound until kernel timeout",
+				"port", port,
+				"error", closeErr,
+			)
+		}
 	}
-	if closeErr := l2.Close(); closeErr != nil {
-		r.log.Warn(
-			"close listener after port allocation; port may remain bound until kernel timeout",
-			"port",
-			p2,
-			"error",
-			closeErr,
-		)
-	}
+	closeListener(l1, p1)
+	closeListener(l2, p2)
 
 	return p1, p2, nil
 }

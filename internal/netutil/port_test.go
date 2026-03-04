@@ -26,32 +26,28 @@ func TestPortRegistry_reserve(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		setup      func(r *PortRegistry)
-		port       int
-		wantOK     bool
-		wantLocked bool // whether the port should be reserved after the call
+		setup  func(r *PortRegistry)
+		port   int
+		wantOK bool
 	}{
 		"reserve new port": {
-			setup:      func(_ *PortRegistry) {},
-			port:       8080,
-			wantOK:     true,
-			wantLocked: true,
+			setup:  func(_ *PortRegistry) {},
+			port:   8080,
+			wantOK: true,
 		},
 		"reserve duplicate port": {
 			setup: func(r *PortRegistry) {
 				r.reserve(9090)
 			},
-			port:       9090,
-			wantOK:     false,
-			wantLocked: true,
+			port:   9090,
+			wantOK: false,
 		},
 		"reserve different ports": {
 			setup: func(r *PortRegistry) {
 				r.reserve(8080)
 			},
-			port:       9090,
-			wantOK:     true,
-			wantLocked: true,
+			port:   9090,
+			wantOK: true,
 		},
 	}
 
@@ -66,11 +62,9 @@ func TestPortRegistry_reserve(t *testing.T) {
 			if got != tc.wantOK {
 				t.Errorf("reserve(%d) = %v, want %v", tc.port, got, tc.wantOK)
 			}
-			// Verify the port is reserved by attempting to reserve it again.
-			if tc.wantLocked {
-				if r.reserve(tc.port) {
-					t.Errorf("port %d should be reserved, but second reserve succeeded", tc.port)
-				}
+			// After any call, the port should be reserved (either newly or previously).
+			if r.reserve(tc.port) {
+				t.Errorf("port %d should be reserved, but second reserve succeeded", tc.port)
 			}
 		})
 	}
@@ -285,6 +279,10 @@ func TestPortRegistry_AllocatePortPair(t *testing.T) {
 	if !r.reserve(p2) {
 		t.Errorf("port2 %d should be available after release, but reserve failed", p2)
 	}
+
+	// Clean up.
+	r.Release(p1)
+	r.Release(p2)
 }
 
 func TestPortRegistry_AllocateMultiplePairs(t *testing.T) {
