@@ -259,9 +259,9 @@ func classifyDocuments(
 	logger *slog.Logger,
 ) (crdDocs []parsedDoc, otherDocs []parsedDoc, err error) {
 	crdDocs = make([]parsedDoc, 0, len(files))
-	otherDocs = make([]parsedDoc, 0, len(files))
+	otherDocs = make([]parsedDoc, 0, 4) // companion resources are uncommon
 	for _, f := range files {
-		logger.Debug("parsing file", "file", f.relPath)
+		logger.Debug("parsing file", "rel_path", f.relPath)
 		docs, parseErr := parseFileDocuments(f.content, f.relPath)
 		if parseErr != nil {
 			return nil, nil, fmt.Errorf("parse %s: %w", f.relPath, parseErr)
@@ -280,7 +280,7 @@ func classifyDocuments(
 // parseFileDocuments decodes all YAML documents in a file's content into
 // unstructured objects. It handles multi-document YAML and skips empty
 // documents.
-func parseFileDocuments(content []byte, file string) ([]parsedDoc, error) {
+func parseFileDocuments(content []byte, relPath string) ([]parsedDoc, error) {
 	reader := yamlutil.NewYAMLReader(bufio.NewReader(bytes.NewReader(content)))
 	docs := make([]parsedDoc, 0, 1) // most files contain a single document
 
@@ -310,7 +310,7 @@ func parseFileDocuments(content []byte, file string) ([]parsedDoc, error) {
 			return nil, fmt.Errorf("doc %d: %w", docNum, ErrMissingKind)
 		}
 
-		docs = append(docs, parsedDoc{obj: obj, relPath: file})
+		docs = append(docs, parsedDoc{obj: obj, relPath: relPath})
 	}
 	return docs, nil
 }
@@ -350,7 +350,7 @@ func applyParsedDocument(
 		if ns == "" {
 			ns = metav1.NamespaceDefault
 			logger.Debug("namespace-scoped resource has no namespace; defaulting to 'default'",
-				"kind", gvk.Kind, "name", doc.obj.GetName(), "file", doc.relPath)
+				"kind", gvk.Kind, "name", doc.obj.GetName(), "rel_path", doc.relPath)
 		}
 		dr = dynClient.Resource(mapping.Resource).Namespace(ns)
 	} else {

@@ -47,7 +47,7 @@ func computeDirHash(dirPath string) (string, []hashedFile, error) {
 
 		relPath, relErr := filepath.Rel(dirPath, p)
 		if relErr != nil {
-			return "", nil, fmt.Errorf("rel path: %w", relErr)
+			return "", nil, fmt.Errorf("rel path for %s: %w", p, relErr)
 		}
 
 		h.Write([]byte(relPath + "\x00")) // hash.Hash.Write never returns an error

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -35,6 +34,6 @@ func walkYAMLFiles(dirPath string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("walk directory %s: %w", dirPath, err)
 	}
-	slices.Sort(files)
+	// filepath.WalkDir visits entries in lexical order, so files are already sorted.
 	return files, nil
 }

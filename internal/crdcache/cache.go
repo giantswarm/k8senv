@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 	"time"
 
@@ -372,19 +371,15 @@ func logCRDEstablishmentProgress(
 ) bool {
 	if !warned && time.Since(startTime) >= longWaitThreshold {
 		warned = true
-		// Clone pending before passing to slog: the caller reuses the slice
-		// across loop iterations, so an async log handler could observe
-		// mutated contents without a defensive copy.
 		logger.Warn("CRD establishment is taking longer than expected",
 			"elapsed", time.Since(startTime).Round(time.Millisecond),
-			"pending_crds", slices.Clone(pending),
+			"pending_crds", pending,
 		)
 	}
 
 	if logger.Enabled(ctx, slog.LevelDebug) {
-		// Clone: same reason as the Warn clone above.
 		logger.Debug("waiting for CRD establishment",
-			"pending_crds", slices.Clone(pending),
+			"pending_crds", pending,
 		)
 	}
 
