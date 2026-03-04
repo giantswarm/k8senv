@@ -92,8 +92,6 @@
 //	        // Initialize was not called before Acquire
 //	    case errors.Is(err, k8senv.ErrShuttingDown):
 //	        // Manager is shutting down, stop requesting instances
-//	    case errors.Is(err, k8senv.ErrPoolClosed):
-//	        // Pool was closed during shutdown
 //	    default:
 //	        // Unexpected error (timeout, process failure, etc.)
 //	    }

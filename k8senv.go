@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/giantswarm/k8senv/internal/core"
 	"k8s.io/client-go/rest"
@@ -196,7 +196,7 @@ func NewManager(opts ...ManagerOption) Manager {
 		for _, opt := range opts {
 			opt(&cfg)
 		}
-		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.toCoreConfig())}
+		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.ManagerConfig)}
 		singletonCfg = cfg
 	} else {
 		logDuplicateNewManager(opts)
@@ -231,45 +231,23 @@ func logDuplicateNewManager(opts []ManagerOption) {
 	)
 }
 
-// configDiffs compares two managerConfig values and returns a human-readable
-// description of each field that differs. Returns nil if the configs are equal.
-//
-// When adding a new field to core.ManagerConfig, add a corresponding diff*
-// call below. TestConfigDiffsCoversAllFields (options_test.go) is a canary
-// test that fails if a field is added without updating this function.
+// configDiffs compares two managerConfig values using reflection and returns
+// a human-readable description of each field that differs. Returns nil if the
+// configs are equal. New fields added to core.ManagerConfig are automatically
+// covered without any manual updates.
 func configDiffs(stored, incoming managerConfig) []string {
 	var diffs []string
 
-	diffInt := func(name string, a, b int) {
-		if a != b {
-			diffs = append(diffs, fmt.Sprintf("%s: %d != %d", name, a, b))
+	sv := reflect.ValueOf(stored.ManagerConfig)
+	iv := reflect.ValueOf(incoming.ManagerConfig)
+	t := sv.Type()
+
+	for i := range t.NumField() {
+		a, b := sv.Field(i), iv.Field(i)
+		if a.Interface() != b.Interface() {
+			diffs = append(diffs, fmt.Sprintf("%s: %v != %v", t.Field(i).Name, a.Interface(), b.Interface()))
 		}
 	}
-
-	diffStr := func(name, a, b string) {
-		if a != b {
-			diffs = append(diffs, fmt.Sprintf("%s: %q != %q", name, a, b))
-		}
-	}
-
-	diffDur := func(name string, a, b time.Duration) {
-		if a != b {
-			diffs = append(diffs, fmt.Sprintf("%s: %s != %s", name, a, b))
-		}
-	}
-
-	diffInt("PoolSize", stored.PoolSize, incoming.PoolSize)
-	diffStr("KineBinary", stored.KineBinary, incoming.KineBinary)
-	diffStr("KubeAPIServerBinary", stored.KubeAPIServerBinary, incoming.KubeAPIServerBinary)
-	diffDur("AcquireTimeout", stored.AcquireTimeout, incoming.AcquireTimeout)
-	diffStr("PrepopulateDBPath", stored.PrepopulateDBPath, incoming.PrepopulateDBPath)
-	diffStr("BaseDataDir", stored.BaseDataDir, incoming.BaseDataDir)
-	diffStr("CRDDir", stored.CRDDir, incoming.CRDDir)
-	diffDur("CRDCacheTimeout", stored.CRDCacheTimeout, incoming.CRDCacheTimeout)
-	diffDur("InstanceStartTimeout", stored.InstanceStartTimeout, incoming.InstanceStartTimeout)
-	diffDur("InstanceStopTimeout", stored.InstanceStopTimeout, incoming.InstanceStopTimeout)
-	diffDur("CleanupTimeout", stored.CleanupTimeout, incoming.CleanupTimeout)
-	diffDur("ShutdownDrainTimeout", stored.ShutdownDrainTimeout, incoming.ShutdownDrainTimeout)
 
 	return diffs
 }

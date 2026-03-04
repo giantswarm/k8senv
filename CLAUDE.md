@@ -203,8 +203,6 @@ Tests are organized across the root package (unit tests) and five integration te
 - `TestErrDoubleReleaseValue` - ErrDoubleRelease has expected value
 - `TestSystemNamespaceNames` - Returns expected system namespace list
 - `TestSystemNamespaceNamesReturnsCopy` - Returns a copy, not the original slice
-- `TestConfigSnapshotFieldCount` - Config snapshot field count matches expectations
-- `TestConfigDiffsCoversAllFields` - Config diff detection covers all fields
 
 **`tests/` (package `k8senv_test`)** — Core integration tests:
 

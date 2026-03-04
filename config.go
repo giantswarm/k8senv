@@ -8,8 +8,3 @@ import "github.com/giantswarm/k8senv/internal/core"
 type managerConfig struct {
 	core.ManagerConfig
 }
-
-// toCoreConfig returns the embedded core.ManagerConfig.
-func (c managerConfig) toCoreConfig() core.ManagerConfig {
-	return c.ManagerConfig
-}

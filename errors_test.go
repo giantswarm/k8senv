@@ -21,7 +21,6 @@ var allSentinelErrors = []struct {
 	{"ErrMissingKind", k8senv.ErrMissingKind},
 	{"ErrNoYAMLFiles", k8senv.ErrNoYAMLFiles},
 	{"ErrNotInitialized", k8senv.ErrNotInitialized},
-	{"ErrPoolClosed", k8senv.ErrPoolClosed},
 	{"ErrShuttingDown", k8senv.ErrShuttingDown},
 }
 

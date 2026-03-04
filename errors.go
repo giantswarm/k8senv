@@ -16,10 +16,6 @@ const (
 	// ErrNotInitialized is returned by Acquire when Initialize has not been called.
 	ErrNotInitialized = core.ErrNotInitialized
 
-	// ErrPoolClosed is returned when Acquire is called on a pool that has
-	// been closed during shutdown.
-	ErrPoolClosed = core.ErrPoolClosed
-
 	// ErrInstanceReleased is returned by Instance.Config when called after Release.
 	// After release, the instance may be re-acquired by another consumer, making
 	// any previously obtained configuration stale.

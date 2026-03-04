@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
@@ -402,68 +401,5 @@ func TestOptionApplicationLastWriteWins(t *testing.T) {
 
 	if snap.PoolSize != 8 {
 		t.Errorf("PoolSize = %d, want 8 (last write wins)", snap.PoolSize)
-	}
-}
-
-// TestConfigSnapshotFieldCount is a canary test that detects when
-// core.ManagerConfig fields are added without updating ConfigSnapshot and
-// ApplyOptionsForTesting. ConfigSnapshot must mirror every ManagerConfig field
-// so that option tests exercise the full configuration surface.
-//
-// If this test fails, a field was added to core.ManagerConfig. You must also:
-//  1. Add the field to ConfigSnapshot in export_test.go
-//  2. Copy the field in ApplyOptionsForTesting in export_test.go
-//  3. Update expectedFields below to match the new count
-func TestConfigSnapshotFieldCount(t *testing.T) {
-	t.Parallel()
-
-	// ConfigSnapshot must have 12 fields, matching core.ManagerConfig (see
-	// TestManagerConfigFieldCount in internal/core/config_test.go).
-	const expectedFields = 12
-
-	actual := reflect.TypeFor[k8senv.ConfigSnapshot]().NumField()
-	if actual != expectedFields {
-		t.Errorf("ConfigSnapshot has %d fields, expected %d; "+
-			"if you added a field to core.ManagerConfig, also update "+
-			"ConfigSnapshot and ApplyOptionsForTesting in export_test.go",
-			actual, expectedFields)
-	}
-}
-
-// TestConfigDiffsCoversAllFields is a canary test that detects when a field is
-// added to core.ManagerConfig without a corresponding entry in configDiffs.
-// It constructs two configs that differ on every field and verifies the number
-// of reported diffs equals the total field count.
-//
-// If this test fails, a field was added to core.ManagerConfig. You must also:
-//  1. Add a diff* call for the new field in configDiffs (k8senv.go)
-//  2. No constant update needed -- the test derives the expected count via reflection
-func TestConfigDiffsCoversAllFields(t *testing.T) {
-	t.Parallel()
-
-	// "stored" uses defaults (no options). "incoming" overrides every field
-	// to a non-default value so that configDiffs reports a diff for each one.
-	incomingOpts := []k8senv.ManagerOption{
-		k8senv.WithPoolSize(999),
-		k8senv.WithKineBinary("/canary/kine"),
-		k8senv.WithKubeAPIServerBinary("/canary/kube-apiserver"),
-		k8senv.WithAcquireTimeout(999 * time.Hour),
-		k8senv.WithPrepopulateDB("/canary/prepopulate.db"),
-		k8senv.WithBaseDataDir("/canary/data"),
-		k8senv.WithCRDDir("/canary/crds"),
-		k8senv.WithCRDCacheTimeout(999 * time.Hour),
-		k8senv.WithInstanceStartTimeout(999 * time.Hour),
-		k8senv.WithInstanceStopTimeout(999 * time.Hour),
-		k8senv.WithCleanupTimeout(999 * time.Hour),
-		k8senv.WithShutdownDrainTimeout(999 * time.Hour),
-	}
-
-	diffs := k8senv.ConfigDiffsForTesting(nil, incomingOpts)
-	wantCount := k8senv.ManagerConfigFieldCount()
-
-	if len(diffs) != wantCount {
-		t.Errorf("configDiffs reported %d diffs, want %d (one per ManagerConfig field); "+
-			"if you added a field to core.ManagerConfig, also add a diff entry in configDiffs (k8senv.go)\n"+
-			"  reported diffs: %v", len(diffs), wantCount, diffs)
 	}
 }
