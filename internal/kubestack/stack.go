@@ -262,15 +262,14 @@ func (s *Stack) logFailedAttempt(err error, attempt, maxRetries int) {
 //   - os.ErrPermission: file/directory permission denied
 //   - os.ErrNotExist: missing binary, database template, or directory
 //   - exec.ErrNotFound: binary not found in PATH
-//   - fileutil.ErrEmptySrc, fileutil.ErrEmptyDst: invalid configuration
+//   - fileutil.ErrEmptyPath: invalid configuration (empty src or dst)
 //   - context.Canceled, context.DeadlineExceeded: caller gave up
 var permanentStartErrors = []error{
 	process.ErrAlreadyStarted,
 	os.ErrPermission,
 	os.ErrNotExist,
 	exec.ErrNotFound,
-	fileutil.ErrEmptySrc,
-	fileutil.ErrEmptyDst,
+	fileutil.ErrEmptyPath,
 	context.Canceled,
 	context.DeadlineExceeded,
 }

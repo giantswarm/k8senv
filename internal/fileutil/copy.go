@@ -6,18 +6,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/giantswarm/k8senv/internal/sentinel"
 )
 
 // defaultFileMode is the permission used when CopyFileOptions.Mode is zero.
 const defaultFileMode = os.FileMode(0o644)
 
-// ErrEmptySrc is returned when a source path is empty.
-const ErrEmptySrc = sentinel.Error("source path must not be empty")
+// ErrEmptySrc wraps ErrEmptyPath for source-path validation.
+var ErrEmptySrc = fmt.Errorf("source path: %w", ErrEmptyPath)
 
-// ErrEmptyDst is returned when a destination path is empty.
-const ErrEmptyDst = sentinel.Error("destination path must not be empty")
+// ErrEmptyDst wraps ErrEmptyPath for destination-path validation.
+var ErrEmptyDst = fmt.Errorf("destination path: %w", ErrEmptyPath)
 
 // CopyFileOptions configures file copy behavior.
 type CopyFileOptions struct {
@@ -90,8 +88,9 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 			if !dstClosed {
 				_ = dstFile.Close()
 			}
-			// Only remove temp files; non-atomic partial files are left for
-			// the caller to handle (original content was already truncated).
+			// Only remove temp files on error. On the non-atomic path,
+			// O_TRUNC already destroyed the original content — removing
+			// the partial file would lose any data that was written.
 			if o.Atomic {
 				_ = os.Remove(writePath)
 			}
@@ -109,7 +108,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
 // It returns true if the file was closed (even on error), so the caller's
 // defer can skip a redundant close.
-func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) (closed bool, _ error) {
+func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) (bool, error) {
 	if doSync || atomic {
 		if err := dstFile.Sync(); err != nil {
 			return false, fmt.Errorf("sync: %w", err)

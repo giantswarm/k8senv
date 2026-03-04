@@ -36,8 +36,8 @@ func TestCopyFile_EmptySourcePath(t *testing.T) {
 		t.Fatal("expected error for empty source path, got nil")
 	}
 
-	if !errors.Is(err, ErrEmptySrc) {
-		t.Errorf("error = %v, want %v", err, ErrEmptySrc)
+	if !errors.Is(err, ErrEmptyPath) {
+		t.Errorf("error = %v, want %v", err, ErrEmptyPath)
 	}
 }
 
@@ -51,8 +51,8 @@ func TestCopyFile_EmptyDestinationPath(t *testing.T) {
 		t.Fatal("expected error for empty destination path, got nil")
 	}
 
-	if !errors.Is(err, ErrEmptyDst) {
-		t.Errorf("error = %v, want %v", err, ErrEmptyDst)
+	if !errors.Is(err, ErrEmptyPath) {
+		t.Errorf("error = %v, want %v", err, ErrEmptyPath)
 	}
 }
 
@@ -65,8 +65,8 @@ func TestCopyFile_BothPathsEmpty(t *testing.T) {
 	}
 
 	// Source is validated first, so its error takes precedence.
-	if !errors.Is(err, ErrEmptySrc) {
-		t.Errorf("error = %v, want %v", err, ErrEmptySrc)
+	if !errors.Is(err, ErrEmptyPath) {
+		t.Errorf("error = %v, want %v", err, ErrEmptyPath)
 	}
 }
 
@@ -106,24 +106,37 @@ func TestCopyFile_CreatesParentDirectories(t *testing.T) {
 	}
 }
 
-func TestCopyFile_CustomMode(t *testing.T) {
+func TestCopyFile_Mode(t *testing.T) {
 	t.Parallel()
-	srcDir := t.TempDir()
-	dstDir := t.TempDir()
-
-	src := createTestFile(t, srcDir, "source.txt", "mode test")
-	dst := filepath.Join(dstDir, "dest.txt")
-
-	if err := CopyFile(src, dst, &CopyFileOptions{Mode: 0o600}); err != nil {
-		t.Fatalf("CopyFile() error: %v", err)
+	tests := []struct {
+		name     string
+		mode     os.FileMode
+		wantMode os.FileMode
+	}{
+		{"custom mode", 0o600, 0o600},
+		{"zero uses default 0644", 0, 0o644},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srcDir := t.TempDir()
+			dstDir := t.TempDir()
 
-	info, err := os.Stat(dst)
-	if err != nil {
-		t.Fatalf("stat destination: %v", err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Errorf("file mode = %o, want %o", got, 0o600)
+			src := createTestFile(t, srcDir, "source.txt", "mode test")
+			dst := filepath.Join(dstDir, "dest.txt")
+
+			if err := CopyFile(src, dst, &CopyFileOptions{Mode: tt.mode}); err != nil {
+				t.Fatalf("CopyFile() error: %v", err)
+			}
+
+			info, err := os.Stat(dst)
+			if err != nil {
+				t.Fatalf("stat destination: %v", err)
+			}
+			if got := info.Mode().Perm(); got != tt.wantMode {
+				t.Errorf("file mode = %o, want %o", got, tt.wantMode)
+			}
+		})
 	}
 }
 
