@@ -256,8 +256,7 @@ func TestCopyFile_OverwritesExisting(t *testing.T) {
 	dstDir := t.TempDir()
 
 	src := createTestFile(t, srcDir, "source.txt", "new content")
-	_ = createTestFile(t, dstDir, "dest.txt", "old content")
-	dst := filepath.Join(dstDir, "dest.txt")
+	dst := createTestFile(t, dstDir, "dest.txt", "old content")
 
 	if err := CopyFile(src, dst, nil); err != nil {
 		t.Fatalf("CopyFile() error: %v", err)

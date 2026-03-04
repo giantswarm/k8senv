@@ -83,26 +83,29 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 
+	var dstClosed bool
 	defer func() {
-		// Cleanup temp file on error. Go's *os.File.Close is safe to call
-		// after a prior Close (poll.FD prevents double-close of the fd).
-		if retErr != nil && o.Atomic {
-			_ = dstFile.Close()
+		if retErr != nil {
+			if !dstClosed {
+				_ = dstFile.Close()
+			}
+			// Clean up: temp file for atomic, partial file for non-atomic.
 			_ = os.Remove(writePath)
 		}
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
 		_ = dstFile.Close()
+		dstClosed = true
 		return fmt.Errorf("copy: %w", err)
 	}
 
-	return finalizeCopy(dstFile, writePath, dst, o.Sync || o.Atomic, o.Atomic)
+	return finalizeCopy(dstFile, writePath, dst, o)
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
-func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) error {
-	if doSync {
+func finalizeCopy(dstFile *os.File, writePath, dst string, o CopyFileOptions) error {
+	if o.Sync || o.Atomic {
 		if err := dstFile.Sync(); err != nil {
 			_ = dstFile.Close()
 			return fmt.Errorf("sync: %w", err)
@@ -113,7 +116,7 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) 
 		return fmt.Errorf("close destination: %w", err)
 	}
 
-	if atomic {
+	if o.Atomic {
 		if err := os.Rename(writePath, dst); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
@@ -131,21 +134,21 @@ func resolveFileMode(mode os.FileMode) os.FileMode {
 }
 
 // isSameFile reports whether the open file srcFile refers to the same file as dstPath.
+// It stats dst first so the common case (new destination) returns without an fstat on src.
 // Stat on the open fd is race-free for src (immune to rename/unlink of the source
 // path). The dst check uses os.Stat by path, which is subject to TOCTOU — acceptable
 // because callers operate on controlled (non-adversarial) paths.
-// Returns false when dst does not exist (the common case for a new copy).
 func isSameFile(srcFile *os.File, dstPath string) (bool, error) {
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return false, fmt.Errorf("stat source: %w", err)
-	}
 	dstInfo, err := os.Stat(dstPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("stat destination: %w", err)
+	}
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return false, fmt.Errorf("stat source: %w", err)
 	}
 	return os.SameFile(srcInfo, dstInfo), nil
 }

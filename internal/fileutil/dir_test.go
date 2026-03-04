@@ -1,6 +1,7 @@
 package fileutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -60,6 +61,14 @@ func TestEnsureDir(t *testing.T) {
 			t.Error("expected directory, got file")
 		}
 	})
+
+	t.Run("empty path returns error", func(t *testing.T) {
+		t.Parallel()
+		err := EnsureDir("")
+		if !errors.Is(err, ErrEmptyPath) {
+			t.Errorf("EnsureDir(\"\") = %v, want %v", err, ErrEmptyPath)
+		}
+	})
 }
 
 func TestEnsureDirForFile(t *testing.T) {
@@ -109,6 +118,14 @@ func TestEnsureDirForFile(t *testing.T) {
 
 		if err := EnsureDirForFile(filePath); err != nil {
 			t.Fatalf("EnsureDirForFile() error: %v", err)
+		}
+	})
+
+	t.Run("empty path returns error", func(t *testing.T) {
+		t.Parallel()
+		err := EnsureDirForFile("")
+		if !errors.Is(err, ErrEmptyPath) {
+			t.Errorf("EnsureDirForFile(\"\") = %v, want %v", err, ErrEmptyPath)
 		}
 	})
 }
