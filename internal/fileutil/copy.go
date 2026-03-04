@@ -10,6 +10,9 @@ import (
 	"github.com/giantswarm/k8senv/internal/sentinel"
 )
 
+// defaultFileMode is the permission used when CopyFileOptions.Mode is nil.
+const defaultFileMode = os.FileMode(0o644)
+
 // ErrEmptySrc is returned when a source path is empty.
 const ErrEmptySrc = sentinel.Error("source path must not be empty")
 
@@ -27,8 +30,8 @@ type CopyFileOptions struct {
 // If opts is nil, uses default behavior (no chmod, no sync, no atomic).
 // It returns an error if src or dst is empty.
 //
-// If src and dst resolve to the same absolute path, CopyFile returns nil
-// without performing any I/O (copying a file onto itself is a no-op).
+// If src and dst refer to the same underlying file (checked via os.SameFile),
+// CopyFile returns nil without performing any I/O.
 //
 // The destination file is created with the target permissions via os.OpenFile,
 // avoiding a window where the file has broader permissions than intended.
@@ -47,7 +50,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 
 	// Guard against copying a file onto itself. On the non-atomic path,
 	// opening dst with O_TRUNC would truncate src before reading it.
-	same, err := sameAbsPath(src, dst)
+	same, err := sameFile(src, dst)
 	if err != nil {
 		return err
 	}
@@ -76,7 +79,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		o = *opts
 	}
 
-	dstFile, writePath, err := openDstFile(dst, resolveFileMode(&o), o.Atomic)
+	dstFile, writePath, err := openDstFile(dst, resolveFileMode(o.Mode), o.Atomic)
 	if err != nil {
 		return err
 	}
@@ -123,50 +126,34 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, doSync bool) error {
 	return nil
 }
 
-// resolveFileMode returns the file mode from opts, defaulting to 0o644.
-func resolveFileMode(opts *CopyFileOptions) os.FileMode {
-	if opts.Mode != nil {
-		return *opts.Mode
+// resolveFileMode returns the given mode, defaulting to 0o644 when nil.
+func resolveFileMode(mode *os.FileMode) os.FileMode {
+	if mode != nil {
+		return *mode
 	}
-	return 0o644
+	return defaultFileMode
 }
 
-// sameAbsPath reports whether a and b refer to the same file system path.
-// It resolves symlinks via filepath.EvalSymlinks so that a symlink and its
-// target are considered the same path. If a path does not exist yet (e.g. dst
-// before the first copy), EvalSymlinks fails with os.ErrNotExist; in that case
-// the function falls back to filepath.Abs, which is sufficient because a
-// non-existent destination cannot be the same file as an existing source.
-func sameAbsPath(a, b string) (bool, error) {
-	resolvedA, err := resolvePathForComparison(a)
+// sameFile reports whether a and b refer to the same underlying file.
+// It uses os.SameFile (device+inode comparison on POSIX) which correctly
+// handles symlinks, hard links, and bind mounts. If either path does not
+// exist, the files cannot be the same, so it returns false.
+func sameFile(a, b string) (bool, error) {
+	infoA, err := os.Stat(a)
 	if err != nil {
-		return false, fmt.Errorf("resolve source path: %w", err)
-	}
-	resolvedB, err := resolvePathForComparison(b)
-	if err != nil {
-		return false, fmt.Errorf("resolve destination path: %w", err)
-	}
-	return resolvedA == resolvedB, nil
-}
-
-// resolvePathForComparison returns the canonical form of p for equality checks.
-// It calls filepath.EvalSymlinks to dereference symlinks. If the path does not
-// exist, EvalSymlinks returns an error wrapping os.ErrNotExist; in that case
-// filepath.Abs is used as a fallback so that non-existent paths can still be
-// compared by their lexical absolute form.
-func resolvePathForComparison(p string) (string, error) {
-	resolved, err := filepath.EvalSymlinks(p)
-	if err == nil {
-		return resolved, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		abs, absErr := filepath.Abs(p)
-		if absErr != nil {
-			return "", fmt.Errorf("abs: %w", absErr)
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
 		}
-		return abs, nil
+		return false, fmt.Errorf("stat source: %w", err)
 	}
-	return "", fmt.Errorf("eval symlinks: %w", err)
+	infoB, err := os.Stat(b)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat destination: %w", err)
+	}
+	return os.SameFile(infoA, infoB), nil
 }
 
 // openDstFile opens the destination file for writing. When atomic is true, it
@@ -181,7 +168,7 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, e
 		writePath := tmpFile.Name()
 		if err := tmpFile.Chmod(mode); err != nil {
 			_ = tmpFile.Close()
-			_ = os.Remove(writePath) //nolint:gosec // G304: writePath is from os.CreateTemp, not user input.
+			_ = os.Remove(writePath) //nolint:gosec // G703: writePath is from os.CreateTemp, not user input.
 			return nil, "", fmt.Errorf("chmod temp file: %w", err)
 		}
 		return tmpFile, writePath, nil
