@@ -33,25 +33,6 @@ type logFiles struct {
 	noCopy     noCopy // sentinel: go vet copylocks flags any copy of this struct
 	stdoutFile *os.File
 	stderrFile *os.File
-	stdoutPath string // precomputed absolute path to stdout log
-	stderrPath string // precomputed absolute path to stderr log
-}
-
-// create creates stdout and stderr log files.
-// Both files are assigned to the struct only after both creates succeed.
-func (l *logFiles) create() error {
-	stdoutFile, err := os.Create(l.stdoutPath)
-	if err != nil {
-		return fmt.Errorf("create stdout log: %w", err)
-	}
-	stderrFile, err := os.Create(l.stderrPath)
-	if err != nil {
-		_ = stdoutFile.Close()
-		return fmt.Errorf("create stderr log: %w", err)
-	}
-	l.stdoutFile = stdoutFile
-	l.stderrFile = stderrFile
-	return nil
 }
 
 // Close closes both log file handles and nils them to prevent double-close.
@@ -70,14 +51,21 @@ func (l *logFiles) Close() {
 // The processName is used to generate log file names (e.g., "kine" -> "kine-stdout.log").
 // Returns a pointer to prevent copying the file handles.
 func newLogFiles(dataDir, processName string) (*logFiles, error) {
-	l := &logFiles{
-		stdoutPath: filepath.Join(dataDir, processName+"-stdout.log"),
-		stderrPath: filepath.Join(dataDir, processName+"-stderr.log"),
+	stdoutPath := filepath.Join(dataDir, processName+"-stdout.log")
+	stderrPath := filepath.Join(dataDir, processName+"-stderr.log")
+
+	//nolint:gosec // paths from controlled config, not user input
+	stdoutFile, err := os.Create(stdoutPath)
+	if err != nil {
+		return nil, fmt.Errorf("create stdout log: %w", err)
 	}
-	if err := l.create(); err != nil {
-		return nil, err
+	//nolint:gosec // paths from controlled config, not user input
+	stderrFile, err := os.Create(stderrPath)
+	if err != nil {
+		_ = stdoutFile.Close()
+		return nil, fmt.Errorf("create stderr log: %w", err)
 	}
-	return l, nil
+	return &logFiles{stdoutFile: stdoutFile, stderrFile: stderrFile}, nil
 }
 
 // DefaultStopTimeout is the default timeout for stopping a process. It is used
