@@ -187,6 +187,14 @@ func (i *Instance) tryRelease(token uint64) bool {
 	return i.gen.CompareAndSwap(token, token+1)
 }
 
+// mustRelease atomically releases the instance identified by token.
+// Panics if the token is stale (double-release), indicating a programming error.
+func (i *Instance) mustRelease(token uint64) {
+	if !i.tryRelease(token) {
+		panic("k8senv: double-release of instance " + i.ID())
+	}
+}
+
 // isCurrentToken reports whether the given token matches the current generation.
 // This is a non-consuming check used to reject stale releases before performing
 // irreversible side effects (e.g., namespace cleanup). The actual release is

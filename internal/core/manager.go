@@ -153,33 +153,10 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		// Stop all instances before nilling the pool to avoid orphaning
 		// processes and data directories.
 		if p := m.pool.Load(); p != nil {
-			// Stop instances in parallel. Each instance is independent
-			// and stopping is I/O-bound, so parallel stops reduce
-			// worst-case rollback latency from N*StopTimeout to 1*StopTimeout.
-			// This mirrors the parallel stop pattern used in Shutdown.
-			var wg sync.WaitGroup
-			for _, inst := range p.Instances() {
-				if inst == nil {
-					continue
-				}
-				wg.Add(1)
-				go func(i *Instance) { //nolint:contextcheck // rollback must use background context; caller's context may be canceled
-					defer wg.Done()
-					// Use a bounded background context instead of the caller's context.
-					// The caller's context may already be canceled (a common cause of
-					// the initialization failure), which would cause Stop to return
-					// immediately and orphan running processes.
-					stopCtx, stopCancel := context.WithTimeout(context.Background(), m.cfg.InstanceStopTimeout)
-					defer stopCancel()
-					if stopErr := i.Stop(stopCtx); stopErr != nil {
-						Logger().Warn("failed to stop instance during rollback",
-							"id", i.ID(), "error", stopErr)
-					}
-				}(
-					inst,
-				)
-			}
-			wg.Wait()
+			_ = stopAllInstances( //nolint:contextcheck // rollback must use background context; caller's context may be canceled
+				p.Instances(),
+				m.cfg.InstanceStopTimeout,
+			)
 		}
 		m.pool.Store(nil)
 		// Reset cachedDBPath so a retry doesn't use a stale path
@@ -399,9 +376,7 @@ func (m *Manager) ReleaseToPool(i *Instance, token uint64) bool {
 // Panics on double-release (busy flag already clear), which indicates a
 // programming error.
 func (m *Manager) stopInstanceDuringShutdown(ctx context.Context, i *Instance, token uint64) {
-	if !i.tryRelease(token) {
-		panic("k8senv: double-release of instance " + i.ID())
-	}
+	i.mustRelease(token)
 	if err := i.Stop(ctx); err != nil {
 		i.log.Warn("failed to stop instance during shutdown", "error", err)
 	}
@@ -523,29 +498,41 @@ func (m *Manager) Shutdown() error {
 	//   - pool.Close itself is idempotent.
 	pool.Close()
 
-	// Stop all instances concurrently. Each instance is independent, so
-	// parallel stops reduce worst-case latency from N*StopTimeout to
-	// 1*StopTimeout.
+	// Warn about busy instances before stopping.
 	instances := pool.Instances()
-	stopErrs := make([]error, len(instances))
-	var wg sync.WaitGroup
-	for idx, i := range instances {
-		if i == nil {
-			continue
-		}
-		if i.IsBusy() {
+	for _, i := range instances {
+		if i != nil && i.IsBusy() {
 			i.log.Warn("stopping instance that is still in use; " +
 				"ensure all instances are released before calling Shutdown")
 		}
+	}
+
+	return stopAllInstances(instances, m.cfg.InstanceStopTimeout)
+}
+
+// stopAllInstances stops all non-nil instances in parallel using background
+// contexts bounded by the given per-process timeout. Returns a combined error
+// from all failed stops. Parallel stops reduce worst-case latency from
+// N*timeout to 1*timeout.
+func stopAllInstances(instances []*Instance, timeout time.Duration) error {
+	stopErrs := make([]error, len(instances))
+	var wg sync.WaitGroup
+	for idx, inst := range instances {
+		if inst == nil {
+			continue
+		}
 		wg.Add(1)
-		go func(pos int, inst *Instance) {
+		go func(pos int, i *Instance) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), m.cfg.InstanceStopTimeout)
+			ctx, cancel := context.WithTimeout(
+				context.Background(), timeout,
+			)
 			defer cancel()
-			if err := inst.Stop(ctx); err != nil {
+			if err := i.Stop(ctx); err != nil {
 				stopErrs[pos] = err
+				i.log.Warn("failed to stop instance", "error", err)
 			}
-		}(idx, i)
+		}(idx, inst)
 	}
 	wg.Wait()
 
@@ -555,6 +542,5 @@ func (m *Manager) Shutdown() error {
 			errs = append(errs, err)
 		}
 	}
-
 	return errors.Join(errs...)
 }

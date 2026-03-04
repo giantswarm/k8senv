@@ -203,9 +203,7 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, uint64, error) {
 // If the pool has been closed (e.g., during shutdown), the instance is stopped
 // instead of being returned to the free stack.
 func (p *Pool) Release(i *Instance, token uint64) {
-	if !i.tryRelease(token) {
-		panic("k8senv: double-release of instance " + i.ID())
-	}
+	i.mustRelease(token)
 
 	p.mu.Lock()
 	if p.closed {
@@ -230,9 +228,7 @@ func (p *Pool) Release(i *Instance, token uint64) {
 // The token must match the generation value returned by Acquire; if the token
 // is stale (instance was re-acquired), ReleaseFailed panics (double-release).
 func (p *Pool) ReleaseFailed(i *Instance, token uint64) {
-	if !i.tryRelease(token) {
-		panic("k8senv: double-release of instance " + i.ID())
-	}
+	i.mustRelease(token)
 
 	// Attempt cleanup of partially started processes.
 	// Stop is idempotent: it atomically nils i.stack and i.cancel on entry,

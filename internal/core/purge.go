@@ -39,17 +39,24 @@ type purgeHandle struct {
 	deleteArgs []any
 }
 
-// buildPurgeDeleteQuery constructs the DELETE statement that removes all kine
-// rows created after the baseline ID while preserving system namespace data.
-// The WHERE clause uses `id > ?` (primary key index, O(rows_to_delete)) plus
-// exact-match and LIKE filters for the system namespaces.
+// purgeDeleteQuery and purgeDeleteMakeArgs are precomputed at package init
+// time from the constant systemNamespaces array. The query is a DELETE
+// statement that removes all kine rows created after a baseline ID while
+// preserving system namespace data. The WHERE clause uses `id > ?` (primary
+// key index, O(rows_to_delete)) plus exact-match and LIKE filters.
 //
 // The filters are built dynamically from systemNamespaces so there is a single
 // source of truth — adding a namespace to systemNamespaces automatically
 // protects it from purge without requiring a manual SQL update.
-//
-// Returns the query string and a function that, given a baselineID, produces
-// the full argument slice [baselineID, exact paths..., LIKE patterns...].
+var (
+	purgeDeleteQuery    string
+	purgeDeleteMakeArgs func(baselineID int64) []any
+)
+
+func init() {
+	purgeDeleteQuery, purgeDeleteMakeArgs = buildPurgeDeleteQuery()
+}
+
 func buildPurgeDeleteQuery() (query string, makeArgs func(baselineID int64) []any) {
 	sysNS := systemNamespaces[:]
 
@@ -156,10 +163,9 @@ func openPurgeHandle(ctx context.Context, sqlitePath string) (*purgeHandle, erro
 		return nil, fmt.Errorf("query baseline id: %w", queryErr)
 	}
 
-	query, makeArgs := buildPurgeDeleteQuery()
-	deleteArgs := makeArgs(baselineID)
+	deleteArgs := purgeDeleteMakeArgs(baselineID)
 
-	deleteStmt, err := db.Prepare(query)
+	deleteStmt, err := db.Prepare(purgeDeleteQuery)
 	if err != nil {
 		db.Close() //nolint:errcheck,gosec // best-effort cleanup on prepare failure
 		return nil, fmt.Errorf("prepare purge delete: %w", err)
