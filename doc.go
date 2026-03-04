@@ -104,12 +104,5 @@
 //	    // Instance was already released; Config is no longer valid
 //	}
 //
-// CRD initialization reports sentinels for invalid CRD directories:
-//
-//	err := mgr.Initialize(ctx)
-//	if errors.Is(err, k8senv.ErrNoYAMLFiles) {
-//	    // CRD directory contained no YAML files
-//	}
-//
 // See the exported Err constants for the complete list of sentinel errors.
 package k8senv

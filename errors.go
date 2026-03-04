@@ -25,15 +25,4 @@ const (
 	// on the same acquisition. After the first Release returns the instance to the
 	// pool, subsequent calls return this error instead of performing any action.
 	ErrDoubleRelease = core.ErrDoubleRelease
-
-	// ErrNoYAMLFiles is returned by Initialize when the CRD directory contains no YAML files.
-	ErrNoYAMLFiles = core.ErrNoYAMLFiles
-
-	// ErrMissingKind is returned by Initialize when a YAML document in the CRD
-	// directory lacks a 'kind' field.
-	ErrMissingKind = core.ErrMissingKind
-
-	// ErrCRDEstablishTimeout is returned by Initialize when CRDs do not reach
-	// the Established condition within the maximum number of polling iterations.
-	ErrCRDEstablishTimeout = core.ErrCRDEstablishTimeout
 )

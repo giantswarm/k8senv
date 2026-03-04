@@ -20,18 +20,17 @@ import (
 	"time"
 
 	"github.com/giantswarm/k8senv"
+	"github.com/giantswarm/k8senv/internal/core"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
 // SystemNamespaces returns a set of namespace names created by kube-apiserver
-// that must survive cleanup. The authoritative source is
-// k8senv.SystemNamespaceNames; this function converts the slice to a map for
-// O(1) lookup convenience. Each call returns a fresh map that callers may
+// that must survive cleanup. Each call returns a fresh map that callers may
 // modify freely.
 func SystemNamespaces() map[string]struct{} {
-	names := k8senv.SystemNamespaceNames()
+	names := core.SystemNamespaceNames()
 	m := make(map[string]struct{}, len(names))
 	for _, n := range names {
 		m[n] = struct{}{}

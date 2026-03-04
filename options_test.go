@@ -235,7 +235,7 @@ func TestOptionApplicationDefaults(t *testing.T) {
 		KineBinary:           k8senv.DefaultKineBinary,
 		KubeAPIServerBinary:  k8senv.DefaultKubeAPIServerBinary,
 		AcquireTimeout:       k8senv.DefaultAcquireTimeout,
-		BaseDataDir:          filepath.Join(os.TempDir(), k8senv.DefaultBaseDataDirName),
+		BaseDataDir:          filepath.Join(os.TempDir(), "k8senv"),
 		CRDCacheTimeout:      k8senv.DefaultCRDCacheTimeout,
 		InstanceStartTimeout: k8senv.DefaultInstanceStartTimeout,
 		InstanceStopTimeout:  k8senv.DefaultInstanceStopTimeout,

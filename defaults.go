@@ -24,11 +24,6 @@ const (
 	// for both wait time and startup (~5-15 seconds).
 	DefaultAcquireTimeout = 30 * time.Second
 
-	// DefaultBaseDataDirName is the directory name under the system temp
-	// directory where instance data is stored. The full path is computed
-	// as filepath.Join(os.TempDir(), DefaultBaseDataDirName).
-	DefaultBaseDataDirName = "k8senv"
-
 	// DefaultCRDCacheTimeout is the overall timeout for CRD cache creation,
 	// including spinning up a temporary kine + kube-apiserver, applying CRDs,
 	// and copying the resulting database.
@@ -50,3 +45,8 @@ const (
 	// for in-flight ReleaseToPool operations to complete before proceeding.
 	DefaultShutdownDrainTimeout = 30 * time.Second
 )
+
+// defaultBaseDataDirName is the directory name under the system temp directory
+// where instance data is stored. Not exported because it is not directly usable
+// with WithBaseDataDir (the full path is filepath.Join(os.TempDir(), this)).
+const defaultBaseDataDirName = "k8senv"

@@ -15,11 +15,8 @@ var allSentinelErrors = []struct {
 	name string
 	err  error
 }{
-	{"ErrCRDEstablishTimeout", k8senv.ErrCRDEstablishTimeout},
 	{"ErrDoubleRelease", k8senv.ErrDoubleRelease},
 	{"ErrInstanceReleased", k8senv.ErrInstanceReleased},
-	{"ErrMissingKind", k8senv.ErrMissingKind},
-	{"ErrNoYAMLFiles", k8senv.ErrNoYAMLFiles},
 	{"ErrNotInitialized", k8senv.ErrNotInitialized},
 	{"ErrShuttingDown", k8senv.ErrShuttingDown},
 }

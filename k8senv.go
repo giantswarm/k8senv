@@ -137,7 +137,7 @@ func defaultManagerConfig() managerConfig {
 		KineBinary:           DefaultKineBinary,
 		KubeAPIServerBinary:  DefaultKubeAPIServerBinary,
 		AcquireTimeout:       DefaultAcquireTimeout,
-		BaseDataDir:          filepath.Join(os.TempDir(), DefaultBaseDataDirName),
+		BaseDataDir:          filepath.Join(os.TempDir(), defaultBaseDataDirName),
 		CRDCacheTimeout:      DefaultCRDCacheTimeout,
 		InstanceStartTimeout: DefaultInstanceStartTimeout,
 		InstanceStopTimeout:  DefaultInstanceStopTimeout,

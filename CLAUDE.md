@@ -201,8 +201,6 @@ Tests are organized across the root package (unit tests) and five integration te
 - `TestPublicErrorConstants` - All public error constants are non-nil
 - `TestPublicErrorConstantsAreDistinct` - Error constants have unique messages
 - `TestErrDoubleReleaseValue` - ErrDoubleRelease has expected value
-- `TestSystemNamespaceNames` - Returns expected system namespace list
-- `TestSystemNamespaceNamesReturnsCopy` - Returns a copy, not the original slice
 
 **`tests/` (package `k8senv_test`)** — Core integration tests:
 
