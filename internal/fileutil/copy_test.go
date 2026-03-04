@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,7 +38,10 @@ func TestCopyFile_EmptySourcePath(t *testing.T) {
 	}
 
 	if !errors.Is(err, ErrEmptyPath) {
-		t.Errorf("error = %v, want %v", err, ErrEmptyPath)
+		t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
+	}
+	if !strings.Contains(err.Error(), "source path") {
+		t.Errorf("error = %q, want source-path context", err)
 	}
 }
 
@@ -52,7 +56,10 @@ func TestCopyFile_EmptyDestinationPath(t *testing.T) {
 	}
 
 	if !errors.Is(err, ErrEmptyPath) {
-		t.Errorf("error = %v, want %v", err, ErrEmptyPath)
+		t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
+	}
+	if !strings.Contains(err.Error(), "destination path") {
+		t.Errorf("error = %q, want destination-path context", err)
 	}
 }
 
@@ -66,7 +73,10 @@ func TestCopyFile_BothPathsEmpty(t *testing.T) {
 
 	// Source is validated first, so its error takes precedence.
 	if !errors.Is(err, ErrEmptyPath) {
-		t.Errorf("error = %v, want %v", err, ErrEmptyPath)
+		t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
+	}
+	if !strings.Contains(err.Error(), "source path") {
+		t.Errorf("error = %q, want source-path context", err)
 	}
 }
 

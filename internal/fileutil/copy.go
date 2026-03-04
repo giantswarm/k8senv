@@ -11,12 +11,6 @@ import (
 // defaultFileMode is the permission used when CopyFileOptions.Mode is zero.
 const defaultFileMode = os.FileMode(0o644)
 
-// ErrEmptySrc wraps ErrEmptyPath for source-path validation.
-var ErrEmptySrc = fmt.Errorf("source path: %w", ErrEmptyPath)
-
-// ErrEmptyDst wraps ErrEmptyPath for destination-path validation.
-var ErrEmptyDst = fmt.Errorf("destination path: %w", ErrEmptyPath)
-
 // CopyFileOptions configures file copy behavior.
 type CopyFileOptions struct {
 	Mode   os.FileMode // Optional: 0 means use default 0644
@@ -40,10 +34,10 @@ type CopyFileOptions struct {
 // preventing concurrent readers from observing a partially-written file.
 func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	if src == "" {
-		return ErrEmptySrc
+		return fmt.Errorf("source path: %w", ErrEmptyPath)
 	}
 	if dst == "" {
-		return ErrEmptyDst
+		return fmt.Errorf("destination path: %w", ErrEmptyPath)
 	}
 
 	srcFile, err := os.Open(src) //nolint:gosec // G304: paths are from controlled sources
@@ -82,53 +76,45 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 
-	var dstClosed bool
 	defer func() {
-		if retErr != nil {
-			if !dstClosed {
-				_ = dstFile.Close()
-			}
-			// Only remove temp files on error. On the non-atomic path,
-			// O_TRUNC already destroyed the original content — removing
-			// the partial file would lose any data that was written.
-			if o.Atomic {
-				_ = os.Remove(writePath)
-			}
+		// Only remove temp files on error. On the non-atomic path,
+		// O_TRUNC already destroyed the original content — removing
+		// the partial file would lose any data that was written.
+		if retErr != nil && o.Atomic {
+			_ = os.Remove(writePath)
 		}
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		return fmt.Errorf("copy: %w", err)
+		_ = dstFile.Close()
+		return fmt.Errorf("copy data: %w", err)
 	}
 
-	dstClosed, err = finalizeCopy(dstFile, writePath, dst, o.Sync, o.Atomic)
-	return err
+	return finalizeCopy(dstFile, writePath, dst, o.Sync, o.Atomic)
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
-// It returns true if the file was closed (even on error), so the caller's
-// defer can skip a redundant close.
-func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) (bool, error) {
+// It always closes dstFile before returning (even on sync error), so the
+// caller must not close the file again.
+func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) error {
 	if doSync || atomic {
 		if err := dstFile.Sync(); err != nil {
-			return false, fmt.Errorf("sync: %w", err)
+			_ = dstFile.Close()
+			return fmt.Errorf("sync destination: %w", err)
 		}
 	}
 
-	// Close before rename so the file content is flushed. On Linux close(2)
-	// always releases the fd, so report closed=true even on error to prevent
-	// a double-close in the caller's defer.
 	if err := dstFile.Close(); err != nil {
-		return true, fmt.Errorf("close destination: %w", err)
+		return fmt.Errorf("close destination: %w", err)
 	}
 
 	if atomic {
 		if err := os.Rename(writePath, dst); err != nil {
-			return true, fmt.Errorf("rename temp file to destination: %w", err)
+			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
 // resolveFileMode returns the given mode, defaulting to 0o644 when zero.
