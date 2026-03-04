@@ -283,7 +283,7 @@ func TestPortRegistry_AllocateMultiplePairs(t *testing.T) {
 
 	r := NewPortRegistry()
 
-	seen := make(map[int]bool)
+	seen := make(map[int]struct{})
 	const pairs = 5
 
 	for i := range pairs {
@@ -291,17 +291,17 @@ func TestPortRegistry_AllocateMultiplePairs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pair %d: AllocatePortPair() error: %v", i, err)
 		}
-		if seen[p1] {
+		if _, dup := seen[p1]; dup {
 			t.Errorf("pair %d: port1 %d already seen", i, p1)
 		}
-		if seen[p2] {
+		if _, dup := seen[p2]; dup {
 			t.Errorf("pair %d: port2 %d already seen", i, p2)
 		}
 		if p1 == p2 {
 			t.Errorf("pair %d: ports should differ: p1=%d, p2=%d", i, p1, p2)
 		}
-		seen[p1] = true
-		seen[p2] = true
+		seen[p1] = struct{}{}
+		seen[p2] = struct{}{}
 	}
 
 	for port := range seen {
