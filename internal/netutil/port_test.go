@@ -9,6 +9,7 @@ func TestNewPortRegistry(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil logger uses default", func(t *testing.T) {
+		t.Parallel()
 		r := NewPortRegistry(nil)
 		if r == nil {
 			t.Fatal("expected non-nil registry")

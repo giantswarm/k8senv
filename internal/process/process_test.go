@@ -2,12 +2,28 @@ package process
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
+
+// requirePanicMsg calls fn and verifies it panics with the exact given message.
+func requirePanicMsg(t *testing.T, fn func(), wantMsg string) {
+	t.Helper()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic, got none")
+		}
+		if msg := fmt.Sprint(r); msg != wantMsg {
+			t.Fatalf("panic message = %q, want %q", msg, wantMsg)
+		}
+	}()
+	fn()
+}
 
 func TestExpectSignalExit(t *testing.T) {
 	t.Parallel()
@@ -185,20 +201,9 @@ func TestNewBaseProcess(t *testing.T) {
 
 	t.Run("panics on empty name", func(t *testing.T) {
 		t.Parallel()
-		defer func() {
-			r := recover()
-			if r == nil {
-				t.Fatal("expected panic for empty name")
-			}
-			msg, ok := r.(string)
-			if !ok {
-				t.Fatalf("expected string panic, got %T", r)
-			}
-			if msg != "k8senv: process name must not be empty" {
-				t.Errorf("panic message = %q, want %q", msg, "k8senv: process name must not be empty")
-			}
-		}()
-		NewBaseProcess("", nil, 0)
+		requirePanicMsg(t, func() {
+			NewBaseProcess("", nil, 0)
+		}, "k8senv: process name must not be empty")
 	})
 }
 
@@ -417,7 +422,7 @@ func TestSetupAndStart_AlreadyStarted(t *testing.T) {
 	bp := NewBaseProcess("test-proc", nil, 0)
 
 	// Start a real process so bp.cmd becomes non-nil.
-	cmd := exec.Command("sleep", "10")
+	cmd := exec.Command("sleep", "1")
 	if err := bp.SetupAndStart(cmd, dataDir); err != nil {
 		t.Fatalf("first SetupAndStart failed: %v", err)
 	}
@@ -427,7 +432,7 @@ func TestSetupAndStart_AlreadyStarted(t *testing.T) {
 	})
 
 	// Attempt a second start while the process is still running.
-	cmd2 := exec.Command("sleep", "10")
+	cmd2 := exec.Command("sleep", "1")
 	err := bp.SetupAndStart(cmd2, dataDir)
 	if err == nil {
 		t.Fatal("expected error for already started process, got nil")

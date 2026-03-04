@@ -8,6 +8,24 @@ import (
 	"github.com/giantswarm/k8senv"
 )
 
+// allSentinelErrors is the single source of truth for every exported error
+// constant. Both TestPublicErrorConstants and TestPublicErrorConstantsAreDistinct
+// iterate this slice, so adding a new sentinel requires only one update.
+var allSentinelErrors = []struct {
+	name string
+	err  error
+}{
+	{"ErrCRDEstablishTimeout", k8senv.ErrCRDEstablishTimeout},
+	{"ErrDoubleRelease", k8senv.ErrDoubleRelease},
+	{"ErrInstanceReleased", k8senv.ErrInstanceReleased},
+	{"ErrMissingKind", k8senv.ErrMissingKind},
+	{"ErrNoYAMLFiles", k8senv.ErrNoYAMLFiles},
+	{"ErrNotInitialized", k8senv.ErrNotInitialized},
+	{"ErrNotStarted", k8senv.ErrNotStarted},
+	{"ErrPoolClosed", k8senv.ErrPoolClosed},
+	{"ErrShuttingDown", k8senv.ErrShuttingDown},
+}
+
 // TestPublicErrorConstants verifies that every exported error constant:
 //   - implements the error interface (Error() returns a non-empty string)
 //   - matches itself via errors.Is
@@ -16,20 +34,8 @@ import (
 func TestPublicErrorConstants(t *testing.T) {
 	t.Parallel()
 
-	// All exported sentinel errors.
-	allErrors := map[string]error{
-		"ErrCRDEstablishTimeout": k8senv.ErrCRDEstablishTimeout,
-		"ErrDoubleRelease":       k8senv.ErrDoubleRelease,
-		"ErrInstanceReleased":    k8senv.ErrInstanceReleased,
-		"ErrMissingKind":         k8senv.ErrMissingKind,
-		"ErrNoYAMLFiles":         k8senv.ErrNoYAMLFiles,
-		"ErrNotInitialized":      k8senv.ErrNotInitialized,
-		"ErrNotStarted":          k8senv.ErrNotStarted,
-		"ErrPoolClosed":          k8senv.ErrPoolClosed,
-		"ErrShuttingDown":        k8senv.ErrShuttingDown,
-	}
-
-	for name, sentinel := range allErrors {
+	for _, entry := range allSentinelErrors {
+		name, sentinel := entry.name, entry.err
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -66,23 +72,8 @@ func TestPublicErrorConstants(t *testing.T) {
 func TestPublicErrorConstantsAreDistinct(t *testing.T) {
 	t.Parallel()
 
-	named := []struct {
-		name string
-		err  error
-	}{
-		{"ErrCRDEstablishTimeout", k8senv.ErrCRDEstablishTimeout},
-		{"ErrDoubleRelease", k8senv.ErrDoubleRelease},
-		{"ErrInstanceReleased", k8senv.ErrInstanceReleased},
-		{"ErrMissingKind", k8senv.ErrMissingKind},
-		{"ErrNoYAMLFiles", k8senv.ErrNoYAMLFiles},
-		{"ErrNotInitialized", k8senv.ErrNotInitialized},
-		{"ErrNotStarted", k8senv.ErrNotStarted},
-		{"ErrPoolClosed", k8senv.ErrPoolClosed},
-		{"ErrShuttingDown", k8senv.ErrShuttingDown},
-	}
-
-	for i, a := range named {
-		for _, b := range named[i+1:] {
+	for i, a := range allSentinelErrors {
+		for _, b := range allSentinelErrors[i+1:] {
 			if errors.Is(a.err, b.err) {
 				t.Errorf("errors.Is(%s, %s) = true: constants must be distinct", a.name, b.name)
 			}

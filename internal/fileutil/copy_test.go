@@ -1,6 +1,7 @@
 package fileutil
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -235,8 +236,8 @@ func TestCopyFile_LargeContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read destination: %v", err)
 	}
-	if len(got) != len(content) {
-		t.Errorf("content length = %d, want %d", len(got), len(content))
+	if !bytes.Equal(got, content) {
+		t.Errorf("content mismatch: got %d bytes, want %d bytes", len(got), len(content))
 	}
 }
 

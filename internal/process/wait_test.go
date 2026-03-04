@@ -107,83 +107,65 @@ func TestWaitReady_MultiAttemptSuccess(t *testing.T) {
 	}
 }
 
-func TestWaitReady_ZeroInterval(t *testing.T) {
+func TestWaitReady_InvalidInterval(t *testing.T) {
 	t.Parallel()
 
-	err := WaitReady(context.Background(), WaitReadyConfig{
-		Interval: 0,
-		Timeout:  5 * time.Second,
-		Name:     "test-proc",
-		Port:     12345,
-	}, func(_ context.Context, _ int) (bool, error) {
-		t.Fatal("check should not be called with zero interval")
-		return false, nil
-	})
-	if err == nil {
-		t.Fatal("expected error for zero interval, got nil")
-	}
-	if !errors.Is(err, ErrIntervalNotPositive) {
-		t.Fatalf("expected ErrIntervalNotPositive, got: %v", err)
+	for _, tc := range []struct {
+		name     string
+		interval time.Duration
+	}{
+		{"zero", 0},
+		{"negative", -1 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := WaitReady(context.Background(), WaitReadyConfig{
+				Interval: tc.interval,
+				Timeout:  5 * time.Second,
+				Name:     "test-proc",
+				Port:     12345,
+			}, func(_ context.Context, _ int) (bool, error) {
+				t.Fatal("check should not be called with invalid interval")
+				return false, nil
+			})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !errors.Is(err, ErrIntervalNotPositive) {
+				t.Fatalf("expected ErrIntervalNotPositive, got: %v", err)
+			}
+		})
 	}
 }
 
-func TestWaitReady_NegativeInterval(t *testing.T) {
+func TestWaitReady_InvalidTimeout(t *testing.T) {
 	t.Parallel()
 
-	err := WaitReady(context.Background(), WaitReadyConfig{
-		Interval: -1 * time.Second,
-		Timeout:  5 * time.Second,
-		Name:     "test-proc",
-		Port:     12345,
-	}, func(_ context.Context, _ int) (bool, error) {
-		t.Fatal("check should not be called with negative interval")
-		return false, nil
-	})
-	if err == nil {
-		t.Fatal("expected error for negative interval, got nil")
-	}
-	if !errors.Is(err, ErrIntervalNotPositive) {
-		t.Fatalf("expected ErrIntervalNotPositive, got: %v", err)
-	}
-}
-
-func TestWaitReady_ZeroTimeout(t *testing.T) {
-	t.Parallel()
-
-	err := WaitReady(context.Background(), WaitReadyConfig{
-		Interval: 100 * time.Millisecond,
-		Timeout:  0,
-		Name:     "test-proc",
-		Port:     12345,
-	}, func(_ context.Context, _ int) (bool, error) {
-		t.Fatal("check should not be called with zero timeout")
-		return false, nil
-	})
-	if err == nil {
-		t.Fatal("expected error for zero timeout, got nil")
-	}
-	if !errors.Is(err, ErrTimeoutNotPositive) {
-		t.Fatalf("expected ErrTimeoutNotPositive, got: %v", err)
-	}
-}
-
-func TestWaitReady_NegativeTimeout(t *testing.T) {
-	t.Parallel()
-
-	err := WaitReady(context.Background(), WaitReadyConfig{
-		Interval: 100 * time.Millisecond,
-		Timeout:  -1 * time.Second,
-		Name:     "test-proc",
-		Port:     12345,
-	}, func(_ context.Context, _ int) (bool, error) {
-		t.Fatal("check should not be called with negative timeout")
-		return false, nil
-	})
-	if err == nil {
-		t.Fatal("expected error for negative timeout, got nil")
-	}
-	if !errors.Is(err, ErrTimeoutNotPositive) {
-		t.Fatalf("expected ErrTimeoutNotPositive, got: %v", err)
+	for _, tc := range []struct {
+		name    string
+		timeout time.Duration
+	}{
+		{"zero", 0},
+		{"negative", -1 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := WaitReady(context.Background(), WaitReadyConfig{
+				Interval: 100 * time.Millisecond,
+				Timeout:  tc.timeout,
+				Name:     "test-proc",
+				Port:     12345,
+			}, func(_ context.Context, _ int) (bool, error) {
+				t.Fatal("check should not be called with invalid timeout")
+				return false, nil
+			})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !errors.Is(err, ErrTimeoutNotPositive) {
+				t.Fatalf("expected ErrTimeoutNotPositive, got: %v", err)
+			}
+		})
 	}
 }
 
