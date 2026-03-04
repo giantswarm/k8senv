@@ -205,15 +205,14 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 	// allocations. Per-process readiness timeouts use the overall cache
 	// timeout since processes start concurrently and the timeout context
 	// gates the total duration.
-	readyTimeout := cfg.Timeout
 	stack, err := kubestack.StartWithRetry(procCtx, timeoutCtx, kubestack.Config{
 		DataDir:               tempDir,
 		SQLitePath:            sqlitePath,
 		KubeconfigPath:        kubeconfigPath,
 		KineBinary:            cfg.KineBinary,
 		APIServerBinary:       cfg.KubeAPIServerBinary,
-		KineReadyTimeout:      readyTimeout,
-		APIServerReadyTimeout: readyTimeout,
+		KineReadyTimeout:      cfg.Timeout,
+		APIServerReadyTimeout: cfg.Timeout,
 		StopTimeout:           cfg.stopTimeout(),
 		PortRegistry:          cfg.PortRegistry,
 		Logger:                logger,
@@ -279,7 +278,7 @@ func applyCRDs(ctx context.Context, logger *slog.Logger, kubeconfigPath, crdDir 
 
 	// Apply all YAML files
 	logger.Info("applying YAML files", "dir", crdDir)
-	if err := applyYAMLFiles(ctx, logger, restCfg, crdDir, files); err != nil {
+	if err := applyYAMLFiles(ctx, logger, restCfg, files); err != nil {
 		return fmt.Errorf("apply yaml files: %w", err)
 	}
 

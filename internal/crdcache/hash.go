@@ -19,6 +19,7 @@ const ErrNoYAMLFiles = sentinel.Error("no YAML files found")
 // bytes instead of reading each file from disk a second time.
 type hashedFile struct {
 	path    string
+	relPath string // relative to the CRD directory, for logging and hashing
 	content []byte
 }
 
@@ -54,7 +55,7 @@ func computeDirHash(dirPath string) (string, []hashedFile, error) {
 		h.Write(content)
 		h.Write([]byte{0}) // separator after content to prevent cross-file collisions
 
-		files = append(files, hashedFile{path: p, content: content})
+		files = append(files, hashedFile{path: p, relPath: relPath, content: content})
 	}
 
 	// Truncate the SHA-256 hex digest to 16 characters (64 bits). This is used

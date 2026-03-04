@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/giantswarm/k8senv/internal/sentinel"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -176,7 +176,6 @@ func applyYAMLFiles(
 	ctx context.Context,
 	logger *slog.Logger,
 	restCfg *rest.Config,
-	dirPath string,
 	files []hashedFile,
 ) error {
 	if len(files) > maxYAMLFiles {
@@ -218,7 +217,7 @@ func applyYAMLFiles(
 
 	// Parse all documents from all files upfront and separate CRDs from
 	// non-CRDs so they can be applied in distinct phases.
-	crdDocs, otherDocs, err := classifyDocuments(files, dirPath, logger)
+	crdDocs, otherDocs, err := classifyDocuments(files, logger)
 	if err != nil {
 		return err
 	}
@@ -257,20 +256,15 @@ func applyYAMLFiles(
 // (one doc per file in most cases).
 func classifyDocuments(
 	files []hashedFile,
-	dirPath string,
 	logger *slog.Logger,
 ) (crdDocs []parsedDoc, otherDocs []parsedDoc, err error) {
 	crdDocs = make([]parsedDoc, 0, len(files))
 	otherDocs = make([]parsedDoc, 0, len(files))
 	for _, f := range files {
-		relPath, relErr := filepath.Rel(dirPath, f.path)
-		if relErr != nil {
-			relPath = f.path
-		}
-		logger.Debug("parsing file", "file", relPath)
-		docs, parseErr := parseFileDocuments(f.content, relPath)
+		logger.Debug("parsing file", "file", f.relPath)
+		docs, parseErr := parseFileDocuments(f.content, f.relPath)
 		if parseErr != nil {
-			return nil, nil, fmt.Errorf("parse %s: %w", relPath, parseErr)
+			return nil, nil, fmt.Errorf("parse %s: %w", f.relPath, parseErr)
 		}
 		for idx := range docs {
 			if isCRDDocument(docs[idx].obj) {
@@ -325,7 +319,7 @@ func parseFileDocuments(content []byte, file string) ([]parsedDoc, error) {
 // CustomResourceDefinition from the apiextensions.k8s.io group.
 func isCRDDocument(obj *unstructured.Unstructured) bool {
 	gvk := obj.GroupVersionKind()
-	return gvk.Group == "apiextensions.k8s.io" && gvk.Kind == "CustomResourceDefinition"
+	return gvk.Group == apiextensionsv1.GroupName && gvk.Kind == "CustomResourceDefinition"
 }
 
 // applyParsedDocument resolves the REST mapping for a pre-parsed document and
@@ -354,7 +348,7 @@ func applyParsedDocument(
 		// to match kubectl's behavior (kubectl apply defaults to the "default"
 		// namespace when none is specified in the manifest or context).
 		if ns == "" {
-			ns = "default"
+			ns = metav1.NamespaceDefault
 			logger.Debug("namespace-scoped resource has no namespace; defaulting to 'default'",
 				"kind", gvk.Kind, "name", doc.obj.GetName(), "file", doc.file)
 		}
