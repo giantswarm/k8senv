@@ -517,22 +517,22 @@ func (m *Manager) Shutdown() error {
 func stopAllInstances(instances []*Instance, timeout time.Duration) error {
 	stopErrs := make([]error, len(instances))
 	var wg sync.WaitGroup
-	for idx, inst := range instances {
-		if inst == nil {
+	for idx, i := range instances {
+		if i == nil {
 			continue
 		}
 		wg.Add(1)
-		go func(pos int, i *Instance) {
+		go func(pos int, inst *Instance) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(
 				context.Background(), timeout,
 			)
 			defer cancel()
-			if err := i.Stop(ctx); err != nil {
+			if err := inst.Stop(ctx); err != nil {
 				stopErrs[pos] = err
-				i.log.Warn("failed to stop instance", "error", err)
+				inst.log.Warn("failed to stop instance", "error", err)
 			}
-		}(idx, inst)
+		}(idx, i)
 	}
 	wg.Wait()
 
