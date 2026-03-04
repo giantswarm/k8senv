@@ -31,7 +31,7 @@ type Config struct {
 	// Optional (for prepopulating kine DB)
 	CachedDBPath string
 
-	// Timeouts (default to 30s for kine, 60s for apiserver)
+	// Timeouts (required, must be positive)
 	KineReadyTimeout      time.Duration
 	APIServerReadyTimeout time.Duration
 
@@ -56,13 +56,9 @@ type Config struct {
 // methods, including Start, Stop, and IsStarted. In practice, each Stack is
 // owned by a single Instance whose startMu mutex serializes lifecycle calls.
 type Stack struct {
-	// Immutable after New: configuration, logger, and shared port registry.
+	// Immutable after New: configuration and logger.
 	config Config
 	log    *slog.Logger
-	// ports is the canonical reference to the port registry, extracted from
-	// Config.PortRegistry during construction. All port operations use this
-	// field exclusively; config.PortRegistry is never accessed after New.
-	ports *netutil.PortRegistry
 
 	// Set by Start, cleared by Stop: process handles, allocated ports, and
 	// lifecycle flag.
@@ -145,8 +141,7 @@ func newStack(cfg Config) *Stack {
 	if log == nil {
 		log = slog.Default()
 	}
-	ports := cfg.PortRegistry
-	return &Stack{config: cfg, log: log, ports: ports}
+	return &Stack{config: cfg, log: log}
 }
 
 // StartWithRetry creates and starts a kubestack, retrying up to maxRetries
@@ -193,7 +188,7 @@ func StartWithRetry(
 
 		if err := stack.Start(procCtx, readyCtx); err != nil {
 			lastErr = err
-			stack.logAndCleanupFailedAttempt(err, attempt, maxRetries)
+			stack.logFailedAttempt(err, attempt, maxRetries)
 			if isPermanentStartError(err) {
 				return nil, fmt.Errorf("permanent start failure (not retried): %w", err)
 			}
@@ -227,6 +222,9 @@ func validateContextPair(processCtx, readyCtx context.Context) error {
 	if readyCtx == nil {
 		return errors.New("readyCtx must not be nil")
 	}
+	if readyCtx.Err() != nil {
+		return fmt.Errorf("readyCtx already canceled: %w", readyCtx.Err())
+	}
 	if processCtx == readyCtx {
 		return errors.New("processCtx and readyCtx must be different contexts; " +
 			"processCtx governs process lifetime, readyCtx governs startup timeout")
@@ -246,18 +244,15 @@ func validateStartWithRetryArgs(procCtx, readyCtx context.Context, maxRetries in
 	return nil
 }
 
-// logAndCleanupFailedAttempt logs a warning for a failed start attempt and
-// stops the partially-started stack to release any allocated ports or
-// processes before the next retry.
-func (s *Stack) logAndCleanupFailedAttempt(err error, attempt, maxRetries int) {
+// logFailedAttempt logs a warning for a failed start attempt.
+// Cleanup of partially-started processes is handled by Start's deferred
+// cleanupAfterStartFailure, so no explicit Stop is needed here.
+func (s *Stack) logFailedAttempt(err error, attempt, maxRetries int) {
 	s.log.Warn("kubestack start attempt failed",
 		"attempt", attempt,
 		"max_retries", maxRetries,
 		"error", err,
 	)
-	if stopErr := s.Stop(s.config.stopTimeout()); stopErr != nil {
-		s.log.Warn("cleanup partially-started kubestack", "error", stopErr)
-	}
 }
 
 // permanentStartErrors lists errors that indicate a permanent failure during
@@ -375,7 +370,7 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 // allocatePorts reserves a pair of ports from the shared port registry
 // and stores them on the stack for use by kine and kube-apiserver.
 func (s *Stack) allocatePorts() error {
-	kinePort, apiPort, err := s.ports.AllocatePortPair()
+	kinePort, apiPort, err := s.config.PortRegistry.AllocatePortPair()
 	if err != nil {
 		return fmt.Errorf("allocate ports: %w", err)
 	}
@@ -441,15 +436,15 @@ func (s *Stack) startAndWait(
 	timeout time.Duration,
 	name string,
 ) error {
-	s.log.Debug("starting " + name)
+	s.log.Debug("starting process", "name", name)
 	if err := proc.Start(processCtx); err != nil {
 		return fmt.Errorf("start %s: %w", name, err)
 	}
-	s.log.Debug("waiting for "+name+" readiness", "timeout", timeout)
+	s.log.Debug("waiting for process readiness", "name", name, "timeout", timeout)
 	if err := proc.WaitReady(readyCtx, timeout); err != nil {
 		return fmt.Errorf("%s readiness: %w", name, err)
 	}
-	s.log.Debug(name + " ready")
+	s.log.Debug("process ready", "name", name)
 	return nil
 }
 
@@ -546,11 +541,11 @@ func (s *Stack) IsStarted() bool {
 // the stored values. Safe to call when ports are already zero (no-op).
 func (s *Stack) releasePorts() {
 	if s.kinePort != 0 {
-		s.ports.Release(s.kinePort)
+		s.config.PortRegistry.Release(s.kinePort)
 		s.kinePort = 0
 	}
 	if s.apiPort != 0 {
-		s.ports.Release(s.apiPort)
+		s.config.PortRegistry.Release(s.apiPort)
 		s.apiPort = 0
 	}
 }
