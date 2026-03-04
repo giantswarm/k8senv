@@ -99,7 +99,7 @@ func TestCopyFile_Mode(t *testing.T) {
 		wantMode os.FileMode
 	}{
 		{"custom mode", 0o600, 0o600},
-		{"zero uses default 0644", 0, 0o644},
+		{"zero uses default", 0, defaultFileMode},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
