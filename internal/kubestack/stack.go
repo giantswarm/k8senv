@@ -427,6 +427,32 @@ func (s *Stack) createProcesses() error {
 	return nil
 }
 
+// startable is satisfied by both kine.Process and apiserver.Process,
+// allowing startAndWait to handle both uniformly.
+type startable interface {
+	Start(ctx context.Context) error
+	WaitReady(ctx context.Context, timeout time.Duration) error
+}
+
+// startAndWait starts a process and waits for it to become ready.
+func (s *Stack) startAndWait(
+	processCtx, readyCtx context.Context,
+	proc startable,
+	timeout time.Duration,
+	name string,
+) error {
+	s.log.Debug("starting " + name)
+	if err := proc.Start(processCtx); err != nil {
+		return fmt.Errorf("start %s: %w", name, err)
+	}
+	s.log.Debug("waiting for "+name+" readiness", "timeout", timeout)
+	if err := proc.WaitReady(readyCtx, timeout); err != nil {
+		return fmt.Errorf("%s readiness: %w", name, err)
+	}
+	s.log.Debug(name + " ready")
+	return nil
+}
+
 // startAndWaitForReady launches kine and kube-apiserver concurrently under
 // processCtx and waits for both to report readiness within readyCtx.
 //
@@ -446,29 +472,10 @@ func (s *Stack) startAndWaitForReady(processCtx, readyCtx context.Context) error
 	// s.apiserver), so concurrent calls to Start are safe despite
 	// BaseProcess not being goroutine-safe.
 	g.Go(func() error {
-		s.log.Debug("starting kine")
-		if err := s.kine.Start(processCtx); err != nil {
-			return fmt.Errorf("start kine: %w", err)
-		}
-		s.log.Debug("waiting for kine readiness", "timeout", s.config.KineReadyTimeout)
-		if err := s.kine.WaitReady(gCtx, s.config.KineReadyTimeout); err != nil {
-			return fmt.Errorf("kine readiness: %w", err)
-		}
-		s.log.Debug("kine ready")
-		return nil
+		return s.startAndWait(processCtx, gCtx, s.kine, s.config.KineReadyTimeout, "kine")
 	})
-
 	g.Go(func() error {
-		s.log.Debug("starting apiserver")
-		if err := s.apiserver.Start(processCtx); err != nil {
-			return fmt.Errorf("start apiserver: %w", err)
-		}
-		s.log.Debug("waiting for apiserver readiness", "timeout", s.config.APIServerReadyTimeout)
-		if err := s.apiserver.WaitReady(gCtx, s.config.APIServerReadyTimeout); err != nil {
-			return fmt.Errorf("apiserver readiness: %w", err)
-		}
-		s.log.Debug("apiserver ready")
-		return nil
+		return s.startAndWait(processCtx, gCtx, s.apiserver, s.config.APIServerReadyTimeout, "apiserver")
 	})
 
 	if err := g.Wait(); err != nil {
@@ -482,14 +489,9 @@ func (s *Stack) startAndWaitForReady(processCtx, readyCtx context.Context) error
 // kine, ports). StopCloseAndNil handles nil pointers gracefully, so this
 // is safe regardless of which resources were successfully initialized.
 func (s *Stack) cleanupAfterStartFailure() {
-	cleanupTimeout := s.config.stopTimeout()
-	if err := process.StopCloseAndNil(&s.apiserver, cleanupTimeout); err != nil {
-		s.log.Warn("cleanup apiserver after start failure", "error", err)
+	if err := s.stopProcesses(s.config.stopTimeout()); err != nil {
+		s.log.Warn("cleanup after start failure", "error", err)
 	}
-	if err := process.StopCloseAndNil(&s.kine, cleanupTimeout); err != nil {
-		s.log.Warn("cleanup kine after start failure", "error", err)
-	}
-	s.releasePorts()
 }
 
 // Stop stops both processes (apiserver first, then kine) and releases
@@ -517,7 +519,13 @@ func (s *Stack) Stop(timeout time.Duration) error {
 		return nil
 	}
 	s.started = false
+	return s.stopProcesses(timeout)
+}
 
+// stopProcesses stops apiserver then kine (reverse start order) and releases
+// ports. The timeout is applied per-process. StopCloseAndNil handles nil
+// pointers gracefully.
+func (s *Stack) stopProcesses(timeout time.Duration) error {
 	var errs []error
 	if err := process.StopCloseAndNil(&s.apiserver, timeout); err != nil {
 		errs = append(errs, fmt.Errorf("stop apiserver: %w", err))
@@ -525,9 +533,7 @@ func (s *Stack) Stop(timeout time.Duration) error {
 	if err := process.StopCloseAndNil(&s.kine, timeout); err != nil {
 		errs = append(errs, fmt.Errorf("stop kine: %w", err))
 	}
-
 	s.releasePorts()
-
 	return errors.Join(errs...)
 }
 
