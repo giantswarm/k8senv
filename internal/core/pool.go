@@ -177,14 +177,8 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, uint64, error) {
 		p.mu.Unlock()
 		p.returnSlot()
 		// Pool closed while we were creating the instance. Clean up.
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), inst.cfg.StopTimeout)
-		defer stopCancel()
-		if stopErr := inst.Stop( //nolint:contextcheck // cleanup must use background context; caller's context is unrelated
-			stopCtx,
-		); stopErr != nil {
-			Logger().Warn("failed to stop instance created after pool close",
-				"id", inst.ID(), "error", stopErr)
-		}
+		//nolint:contextcheck // cleanup must use background context; caller's context is unrelated
+		stopInstanceBestEffort(inst, "pool closed during acquire")
 		return nil, 0, ErrPoolClosed
 	}
 	p.mu.Unlock()
@@ -208,12 +202,7 @@ func (p *Pool) Release(i *Instance, token uint64) {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
-		defer stopCancel()
-		if err := i.Stop(stopCtx); err != nil {
-			Logger().Warn("failed to stop released instance after pool close",
-				"id", i.ID(), "error", err)
-		}
+		stopInstanceBestEffort(i, "pool closed during release")
 		p.returnSlot()
 		return
 	}
@@ -234,11 +223,7 @@ func (p *Pool) ReleaseFailed(i *Instance, token uint64) {
 	// Stop is idempotent: it atomically nils i.stack and i.cancel on entry,
 	// so a second call returns nil immediately.
 	// Called without holding the lock because it performs I/O.
-	ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
-	defer cancel()
-	if err := i.Stop(ctx); err != nil {
-		Logger().Warn("failed to stop instance during cleanup", "id", i.ID(), "error", err)
-	}
+	stopInstanceBestEffort(i, "cleanup after failure")
 
 	p.returnSlot()
 }
@@ -255,6 +240,17 @@ func (p *Pool) Close() {
 	// Close closeCh to unblock any Acquire calls waiting on the semaphore.
 	if p.closeCh != nil {
 		p.closeOnce.Do(func() { close(p.closeCh) })
+	}
+}
+
+// stopInstanceBestEffort stops the instance using a background context bounded
+// by the instance's configured stop timeout, logging a warning on failure.
+// Uses the instance-scoped logger so the instance ID is automatically included.
+func stopInstanceBestEffort(i *Instance, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), i.cfg.StopTimeout)
+	defer cancel()
+	if err := i.Stop(ctx); err != nil {
+		i.log.Warn("failed to stop instance", "reason", reason, "error", err)
 	}
 }
 

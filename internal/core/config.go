@@ -68,33 +68,15 @@ type ManagerConfig struct {
 func (c ManagerConfig) Validate() error {
 	var errs []error
 
-	if c.KineBinary == "" {
-		errs = append(errs, errors.New("kine binary path must not be empty"))
-	}
-	if c.KubeAPIServerBinary == "" {
-		errs = append(errs, errors.New("kube-apiserver binary path must not be empty"))
-	}
-	if c.AcquireTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("acquire timeout must be greater than 0, got %s", c.AcquireTimeout))
-	}
-	if c.BaseDataDir == "" {
-		errs = append(errs, errors.New("base data directory must not be empty"))
-	}
-	if c.InstanceStartTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("instance start timeout must be greater than 0, got %s", c.InstanceStartTimeout))
-	}
-	if c.InstanceStopTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("instance stop timeout must be greater than 0, got %s", c.InstanceStopTimeout))
-	}
-	if c.CleanupTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("cleanup timeout must be greater than 0, got %s", c.CleanupTimeout))
-	}
-	if c.CRDCacheTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("CRD cache timeout must be greater than 0, got %s", c.CRDCacheTimeout))
-	}
-	if c.ShutdownDrainTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("shutdown drain timeout must be greater than 0, got %s", c.ShutdownDrainTimeout))
-	}
+	requireNonEmpty(&errs, "kine binary path", c.KineBinary)
+	requireNonEmpty(&errs, "kube-apiserver binary path", c.KubeAPIServerBinary)
+	requirePositiveDuration(&errs, "acquire timeout", c.AcquireTimeout)
+	requireNonEmpty(&errs, "base data directory", c.BaseDataDir)
+	requirePositiveDuration(&errs, "instance start timeout", c.InstanceStartTimeout)
+	requirePositiveDuration(&errs, "instance stop timeout", c.InstanceStopTimeout)
+	requirePositiveDuration(&errs, "cleanup timeout", c.CleanupTimeout)
+	requirePositiveDuration(&errs, "CRD cache timeout", c.CRDCacheTimeout)
+	requirePositiveDuration(&errs, "shutdown drain timeout", c.ShutdownDrainTimeout)
 	if c.PoolSize < 0 {
 		errs = append(errs, fmt.Errorf("pool size must not be negative, got %d", c.PoolSize))
 	}
@@ -134,24 +116,28 @@ type InstanceConfig struct {
 func (c InstanceConfig) Validate() error {
 	var errs []error
 
-	if c.StartTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("start timeout must be greater than 0, got %s", c.StartTimeout))
-	}
-	if c.StopTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("stop timeout must be greater than 0, got %s", c.StopTimeout))
-	}
-	if c.CleanupTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("cleanup timeout must be greater than 0, got %s", c.CleanupTimeout))
-	}
+	requirePositiveDuration(&errs, "start timeout", c.StartTimeout)
+	requirePositiveDuration(&errs, "stop timeout", c.StopTimeout)
+	requirePositiveDuration(&errs, "cleanup timeout", c.CleanupTimeout)
 	if c.MaxStartRetries <= 0 {
 		errs = append(errs, fmt.Errorf("max start retries must be greater than 0, got %d", c.MaxStartRetries))
 	}
-	if c.KineBinary == "" {
-		errs = append(errs, errors.New("kine binary path must not be empty"))
-	}
-	if c.KubeAPIServerBinary == "" {
-		errs = append(errs, errors.New("kube-apiserver binary path must not be empty"))
-	}
+	requireNonEmpty(&errs, "kine binary path", c.KineBinary)
+	requireNonEmpty(&errs, "kube-apiserver binary path", c.KubeAPIServerBinary)
 
 	return errors.Join(errs...)
+}
+
+// requirePositiveDuration appends a validation error if d is not positive.
+func requirePositiveDuration(errs *[]error, name string, d time.Duration) {
+	if d <= 0 {
+		*errs = append(*errs, fmt.Errorf("%s must be greater than 0, got %s", name, d))
+	}
+}
+
+// requireNonEmpty appends a validation error if value is empty.
+func requireNonEmpty(errs *[]error, name string, value string) {
+	if value == "" {
+		*errs = append(*errs, errors.New(name+" must not be empty"))
+	}
 }
