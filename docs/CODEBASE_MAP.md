@@ -146,8 +146,8 @@ k8senv/
 │   │   ├── base.go            # BaseProcess: lifecycle, Wait goroutine, exited channel
 │   │   ├── base_linux.go      # Linux: Pdeathsig = SIGTERM
 │   │   ├── base_other.go      # Non-Linux: no-op
-│   │   ├── process.go         # SIGTERM → SIGKILL stop, LogFiles management
-│   │   ├── process_test.go    # BaseProcess + LogFiles + stopWithDone tests
+│   │   ├── process.go         # SIGTERM → SIGKILL stop, logFiles management
+│   │   ├── process_test.go    # BaseProcess + logFiles + stopWithDone tests
 │   │   ├── stoppable.go       # Stoppable interface + generic StopCloseAndNil
 │   │   ├── wait.go            # WaitReady: polling + ProcessExited fast abort
 │   │   └── wait_test.go       # WaitReady unit tests
@@ -399,8 +399,8 @@ guardReleasePanic: defer ensures pool slot returned even if purge panics
 | `base.go` | `BaseProcess`: lifecycle, single Wait goroutine, exited broadcast channel | 1731 |
 | `base_linux.go` | Linux: `Pdeathsig = SIGTERM` | 105 |
 | `base_other.go` | Non-Linux: no-op | 57 |
-| `process.go` | SIGTERM → SIGKILL stop, LogFiles (noCopy), StartCmd | 2468 |
-| `process_test.go` | BaseProcess + LogFiles + stopWithDone tests | 3392 |
+| `process.go` | SIGTERM → SIGKILL stop, logFiles (noCopy), startCmd | 2468 |
+| `process_test.go` | BaseProcess + logFiles + stopWithDone tests | 3392 |
 | `stoppable.go` | `Stoppable` interface + generic `StopCloseAndNil[P, E]` | 406 |
 | `wait.go` | `WaitReady`: polling with `ProcessExited` channel for fast abort | 881 |
 | `wait_test.go` | WaitReady unit tests | 2276 |

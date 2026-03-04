@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// noCopy prevents LogFiles from being copied after it holds open file handles.
+// noCopy prevents logFiles from being copied after it holds open file handles.
 // Embedding this type causes go vet's copylocks checker to report any value
-// copy of LogFiles, which would alias the underlying *os.File fields and allow
+// copy of logFiles, which would alias the underlying *os.File fields and allow
 // one copy to close the other's file descriptors.
 //
 // This technique is the same pattern used by sync.Mutex and strings.Builder in
@@ -26,10 +26,10 @@ func (*noCopy) Lock() {}
 // Unlock is a no-op required to satisfy sync.Locker.
 func (*noCopy) Unlock() {}
 
-// LogFiles manages stdout/stderr file handles for a process.
-// LogFiles must not be copied after creation; use a pointer when passing or
+// logFiles manages stdout/stderr file handles for a process.
+// logFiles must not be copied after creation; use a pointer when passing or
 // storing it to avoid aliasing the underlying file descriptors.
-type LogFiles struct {
+type logFiles struct {
 	noCopy     noCopy // sentinel: go vet copylocks flags any copy of this struct
 	stdoutFile *os.File
 	stderrFile *os.File
@@ -39,7 +39,7 @@ type LogFiles struct {
 
 // create creates stdout and stderr log files.
 // Both files are assigned to the struct only after both creates succeed.
-func (l *LogFiles) create() error {
+func (l *logFiles) create() error {
 	stdoutFile, err := os.Create(l.stdoutPath)
 	if err != nil {
 		return fmt.Errorf("create stdout log: %w", err)
@@ -55,7 +55,7 @@ func (l *LogFiles) create() error {
 }
 
 // Close closes both log file handles and nils them to prevent double-close.
-func (l *LogFiles) Close() {
+func (l *logFiles) Close() {
 	if l.stdoutFile != nil {
 		_ = l.stdoutFile.Close()
 		l.stdoutFile = nil
@@ -69,8 +69,8 @@ func (l *LogFiles) Close() {
 // newLogFiles creates and initializes log files for a process.
 // The processName is used to generate log file names (e.g., "kine" -> "kine-stdout.log").
 // Returns a pointer to prevent copying the file handles.
-func newLogFiles(dataDir, processName string) (*LogFiles, error) {
-	l := &LogFiles{
+func newLogFiles(dataDir, processName string) (*logFiles, error) {
+	l := &logFiles{
 		stdoutPath: filepath.Join(dataDir, processName+"-stdout.log"),
 		stderrPath: filepath.Join(dataDir, processName+"-stderr.log"),
 	}
@@ -146,7 +146,8 @@ func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
 // This avoids spawning a second cmd.Wait goroutine, which would be undefined
 // behavior.
 //
-// Precondition: b.cmd and b.cmd.Process must be non-nil (caller verifies).
+// Precondition: b.cmd, b.cmd.Process, and b.waitDone must be non-nil
+// (caller verifies cmd/Process; waitDone is set alongside cmd by SetupAndStart).
 //
 // Shutdown flow:
 //  1. Send SIGTERM for graceful shutdown.
@@ -248,9 +249,9 @@ func expectSignalExit(err error, name string) error {
 }
 
 // startCmd creates log files, sets up stdout/stderr, and starts the command.
-// On success, caller owns the LogFiles. On failure, log files are closed automatically.
+// On success, caller owns the logFiles. On failure, log files are closed automatically.
 // Returns a pointer to prevent copying the file handles.
-func startCmd(cmd *exec.Cmd, dataDir, processName string) (*LogFiles, error) {
+func startCmd(cmd *exec.Cmd, dataDir, processName string) (*logFiles, error) {
 	logFiles, err := newLogFiles(dataDir, processName)
 	if err != nil {
 		return nil, fmt.Errorf("create %s logs: %w", processName, err)

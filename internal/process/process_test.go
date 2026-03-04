@@ -254,7 +254,7 @@ func TestLogFiles_CloseNilHandles(t *testing.T) {
 	t.Parallel()
 
 	// Close with nil file handles should not panic.
-	lf := LogFiles{}
+	lf := logFiles{}
 	lf.Close()
 }
 

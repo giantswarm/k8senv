@@ -84,7 +84,7 @@ flowchart TD
 | `base.go` | `BaseProcess`: embeddable process lifecycle (setup, start, stop) |
 | `base_linux.go` | Linux-specific process group and signal handling |
 | `base_other.go` | Non-Linux (macOS, Windows) process signal handling |
-| `process.go` | `LogFiles` management, port conflict detection |
+| `process.go` | `logFiles` management, process stop sequence |
 | `stoppable.go` | `Stoppable` interface, cleanup helpers |
 | `wait.go` | Polling-based readiness checks with configurable intervals |
 
