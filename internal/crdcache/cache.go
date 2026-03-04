@@ -244,7 +244,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 	}()
 
 	// Apply CRDs and wait for establishment.
-	if err := applyCRDs(timeoutCtx, logger, kubeconfigPath, cfg.CRDDir, files); err != nil {
+	if err := applyCRDs(timeoutCtx, logger, kubeconfigPath, files); err != nil {
 		return err
 	}
 
@@ -269,7 +269,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 // Established condition. It does not manage the kube stack lifecycle — the
 // caller is responsible for starting and stopping the stack.
 // The files slice contains pre-read YAML file contents from computeDirHash.
-func applyCRDs(ctx context.Context, logger *slog.Logger, kubeconfigPath, crdDir string, files []hashedFile) error {
+func applyCRDs(ctx context.Context, logger *slog.Logger, kubeconfigPath string, files []hashedFile) error {
 	// Get rest.Config from kubeconfig
 	restCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
@@ -277,7 +277,7 @@ func applyCRDs(ctx context.Context, logger *slog.Logger, kubeconfigPath, crdDir 
 	}
 
 	// Apply all YAML files
-	logger.Info("applying YAML files", "dir", crdDir)
+	logger.Info("applying YAML files", "count", len(files))
 	if err := applyYAMLFiles(ctx, logger, restCfg, files); err != nil {
 		return fmt.Errorf("apply yaml files: %w", err)
 	}
