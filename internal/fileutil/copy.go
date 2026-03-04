@@ -70,8 +70,11 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	if opts != nil {
 		o = *opts
 	}
+	if o.Mode == 0 {
+		o.Mode = defaultFileMode
+	}
 
-	dstFile, writePath, err := openDstFile(dst, resolveFileMode(o.Mode), o.Atomic)
+	dstFile, writePath, err := openDstFile(dst, o.Mode, o.Atomic)
 	if err != nil {
 		return err
 	}
@@ -115,14 +118,6 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, opts CopyFileOptions)
 	}
 
 	return nil
-}
-
-// resolveFileMode returns the given mode, defaulting to 0o644 when zero.
-func resolveFileMode(mode os.FileMode) os.FileMode {
-	if mode != 0 {
-		return mode
-	}
-	return defaultFileMode
 }
 
 // isSameFile reports whether the open file srcFile refers to the same file as dstPath.
