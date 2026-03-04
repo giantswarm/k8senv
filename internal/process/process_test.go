@@ -255,7 +255,7 @@ func TestLogFiles_Paths(t *testing.T) {
 
 	t.Run("stdout path", func(t *testing.T) {
 		t.Parallel()
-		lf := LogFiles{dataDir: "/tmp/k8senv/inst-1", stdoutName: "kine-stdout.log"}
+		lf := LogFiles{stdoutPath: "/tmp/k8senv/inst-1/kine-stdout.log"}
 		want := "/tmp/k8senv/inst-1/kine-stdout.log"
 		if got := lf.StdoutPath(); got != want {
 			t.Errorf("StdoutPath() = %q, want %q", got, want)
@@ -264,7 +264,7 @@ func TestLogFiles_Paths(t *testing.T) {
 
 	t.Run("stderr path", func(t *testing.T) {
 		t.Parallel()
-		lf := LogFiles{dataDir: "/tmp/k8senv/inst-1", stderrName: "kine-stderr.log"}
+		lf := LogFiles{stderrPath: "/tmp/k8senv/inst-1/kine-stderr.log"}
 		want := "/tmp/k8senv/inst-1/kine-stderr.log"
 		if got := lf.StderrPath(); got != want {
 			t.Errorf("StderrPath() = %q, want %q", got, want)

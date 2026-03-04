@@ -42,7 +42,7 @@ type BaseProcess struct {
 // NewBaseProcess creates a BaseProcess with the given name, logger, and stop
 // timeout. The stopTimeout is used by Close as a safety-net timeout when
 // auto-stopping a process that was not explicitly stopped. If stopTimeout is
-// zero, DefaultStopTimeout is used as a fallback. If logger is nil,
+// zero or negative, DefaultStopTimeout is used. If logger is nil,
 // slog.Default() is used. Panics if name is empty, since an empty name
 // produces confusing error messages throughout the process lifecycle (Stop,
 // Close, log entries).
@@ -52,6 +52,9 @@ func NewBaseProcess(name string, logger *slog.Logger, stopTimeout time.Duration)
 	}
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if stopTimeout <= 0 {
+		stopTimeout = DefaultStopTimeout
 	}
 	return BaseProcess{name: name, log: logger, stopTimeout: stopTimeout}
 }
@@ -68,21 +71,20 @@ func NewBaseProcess(name string, logger *slog.Logger, stopTimeout time.Duration)
 // Stop will leak the log file handles opened by SetupAndStart. All callers
 // should use the StopCloseAndNil helper, which calls both Stop and Close.
 func (b *BaseProcess) Stop(timeout time.Duration) error {
-	if b.cmd == nil || b.cmd.Process == nil {
+	defer func() {
 		b.cmd = nil
 		b.waitDone = nil
 		b.exited = nil
+	}()
+	if b.cmd == nil || b.cmd.Process == nil {
 		return nil
 	}
 	pid := b.cmd.Process.Pid
-	err := stopWithDone(b.cmd, b.waitDone, timeout, b.name)
+	err := b.stopWithDone(timeout)
 	if err != nil {
 		b.log.Warn("process stop failed; process may be orphaned",
 			"process", b.name, "pid", pid, "error", err)
 	}
-	b.cmd = nil
-	b.waitDone = nil
-	b.exited = nil
 	return err
 }
 
@@ -91,8 +93,7 @@ func (b *BaseProcess) Stop(timeout time.Duration) error {
 // prevent resource leaks. Callers should always call Stop before Close; the
 // auto-stop is a safety net, not an intended code path.
 //
-// The auto-stop uses the stopTimeout provided to NewBaseProcess, falling back
-// to DefaultStopTimeout when zero.
+// The auto-stop uses the stopTimeout provided to NewBaseProcess.
 //
 // If the auto-stop fails, Close still closes log files. This means a process
 // that could not be stopped may continue running with its stdout/stderr file
@@ -104,11 +105,7 @@ func (b *BaseProcess) Close() {
 		// Best-effort stop; log but do not propagate the error since Close
 		// has no error return and changing the signature would break the
 		// Stoppable interface contract.
-		timeout := b.stopTimeout
-		if timeout <= 0 {
-			timeout = DefaultStopTimeout
-		}
-		if err := b.Stop(timeout); err != nil {
+		if err := b.Stop(b.stopTimeout); err != nil {
 			b.log.Warn("auto-stop during Close failed",
 				"process", b.name, "error", err)
 		}
@@ -162,7 +159,7 @@ func (b *BaseProcess) SetupAndStart(cmd *exec.Cmd, dataDir string) error {
 	cmd.Dir = dataDir
 	configureSysProcAttr(cmd)
 
-	logFiles, err := StartCmd(cmd, dataDir, b.name)
+	logFiles, err := startCmd(cmd, dataDir, b.name)
 	if err != nil {
 		return fmt.Errorf("start command: %w", err)
 	}

@@ -33,19 +33,18 @@ type LogFiles struct {
 	noCopy     noCopy // sentinel: go vet copylocks flags any copy of this struct
 	stdoutFile *os.File
 	stderrFile *os.File
-	dataDir    string
-	stdoutName string // e.g., "kine-stdout.log"
-	stderrName string // e.g., "kube-apiserver-stderr.log"
+	stdoutPath string // precomputed absolute path to stdout log
+	stderrPath string // precomputed absolute path to stderr log
 }
 
 // create creates stdout and stderr log files.
 // Both files are assigned to the struct only after both creates succeed.
 func (l *LogFiles) create() error {
-	stdoutFile, err := os.Create(l.StdoutPath())
+	stdoutFile, err := os.Create(l.stdoutPath)
 	if err != nil {
 		return fmt.Errorf("create stdout log: %w", err)
 	}
-	stderrFile, err := os.Create(l.StderrPath())
+	stderrFile, err := os.Create(l.stderrPath)
 	if err != nil {
 		_ = stdoutFile.Close()
 		return fmt.Errorf("create stderr log: %w", err)
@@ -69,22 +68,21 @@ func (l *LogFiles) Close() {
 
 // StdoutPath returns the absolute path to the stdout log file.
 func (l *LogFiles) StdoutPath() string {
-	return filepath.Join(l.dataDir, l.stdoutName)
+	return l.stdoutPath
 }
 
 // StderrPath returns the absolute path to the stderr log file.
 func (l *LogFiles) StderrPath() string {
-	return filepath.Join(l.dataDir, l.stderrName)
+	return l.stderrPath
 }
 
-// NewLogFiles creates and initializes log files for a process.
+// newLogFiles creates and initializes log files for a process.
 // The processName is used to generate log file names (e.g., "kine" -> "kine-stdout.log").
 // Returns a pointer to prevent copying the file handles.
-func NewLogFiles(dataDir, processName string) (*LogFiles, error) {
+func newLogFiles(dataDir, processName string) (*LogFiles, error) {
 	l := &LogFiles{
-		dataDir:    dataDir,
-		stdoutName: processName + "-stdout.log",
-		stderrName: processName + "-stderr.log",
+		stdoutPath: filepath.Join(dataDir, processName+"-stdout.log"),
+		stderrPath: filepath.Join(dataDir, processName+"-stderr.log"),
 	}
 	if err := l.create(); err != nil {
 		return nil, err
@@ -134,6 +132,14 @@ func drainReserve(timeout time.Duration) time.Duration {
 // Returns true and the cmd.Wait error if the channel delivered in time,
 // or false and a nil error if the timeout elapsed.
 func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
+	// Fast path: the process usually has already exited by the time we
+	// drain, so check without allocating a timer.
+	select {
+	case err := <-done:
+		return true, err
+	default:
+	}
+
 	t := time.NewTimer(timeout)
 	defer t.Stop()
 
@@ -145,10 +151,12 @@ func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
 	}
 }
 
-// stopWithDone implements the SIGTERM-then-SIGKILL shutdown sequence using a
-// pre-existing done channel that already has a goroutine calling cmd.Wait. This
-// avoids spawning a second cmd.Wait goroutine, which would be undefined behavior.
-// The done channel must receive the result of exactly one cmd.Wait call.
+// stopWithDone implements the SIGTERM-then-SIGKILL shutdown sequence using the
+// pre-existing waitDone channel that already has a goroutine calling cmd.Wait.
+// This avoids spawning a second cmd.Wait goroutine, which would be undefined
+// behavior.
+//
+// Precondition: b.cmd and b.cmd.Process must be non-nil (caller verifies).
 //
 // Shutdown flow:
 //  1. Send SIGTERM for graceful shutdown.
@@ -163,12 +171,9 @@ func drainDone(done <-chan error, timeout time.Duration) (bool, error) {
 // Total blocking time is bounded by timeout. A portion of the timeout
 // (killDrainBudget, capped at half of timeout) is reserved for draining the
 // done channel after SIGKILL. The main SIGTERM/SIGKILL wait uses the remainder.
-func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name string) error {
-	if cmd == nil || cmd.Process == nil {
-		return nil
-	}
-	if done == nil {
-		return fmt.Errorf("%s: done channel must not be nil", name)
+func (b *BaseProcess) stopWithDone(timeout time.Duration) error {
+	if b.waitDone == nil {
+		return fmt.Errorf("%s: done channel must not be nil", b.name)
 	}
 
 	// Partition the timeout budget: reserve a portion at the end for
@@ -179,14 +184,14 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	mainBudget := timeout - reserve
 
 	// Send SIGTERM for graceful shutdown.
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := b.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		// Process already exited; drain the wait goroutine within the
 		// caller's timeout budget to avoid blocking indefinitely.
-		ok, waitErr := drainDone(done, timeout)
+		ok, waitErr := drainDone(b.waitDone, timeout)
 		if !ok {
-			return fmt.Errorf("%s: timed out draining process after signal failure", name)
+			return fmt.Errorf("%s: timed out draining process after signal failure", b.name)
 		}
-		return expectSignalExit(waitErr, name)
+		return expectSignalExit(waitErr, b.name)
 	}
 
 	// Schedule SIGKILL after the grace period. If the process exits before
@@ -197,17 +202,18 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	// while the main timer is still running, giving drainDone a window to
 	// collect the exit status rather than hitting the timeout path.
 	grace := min(termGracePeriod, mainBudget)
+
+	// Capture the process pointer before scheduling the kill timer.
+	// Stop's defer nils b.cmd after this method returns, so the closure
+	// must not access b.cmd — it uses the captured proc pointer instead.
+	proc := b.cmd.Process
 	killTimer := time.AfterFunc(grace, func() {
 		// Kill after Wait (process already exited) is a no-op that returns
 		// an "os: process already finished" error, which we intentionally
 		// discard. This is safe because the OS has already released the
 		// process, and Kill on a finished process is explicitly harmless.
-		_ = cmd.Process.Kill()
+		_ = proc.Kill()
 	})
-	// Safety: killTimer.Stop cancels the pending SIGKILL before this function
-	// returns. This is safe because cmd.Process is only used by the kill
-	// callback and by the caller (who must not nil cmd until stopWithDone
-	// returns). The defer guarantees the timer is canceled on all exit paths.
 	defer killTimer.Stop()
 
 	// Wait for process exit or main budget expiry.
@@ -215,18 +221,18 @@ func stopWithDone(cmd *exec.Cmd, done <-chan error, timeout time.Duration, name 
 	defer totalTimer.Stop()
 
 	select {
-	case err := <-done:
-		return expectSignalExit(err, name)
+	case err := <-b.waitDone:
+		return expectSignalExit(err, b.name)
 	case <-totalTimer.C:
 		// Main budget expired. Drain with the reserved budget. SIGKILL
 		// was already sent (grace <= mainBudget), so the process should
 		// exit almost immediately; the reserve is a safety net.
-		ok, waitErr := drainDone(done, reserve)
+		ok, waitErr := drainDone(b.waitDone, reserve)
 		if !ok {
-			return fmt.Errorf("%s: timed out waiting for process to exit after SIGKILL", name)
+			return fmt.Errorf("%s: timed out waiting for process to exit after SIGKILL", b.name)
 		}
-		if err := expectSignalExit(waitErr, name); err != nil {
-			return fmt.Errorf("%s stop timeout: %w", name, err)
+		if err := expectSignalExit(waitErr, b.name); err != nil {
+			return fmt.Errorf("%s stop timeout: %w", b.name, err)
 		}
 		return nil
 	}
@@ -251,11 +257,11 @@ func expectSignalExit(err error, name string) error {
 	return fmt.Errorf("%s: %w", name, err)
 }
 
-// StartCmd creates log files, sets up stdout/stderr, and starts the command.
+// startCmd creates log files, sets up stdout/stderr, and starts the command.
 // On success, caller owns the LogFiles. On failure, log files are closed automatically.
 // Returns a pointer to prevent copying the file handles.
-func StartCmd(cmd *exec.Cmd, dataDir, processName string) (*LogFiles, error) {
-	logFiles, err := NewLogFiles(dataDir, processName)
+func startCmd(cmd *exec.Cmd, dataDir, processName string) (*LogFiles, error) {
+	logFiles, err := newLogFiles(dataDir, processName)
 	if err != nil {
 		return nil, fmt.Errorf("create %s logs: %w", processName, err)
 	}
