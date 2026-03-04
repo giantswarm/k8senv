@@ -168,12 +168,8 @@ func TestPortRegistry_ConcurrentReserve(t *testing.T) {
 	wg.Wait()
 	close(reserved)
 
-	count := 0
-	for range reserved {
-		count++
-	}
-	if count != goroutines {
-		t.Errorf("expected %d reservations, got %d", goroutines, count)
+	if n := len(reserved); n != goroutines {
+		t.Errorf("expected %d reservations, got %d", goroutines, n)
 	}
 }
 

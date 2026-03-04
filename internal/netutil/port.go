@@ -11,6 +11,10 @@ import (
 // in the registry. This guards against pathological cases.
 const maxPortRetries = 20
 
+// loopbackAddr is reused across all port allocation calls.
+// net.ListenTCP does not mutate the address, so this is safe for concurrent use.
+var loopbackAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
+
 // PortRegistry tracks ports currently reserved by this process to prevent
 // the TOCTOU race where two concurrent AllocatePortPair calls receive the
 // same port from the kernel (because the first caller closed its listener
@@ -59,10 +63,8 @@ func (r *PortRegistry) Release(port int) {
 // The port is registered in the registry; the caller must call
 // [PortRegistry.Release] to free it.
 func (r *PortRegistry) getFreePortFromKernel() (int, error) {
-	addr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
-
 	for range maxPortRetries {
-		l, err := net.ListenTCP("tcp", addr)
+		l, err := net.ListenTCP("tcp", loopbackAddr)
 		if err != nil {
 			return 0, fmt.Errorf("listen on tcp address: %w", err)
 		}
