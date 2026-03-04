@@ -90,14 +90,14 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return fmt.Errorf("copy data: %w", err)
 	}
 
-	return finalizeCopy(dstFile, writePath, dst, o.Sync, o.Atomic)
+	return finalizeCopy(dstFile, writePath, dst, o)
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
 // It always closes dstFile before returning (even on sync error), so the
 // caller must not close the file again.
-func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) error {
-	if doSync || atomic {
+func finalizeCopy(dstFile *os.File, writePath, dst string, opts CopyFileOptions) error {
+	if opts.Sync || opts.Atomic {
 		if err := dstFile.Sync(); err != nil {
 			_ = dstFile.Close()
 			return fmt.Errorf("sync destination: %w", err)
@@ -108,7 +108,7 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) 
 		return fmt.Errorf("close destination: %w", err)
 	}
 
-	if atomic {
+	if opts.Atomic {
 		if err := os.Rename(writePath, dst); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
