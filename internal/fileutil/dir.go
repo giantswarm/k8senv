@@ -18,7 +18,7 @@ const defaultDirMode = os.FileMode(0o755)
 // Uses mode 0755. Returns nil if directory already exists.
 func EnsureDir(path string) error {
 	if path == "" {
-		return fmt.Errorf("ensure directory: %w", ErrEmptyPath)
+		return fmt.Errorf("create directory: %w", ErrEmptyPath)
 	}
 	if err := os.MkdirAll(path, defaultDirMode); err != nil {
 		return fmt.Errorf("create directory: %w", err)

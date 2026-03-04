@@ -54,7 +54,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	// opening dst with O_TRUNC would truncate src before reading it.
 	same, err := isSameFile(srcFile, dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("same-file check: %w", err)
 	}
 	if same {
 		return nil
@@ -86,7 +86,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		_ = dstFile.Close()
+		_ = dstFile.Close() // best-effort cleanup; copy error takes precedence
 		return fmt.Errorf("copy data: %w", err)
 	}
 
@@ -170,6 +170,12 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, e
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("create destination: %w", err)
+	}
+	// OpenFile applies umask; Chmod sets exact permissions to match the
+	// atomic path (which uses CreateTemp + Chmod).
+	if err := f.Chmod(mode); err != nil {
+		_ = f.Close()
+		return nil, "", fmt.Errorf("chmod destination: %w", err)
 	}
 	return f, dst, nil
 }
