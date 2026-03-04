@@ -183,7 +183,7 @@ func TestPortRegistry_ConcurrentRelease(t *testing.T) {
 	r := NewPortRegistry()
 	const goroutines = 50
 
-	// Pre-populate ports using the public reserve method.
+	// Pre-populate ports.
 	for i := range goroutines {
 		if !r.reserve(10000 + i) {
 			t.Fatalf("setup: failed to reserve port %d", 10000+i)

@@ -55,10 +55,11 @@ func (r *PortRegistry) Release(port int) {
 }
 
 // getFreePortFromKernel asks the kernel for a free port, skipping any ports
-// already in the registry. On success it returns an open [net.TCPListener] that
-// the caller must close when the port is no longer needed to be held open. The
-// port is also registered in the registry; the caller must call [PortRegistry.Release]
-// separately to free it from the registry.
+// already in the registry. On success it returns an open [net.TCPListener] and
+// the assigned port number. The port is registered in the registry; the caller
+// must call [PortRegistry.Release] to free it. The caller should close the
+// listener when it is no longer needed (typically immediately, since the registry
+// entry prevents duplicate allocation).
 func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
 	addr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 
