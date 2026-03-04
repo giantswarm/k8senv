@@ -456,7 +456,7 @@ BaseProcess (embeddable)
 | `port_test.go` | Port allocation tests | 1929 |
 | `doc.go` | Package documentation | 70 |
 
-**Port allocation**: Both listeners held open simultaneously (guarantees distinct kernel assignments). `reserve()` called before closing listener (prevents TOCTOU between concurrent allocations). Retry on duplicate (`maxPortRetries=20`). `Release()` logs warning on double-release.
+**Port allocation**: Ports allocated sequentially via `getFreePortFromKernel`. `reserve()` called before closing listener (prevents TOCTOU between concurrent allocations). Retry on duplicate (`maxPortRetries=20`). `Release()` logs warning on double-release.
 
 ---
 

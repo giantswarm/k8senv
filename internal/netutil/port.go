@@ -74,11 +74,12 @@ func (r *PortRegistry) getFreePortFromKernel() (int, error) {
 			return 0, fmt.Errorf("unexpected address type: %T", l.Addr())
 		}
 		port := tcpAddr.Port
-		_ = l.Close()
 		if r.reserve(port) {
+			_ = l.Close()
 			return port, nil
 		}
-		// Port already in registry, retry to get a different one.
+		// Port already in registry, close and retry to get a different one.
+		_ = l.Close()
 		slog.Default().Debug("port already in registry, retrying", "port", port)
 	}
 	r.mu.Lock()
