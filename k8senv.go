@@ -146,6 +146,15 @@ func defaultManagerConfig() managerConfig {
 	}}
 }
 
+// applyOptions creates a default managerConfig and applies the given options.
+func applyOptions(opts []ManagerOption) managerConfig {
+	cfg := defaultManagerConfig()
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
+}
+
 // resetForTesting resets the singleton state so that the next call to
 // NewManager creates a fresh manager. This follows the Go stdlib pattern
 // (e.g., net/http/internal) for enabling test isolation within a single
@@ -192,10 +201,7 @@ func NewManager(opts ...ManagerOption) Manager {
 	defer singletonMu.Unlock()
 
 	if singletonMgr == nil {
-		cfg := defaultManagerConfig()
-		for _, opt := range opts {
-			opt(&cfg)
-		}
+		cfg := applyOptions(opts)
 		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.ManagerConfig)}
 		singletonCfg = cfg
 	} else {
@@ -214,11 +220,7 @@ func logDuplicateNewManager(opts []ManagerOption) {
 		return
 	}
 
-	incoming := defaultManagerConfig()
-	for _, opt := range opts {
-		opt(&incoming)
-	}
-
+	incoming := applyOptions(opts)
 	diffs := configDiffs(singletonCfg, incoming)
 	if len(diffs) == 0 {
 		core.Logger().Warn("NewManager called more than once; returning existing singleton (options ignored)")

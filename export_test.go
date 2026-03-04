@@ -17,14 +17,9 @@ func ResetForTesting() error { return resetForTesting() }
 // manual synchronization.
 type ConfigSnapshot = core.ManagerConfig
 
-// ApplyOptionsForTesting creates a default managerConfig, applies the given
-// options, and returns the resulting core.ManagerConfig. This tests the option
-// closures directly without touching the singleton.
+// ApplyOptionsForTesting applies the given options to a default config and
+// returns the resulting core.ManagerConfig. This tests the option closures
+// directly without touching the singleton.
 func ApplyOptionsForTesting(opts ...ManagerOption) ConfigSnapshot {
-	cfg := defaultManagerConfig()
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-
-	return cfg.ManagerConfig
+	return applyOptions(opts).ManagerConfig
 }
