@@ -1,7 +1,6 @@
 package fileutil
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,7 +22,7 @@ const ErrEmptyDst = sentinel.Error("destination path must not be empty")
 type CopyFileOptions struct {
 	Mode   *os.FileMode // Optional: set specific permissions after copy (ignored on Windows)
 	Sync   bool         // If true, call Sync() before closing dst
-	Atomic bool         // If true, write to a temp file then rename to dst (prevents partial reads)
+	Atomic bool         // If true, write to a temp file then rename to dst (implies Sync for durability)
 }
 
 // CopyFile copies a file from src to dst, creating parent directories as needed.
@@ -48,21 +47,6 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return ErrEmptyDst
 	}
 
-	// Guard against copying a file onto itself. On the non-atomic path,
-	// opening dst with O_TRUNC would truncate src before reading it.
-	same, err := sameFile(src, dst)
-	if err != nil {
-		return err
-	}
-	if same {
-		return nil
-	}
-
-	// Ensure parent directory exists.
-	if err := EnsureDirForFile(dst); err != nil {
-		return fmt.Errorf("prepare destination: %w", err)
-	}
-
 	srcFile, err := os.Open(src) //nolint:gosec // G304: paths are from controlled sources
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
@@ -72,6 +56,20 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 			retErr = fmt.Errorf("close source: %w", closeErr)
 		}
 	}()
+
+	// Guard against copying a file onto itself. On the non-atomic path,
+	// opening dst with O_TRUNC would truncate src before reading it.
+	// Stat on the open fd is race-free (immune to rename/unlink of src path).
+	if same, err := isSameFile(srcFile, dst); err != nil {
+		return err
+	} else if same {
+		return nil
+	}
+
+	// Ensure parent directory exists.
+	if err := EnsureDirForFile(dst); err != nil {
+		return fmt.Errorf("prepare destination: %w", err)
+	}
 
 	// Normalize options to avoid nil checks throughout.
 	var o CopyFileOptions
@@ -84,13 +82,13 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 	defer func() {
-		if retErr != nil && writePath != dst {
+		if retErr != nil && o.Atomic {
 			_ = os.Remove(writePath)
 		}
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		_ = dstFile.Close()
+		_ = dstFile.Close() // best-effort; copy error takes priority
 		return fmt.Errorf("copy: %w", err)
 	}
 
@@ -134,26 +132,19 @@ func resolveFileMode(mode *os.FileMode) os.FileMode {
 	return defaultFileMode
 }
 
-// sameFile reports whether a and b refer to the same underlying file.
-// It uses os.SameFile (device+inode comparison on POSIX) which correctly
-// handles symlinks, hard links, and bind mounts. If either path does not
-// exist, the files cannot be the same, so it returns false.
-func sameFile(a, b string) (bool, error) {
-	infoA, err := os.Stat(a)
+// isSameFile reports whether the open file src refers to the same file as dst.
+// Using Stat on the open fd is immune to rename/unlink of the source path.
+// Returns false when dst does not exist (the common case for a new copy).
+func isSameFile(src *os.File, dst string) (bool, error) {
+	srcInfo, err := src.Stat()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
 		return false, fmt.Errorf("stat source: %w", err)
 	}
-	infoB, err := os.Stat(b)
+	dstInfo, err := os.Stat(dst)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat destination: %w", err)
+		return false, nil //nolint:nilerr // dst not existing means files differ
 	}
-	return os.SameFile(infoA, infoB), nil
+	return os.SameFile(srcInfo, dstInfo), nil
 }
 
 // openDstFile opens the destination file for writing. When atomic is true, it

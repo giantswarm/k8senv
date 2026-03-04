@@ -10,7 +10,7 @@ import (
 // Uses mode 0755. Returns nil if directory already exists.
 func EnsureDir(path string) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
-		return fmt.Errorf("create directory %s: %w", path, err)
+		return fmt.Errorf("create directory: %w", err)
 	}
 	return nil
 }
