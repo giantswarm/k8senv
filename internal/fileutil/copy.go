@@ -83,31 +83,29 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 
-	var dstClosed bool
 	defer func() {
 		if retErr != nil {
-			if !dstClosed {
-				_ = dstFile.Close()
+			_ = dstFile.Close()
+			// Only remove temp files; non-atomic partial files are left for
+			// the caller to handle (original content was already truncated).
+			if o.Atomic {
+				_ = os.Remove(writePath)
 			}
-			// Clean up: temp file for atomic, partial file for non-atomic.
-			_ = os.Remove(writePath)
 		}
 	}()
 
 	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		_ = dstFile.Close()
-		dstClosed = true
 		return fmt.Errorf("copy: %w", err)
 	}
 
-	return finalizeCopy(dstFile, writePath, dst, o)
+	return finalizeCopy(dstFile, writePath, dst, o.Sync, o.Atomic)
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
-func finalizeCopy(dstFile *os.File, writePath, dst string, o CopyFileOptions) error {
-	if o.Sync || o.Atomic {
+// On sync failure the caller's defer closes the file.
+func finalizeCopy(dstFile *os.File, writePath, dst string, sync, atomic bool) error {
+	if sync || atomic {
 		if err := dstFile.Sync(); err != nil {
-			_ = dstFile.Close()
 			return fmt.Errorf("sync: %w", err)
 		}
 	}
@@ -116,7 +114,7 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, o CopyFileOptions) er
 		return fmt.Errorf("close destination: %w", err)
 	}
 
-	if o.Atomic {
+	if atomic {
 		if err := os.Rename(writePath, dst); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
