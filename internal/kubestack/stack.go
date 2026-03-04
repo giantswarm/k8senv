@@ -137,24 +137,10 @@ func (c Config) resolveBinaries() error {
 	return errors.Join(errs...)
 }
 
-// New creates a new Stack. Does not start processes.
-// Callers must set KineBinary, APIServerBinary, DataDir, SQLitePath,
-// KubeconfigPath, and PortRegistry in cfg. Returns an error if any required
-// field is missing or invalid.
-func New(cfg Config) (*Stack, error) {
-	if err := cfg.validate(); err != nil {
-		return nil, fmt.Errorf("invalid kubestack config: %w", err)
-	}
-	if err := cfg.resolveBinaries(); err != nil {
-		return nil, fmt.Errorf("invalid kubestack config: %w", err)
-	}
-	return newValidated(cfg), nil
-}
-
-// newValidated constructs a Stack from a config that has already been
-// validated and had its binaries resolved. It is used internally to avoid
+// newStack constructs a Stack from a config that has already been validated
+// and had its binaries resolved. It is used by StartWithRetry to avoid
 // redundant validation and repeated exec.LookPath calls inside retry loops.
-func newValidated(cfg Config) *Stack {
+func newStack(cfg Config) *Stack {
 	log := cfg.Logger
 	if log == nil {
 		log = slog.Default()
@@ -165,7 +151,7 @@ func newValidated(cfg Config) *Stack {
 
 // StartWithRetry creates and starts a kubestack, retrying up to maxRetries
 // times on transient failures (e.g., port conflicts). Each retry creates a
-// fresh Stack via [newValidated], which allocates new ports via
+// fresh Stack via [newStack], which allocates new ports via
 // [netutil.PortRegistry], resolving the root cause of port collisions without
 // backoff.
 //
@@ -191,11 +177,6 @@ func StartWithRetry(
 		return nil, fmt.Errorf("invalid kubestack config: %w", err)
 	}
 
-	log := cfg.Logger
-	if log == nil {
-		log = slog.Default()
-	}
-
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if readyCtx.Err() != nil {
@@ -208,11 +189,11 @@ func StartWithRetry(
 			return nil, fmt.Errorf("context canceled: %w", readyCtx.Err())
 		}
 
-		stack := newValidated(cfg)
+		stack := newStack(cfg)
 
 		if err := stack.Start(procCtx, readyCtx); err != nil {
 			lastErr = err
-			cleanupFailedStartAttempt(log, stack, cfg, err, attempt, maxRetries)
+			stack.logAndCleanupFailedAttempt(err, attempt, maxRetries)
 			if isPermanentStartError(err) {
 				return nil, fmt.Errorf("permanent start failure (not retried): %w", err)
 			}
@@ -220,7 +201,7 @@ func StartWithRetry(
 		}
 
 		if attempt > 1 {
-			log.Info("kubestack start succeeded after retry", "attempt", attempt)
+			stack.log.Info("kubestack start succeeded after retry", "attempt", attempt)
 		}
 		return stack, nil
 	}
@@ -265,17 +246,17 @@ func validateStartWithRetryArgs(procCtx, readyCtx context.Context, maxRetries in
 	return nil
 }
 
-// cleanupFailedStartAttempt logs a warning for a failed start attempt and
+// logAndCleanupFailedAttempt logs a warning for a failed start attempt and
 // stops the partially-started stack to release any allocated ports or
 // processes before the next retry.
-func cleanupFailedStartAttempt(log *slog.Logger, stack *Stack, cfg Config, err error, attempt, maxRetries int) {
-	log.Warn("kubestack start attempt failed",
+func (s *Stack) logAndCleanupFailedAttempt(err error, attempt, maxRetries int) {
+	s.log.Warn("kubestack start attempt failed",
 		"attempt", attempt,
 		"max_retries", maxRetries,
 		"error", err,
 	)
-	if stopErr := stack.Stop(cfg.stopTimeout()); stopErr != nil {
-		log.Warn("cleanup partially-started kubestack", "error", stopErr)
+	if stopErr := s.Stop(s.config.stopTimeout()); stopErr != nil {
+		s.log.Warn("cleanup partially-started kubestack", "error", stopErr)
 	}
 }
 
