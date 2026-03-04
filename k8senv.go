@@ -244,7 +244,7 @@ func configDiffs(stored, incoming managerConfig) []string {
 
 	for i := range t.NumField() {
 		a, b := sv.Field(i), iv.Field(i)
-		if a.Interface() != b.Interface() {
+		if !reflect.DeepEqual(a.Interface(), b.Interface()) {
 			diffs = append(diffs, fmt.Sprintf("%s: %v != %v", t.Field(i).Name, a.Interface(), b.Interface()))
 		}
 	}
