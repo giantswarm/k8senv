@@ -191,7 +191,7 @@ func (i *Instance) tryRelease(token uint64) bool {
 // Panics if the token is stale (double-release), indicating a programming error.
 func (i *Instance) mustRelease(token uint64) {
 	if !i.tryRelease(token) {
-		panic("k8senv: double-release of instance " + i.ID())
+		panic("k8senv: double-release of instance " + i.id)
 	}
 }
 
