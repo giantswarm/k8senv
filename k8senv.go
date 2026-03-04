@@ -17,13 +17,12 @@ import (
 // Singleton state for NewManager. The first call creates the manager;
 // subsequent calls return the same instance and log a warning.
 //
-// singletonMu protects singletonMgr, singletonCreated, and singletonCfg
-// so that resetForTesting (used in tests) is concurrency-safe with NewManager.
+// singletonMu protects singletonMgr and singletonCfg so that
+// resetForTesting (used in tests) is concurrency-safe with NewManager.
 var (
-	singletonMu      sync.Mutex
-	singletonMgr     Manager
-	singletonCreated bool
-	// singletonCfg is only valid when singletonCreated == true.
+	singletonMu  sync.Mutex
+	singletonMgr Manager
+	// singletonCfg is only valid when singletonMgr != nil.
 	singletonCfg managerConfig
 )
 
@@ -167,7 +166,6 @@ func resetForTesting() error {
 	}
 
 	singletonMgr = nil
-	singletonCreated = false
 	singletonCfg = managerConfig{}
 
 	return shutdownErr
@@ -193,14 +191,13 @@ func NewManager(opts ...ManagerOption) Manager {
 	singletonMu.Lock()
 	defer singletonMu.Unlock()
 
-	if !singletonCreated {
+	if singletonMgr == nil {
 		cfg := defaultManagerConfig()
 		for _, opt := range opts {
 			opt(&cfg)
 		}
 		singletonMgr = &managerWrapper{mgr: core.NewManagerWithConfig(cfg.toCoreConfig())}
 		singletonCfg = cfg
-		singletonCreated = true
 	} else {
 		logDuplicateNewManager(opts)
 	}

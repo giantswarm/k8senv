@@ -255,8 +255,7 @@ func WithShutdownDrainTimeout(time.Duration) ManagerOption
 
 // Sentinel errors (const via sentinel.Error — errors.Is + wrapping compatible)
 const ErrShuttingDown, ErrNotInitialized, ErrPoolClosed, ErrInstanceReleased,
-      ErrNotStarted, ErrDoubleRelease, ErrNoYAMLFiles, ErrMissingKind,
-      ErrCRDEstablishTimeout
+      ErrDoubleRelease, ErrNoYAMLFiles, ErrMissingKind, ErrCRDEstablishTimeout
 
 // Utilities
 func SetLogger(*slog.Logger)

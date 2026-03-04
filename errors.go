@@ -25,10 +25,6 @@ const (
 	// any previously obtained configuration stale.
 	ErrInstanceReleased = core.ErrInstanceReleased
 
-	// ErrNotStarted is returned by Instance.Config when the instance's processes
-	// have not been launched yet.
-	ErrNotStarted = core.ErrNotStarted
-
 	// ErrDoubleRelease is returned by Instance.Release when called more than once
 	// on the same acquisition. After the first Release returns the instance to the
 	// pool, subsequent calls return this error instead of performing any action.
