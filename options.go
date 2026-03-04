@@ -134,7 +134,7 @@ func WithInstanceStartTimeout(d time.Duration) ManagerOption {
 }
 
 // WithInstanceStopTimeout sets the maximum time allowed for an instance's
-// processes to stop gracefully during shutdown or clean release.
+// processes to stop gracefully during shutdown.
 //
 // Default: 10 seconds.
 //

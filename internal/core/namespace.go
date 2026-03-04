@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 // systemNamespaces lists the namespaces created by kube-apiserver that must
@@ -37,15 +36,14 @@ func isSystemNamespace(name string) bool {
 	return slices.Contains(systemNamespaces[:], name)
 }
 
-// cleanupQPS is the client-side QPS limit for cleanup clients. Set higher
-// than instance.go's user-facing instanceQPS because cleanup issues many
-// small deletions in rapid succession and benefits from zero throttling.
-// The target is a local, ephemeral kube-apiserver with no external consumers.
-const cleanupQPS = 10_000
+// internalQPS is the client-side QPS limit for internal clients (namespace
+// readiness polling). Set high to avoid client-go rate limiting against the
+// local, ephemeral kube-apiserver with no external consumers.
+const internalQPS = 10_000
 
-// cleanupBurst is the client-side burst limit for cleanup clients, matching
-// cleanupQPS for the same reason.
-const cleanupBurst = 10_000
+// internalBurst is the client-side burst limit for internal clients,
+// matching internalQPS for the same reason.
+const internalBurst = 10_000
 
 // nsReadinessPollInterval is the polling interval for waitForSystemNamespaces.
 const nsReadinessPollInterval = 10 * time.Millisecond
@@ -61,9 +59,9 @@ const nsReadinessTimeout = 30 * time.Second
 // as started, to close the gap where /livez returns 200 before the namespace
 // controller has created all system namespaces.
 func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
-	client, err := i.getOrBuildCleanupClient()
+	client, err := i.getOrBuildInternalClient()
 	if err != nil {
-		return fmt.Errorf("build cleanup client for namespace readiness: %w", err)
+		return fmt.Errorf("build internal client for namespace readiness: %w", err)
 	}
 
 	// Use a local timeout so we don't spin forever, but also respect the
@@ -103,65 +101,40 @@ func (i *Instance) waitForSystemNamespaces(ctx context.Context) error {
 	return nil
 }
 
-// getOrBuildCachedClient deduplicates the cache-check → build-config →
-// create-client → CAS-store pattern shared by the cleanup client builder.
-// It checks the cache first, builds a high-QPS rest.Config if needed,
-// calls build to create the client, and stores it via CAS.
-func getOrBuildCachedClient[T any](
-	i *Instance,
-	get func(*clientCache) T,
-	isNil func(T) bool,
-	build func(*rest.Config) (T, error),
-	set func(*clientCache, T),
-	name string,
-) (T, error) {
-	if cache := i.clients.Load(); cache != nil {
-		if v := get(cache); !isNil(v) {
-			return v, nil
-		}
+// getOrBuildInternalClient returns the cached internal client or creates one.
+// The client is used for namespace readiness polling during startup. It
+// effectively disables client-side rate limiting (QPS=10000, Burst=10000)
+// because the client only targets a local, ephemeral kube-apiserver — no
+// shared infrastructure can be overwhelmed.
+func (i *Instance) getOrBuildInternalClient() (*kubernetes.Clientset, error) {
+	if cache := i.clients.Load(); cache != nil && cache.clientset != nil {
+		return cache.clientset, nil
 	}
 
 	cfg, err := i.getOrBuildRestConfig()
 	if err != nil {
-		var zero T
-		return zero, fmt.Errorf("build config for %s: %w", name, err)
+		return nil, fmt.Errorf("build config for internal client: %w", err)
 	}
-	cfg.QPS = cleanupQPS
-	cfg.Burst = cleanupBurst
+	cfg.QPS = internalQPS
+	cfg.Burst = internalBurst
 
-	v, err := build(cfg)
+	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		var zero T
-		return zero, fmt.Errorf("create %s: %w", name, err)
+		return nil, fmt.Errorf("create internal client: %w", err)
 	}
 
 	if err := i.casClientCache(func(cc *clientCache) *clientCache {
-		if !isNil(get(cc)) {
+		if cc.clientset != nil {
 			return nil // another goroutine won the race
 		}
 		updated := *cc
-		set(&updated, v)
+		updated.clientset = client
 		return &updated
 	}); err != nil {
-		var zero T
-		return zero, fmt.Errorf("cache %s: %w", name, err)
+		return nil, fmt.Errorf("cache internal client: %w", err)
 	}
 	// Return the locally-built client directly instead of re-reading from
 	// i.clients.Load(), which could race with a concurrent Stop() that
 	// stores nil between the CAS and the Load.
-	return v, nil
-}
-
-// getOrBuildCleanupClient returns the cached cleanup client or creates one.
-// It effectively disables client-side rate limiting (QPS=10000, Burst=10000)
-// because the client only targets a local, ephemeral kube-apiserver — no
-// shared infrastructure can be overwhelmed.
-func (i *Instance) getOrBuildCleanupClient() (*kubernetes.Clientset, error) {
-	return getOrBuildCachedClient(i,
-		func(cc *clientCache) *kubernetes.Clientset { return cc.clientset },
-		func(c *kubernetes.Clientset) bool { return c == nil },
-		kubernetes.NewForConfig,
-		func(cc *clientCache, c *kubernetes.Clientset) { cc.clientset = c },
-		"cleanup client",
-	)
+	return client, nil
 }

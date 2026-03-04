@@ -43,7 +43,7 @@ const (
 	DefaultInstanceStopTimeout = 10 * time.Second
 
 	// DefaultCleanupTimeout is the maximum time allowed for SQLite purge
-	// during release. Default: 30 seconds.
+	// during release.
 	DefaultCleanupTimeout = 30 * time.Second
 
 	// DefaultShutdownDrainTimeout is the maximum time Shutdown() waits

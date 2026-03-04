@@ -24,8 +24,8 @@ func TestReleasePurgePreservesSystemNamespaces(t *testing.T) {
 	testutil.ReleasePreservesSystemNamespaces(t, context.Background(), sharedManager, "purge")
 }
 
-// TestReleasePurgeWithNoUserNamespaces verifies that Release() with
-// ReleasePurge succeeds quickly when no user namespaces exist (fast path).
+// TestReleasePurgeWithNoUserNamespaces verifies that Release()
+// succeeds quickly when no user namespaces exist (fast path).
 func TestReleasePurgeWithNoUserNamespaces(t *testing.T) {
 	t.Parallel()
 	testutil.ReleaseWithNoUserNamespaces(t, context.Background(), sharedManager)

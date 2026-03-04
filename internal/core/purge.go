@@ -18,6 +18,9 @@ import (
 // kine's own SQLite operations while keeping test latency acceptable.
 // 5 seconds is generous for a local SQLite file; in practice, lock waits
 // resolve within a few milliseconds.
+//
+// SYNC: this value must match internal/kine.sqliteBusyTimeoutMs — both
+// operate on the same SQLite file and must agree on the timeout.
 const sqliteBusyTimeoutMs = 5000
 
 // purgeHandle holds a persistent SQLite connection and a prepared DELETE
