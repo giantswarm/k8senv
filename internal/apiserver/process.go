@@ -20,7 +20,6 @@ import (
 
 	"github.com/giantswarm/k8senv/internal/fileutil"
 	"github.com/giantswarm/k8senv/internal/process"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -119,14 +118,13 @@ func New(cfg Config) (*Process, error) {
 	}, nil
 }
 
-// startFiles holds the file paths produced by parallel file preparation.
-// Each field is written by exactly one goroutine, making data ownership
-// explicit and preventing accidental races if new preparation steps are added.
+// startFiles holds the file paths produced by prepareFiles and consumed by
+// buildArgs, bundling related paths into a single value.
 type startFiles struct {
-	tokenFilePath  string // Written by the writeTokenFile goroutine.
-	certDir        string // Written by the setupCertsAndKeys goroutine.
-	saKeyPath      string // Written by the setupCertsAndKeys goroutine.
-	authConfigPath string // Written by the writeAuthConfig goroutine.
+	tokenFilePath  string
+	certDir        string
+	saKeyPath      string
+	authConfigPath string
 }
 
 // Start launches the kube-apiserver process. It prepares token, certificate,
@@ -144,7 +142,7 @@ func (p *Process) Start(ctx context.Context) error {
 		return fmt.Errorf("start apiserver: %w", err)
 	}
 
-	args := p.buildArgs(files.certDir, files.authConfigPath, files.tokenFilePath, files.saKeyPath)
+	args := p.buildArgs(files)
 
 	cmd := exec.CommandContext( //nolint:gosec // G204: binary path is from config, not user input
 		ctx,
@@ -156,44 +154,31 @@ func (p *Process) Start(ctx context.Context) error {
 	return nil
 }
 
-// prepareFiles creates token, certificate, and auth config files in parallel.
-// Each goroutine writes to a distinct field of the result struct, making data
-// ownership explicit. Concurrent writes to different struct fields are safe in
-// Go, and g.Wait() provides the happens-before guarantee that all writes are
-// visible to the caller.
+// prepareFiles creates token, certificate, and auth config files sequentially.
+// These are fast local file writes; setupCertsAndKeys dominates at ~5-15ms
+// (ECDSA key generation), while the other two complete in microseconds.
 func (p *Process) prepareFiles(dir string) (startFiles, error) {
 	var files startFiles
-	var g errgroup.Group
 
-	g.Go(func() error {
-		path, err := p.writeTokenFile(dir)
-		if err != nil {
-			return err
-		}
-		files.tokenFilePath = path
-		return nil
-	})
-	g.Go(func() error {
-		certDir, saKeyPath, err := p.setupCertsAndKeys(dir)
-		if err != nil {
-			return err
-		}
-		files.certDir = certDir
-		files.saKeyPath = saKeyPath
-		return nil
-	})
-	g.Go(func() error {
-		path, err := p.writeAuthConfig(dir)
-		if err != nil {
-			return err
-		}
-		files.authConfigPath = path
-		return nil
-	})
-
-	if err := g.Wait(); err != nil {
+	tokenFilePath, err := p.writeTokenFile(dir)
+	if err != nil {
 		return startFiles{}, fmt.Errorf("prepare apiserver files: %w", err)
 	}
+	files.tokenFilePath = tokenFilePath
+
+	certDir, saKeyPath, err := p.setupCertsAndKeys(dir)
+	if err != nil {
+		return startFiles{}, fmt.Errorf("prepare apiserver files: %w", err)
+	}
+	files.certDir = certDir
+	files.saKeyPath = saKeyPath
+
+	authConfigPath, err := p.writeAuthConfig(dir)
+	if err != nil {
+		return startFiles{}, fmt.Errorf("prepare apiserver files: %w", err)
+	}
+	files.authConfigPath = authConfigPath
+
 	return files, nil
 }
 
@@ -254,7 +239,7 @@ func (p *Process) writeAuthConfig(dir string) (string, error) {
 }
 
 // buildArgs assembles the kube-apiserver command-line arguments.
-func (p *Process) buildArgs(certDir, authConfigPath, tokenFilePath, saKeyPath string) []string {
+func (p *Process) buildArgs(files startFiles) []string {
 	return []string{
 		// Storage
 		"--etcd-servers=" + p.config.EtcdEndpoint,
@@ -264,18 +249,18 @@ func (p *Process) buildArgs(certDir, authConfigPath, tokenFilePath, saKeyPath st
 		fmt.Sprintf("--secure-port=%d", p.config.Port),
 
 		// TLS (self-signed for testing)
-		"--cert-dir=" + certDir,
+		"--cert-dir=" + files.certDir,
 
 		// Authentication - use AuthenticationConfiguration for anonymous health endpoints
-		"--authentication-config=" + authConfigPath,
-		"--token-auth-file=" + tokenFilePath,
+		"--authentication-config=" + files.authConfigPath,
+		"--token-auth-file=" + files.tokenFilePath,
 		// Use AlwaysAllow for faster startup - RBAC bootstrap is slow (~6s)
 		// Tests using token auth with system:masters group still work correctly
 		"--authorization-mode=AlwaysAllow",
 
 		// Service account configuration (required)
-		"--service-account-key-file=" + saKeyPath,
-		"--service-account-signing-key-file=" + saKeyPath,
+		"--service-account-key-file=" + files.saKeyPath,
+		"--service-account-signing-key-file=" + files.saKeyPath,
 		"--service-account-issuer=https://kubernetes.default.svc",
 
 		// Required service configuration
