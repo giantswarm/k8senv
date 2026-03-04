@@ -19,7 +19,7 @@ type CopyFileOptions struct {
 }
 
 // CopyFile copies a file from src to dst, creating parent directories as needed.
-// If opts is nil, uses default behavior (no chmod, no sync, no atomic).
+// If opts is nil, uses default behavior (mode 0644, no sync, no atomic).
 // It returns an error if src or dst is empty.
 //
 // If src and dst refer to the same underlying file (checked via os.SameFile),
@@ -74,7 +74,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		o.Mode = defaultFileMode
 	}
 
-	dstFile, writePath, err := openDstFile(dst, o.Mode, o.Atomic)
+	dstFile, err := openDstFile(dst, o.Mode, o.Atomic)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		// O_TRUNC already destroyed the original content — removing
 		// the partial file would lose any data that was written.
 		if retErr != nil && o.Atomic {
-			_ = os.Remove(writePath)
+			_ = os.Remove(dstFile.Name()) //nolint:gosec // G703: path is from os.CreateTemp, not user input
 		}
 	}()
 
@@ -93,13 +93,13 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return fmt.Errorf("copy data: %w", err)
 	}
 
-	return finalizeCopy(dstFile, writePath, dst, o)
+	return finalizeCopy(dstFile, dst, o)
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
 // It always closes dstFile before returning (even on sync error), so the
 // caller must not close the file again.
-func finalizeCopy(dstFile *os.File, writePath, dst string, opts CopyFileOptions) error {
+func finalizeCopy(dstFile *os.File, dst string, opts CopyFileOptions) error {
 	if opts.Sync || opts.Atomic {
 		if err := dstFile.Sync(); err != nil {
 			_ = dstFile.Close()
@@ -112,7 +112,10 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, opts CopyFileOptions)
 	}
 
 	if opts.Atomic {
-		if err := os.Rename(writePath, dst); err != nil {
+		if err := os.Rename( //nolint:gosec // G703: path is from os.CreateTemp, not user input
+			dstFile.Name(),
+			dst,
+		); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
 	}
@@ -142,20 +145,20 @@ func isSameFile(srcFile *os.File, dstPath string) (bool, error) {
 
 // openDstFile opens the destination file for writing. When atomic is true, it
 // creates a temp file in the same directory as dst (with the correct permissions)
-// to enable an atomic rename after writing.
-func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, error) {
+// to enable an atomic rename after writing. Callers can retrieve the actual
+// write path via the returned file's Name method.
+func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, error) {
 	if atomic {
 		tmpFile, err := os.CreateTemp(filepath.Dir(dst), ".tmp-copy-*")
 		if err != nil {
-			return nil, "", fmt.Errorf("create temp file: %w", err)
+			return nil, fmt.Errorf("create temp file: %w", err)
 		}
-		writePath := tmpFile.Name()
 		if err := tmpFile.Chmod(mode); err != nil {
 			_ = tmpFile.Close()
-			_ = os.Remove(writePath) //nolint:gosec // G703: writePath is from os.CreateTemp, not user input
-			return nil, "", fmt.Errorf("chmod temp file: %w", err)
+			_ = os.Remove(tmpFile.Name()) //nolint:gosec // G703: path is from os.CreateTemp, not user input
+			return nil, fmt.Errorf("chmod temp file: %w", err)
 		}
-		return tmpFile, writePath, nil
+		return tmpFile, nil
 	}
 
 	f, err := os.OpenFile( //nolint:gosec // G304: paths are from controlled sources
@@ -164,13 +167,13 @@ func openDstFile(dst string, mode os.FileMode, atomic bool) (*os.File, string, e
 		mode,
 	)
 	if err != nil {
-		return nil, "", fmt.Errorf("create destination: %w", err)
+		return nil, fmt.Errorf("create destination: %w", err)
 	}
 	// OpenFile applies umask; Chmod sets exact permissions to match the
 	// atomic path (which uses CreateTemp + Chmod).
 	if err := f.Chmod(mode); err != nil {
 		_ = f.Close()
-		return nil, "", fmt.Errorf("chmod destination: %w", err)
+		return nil, fmt.Errorf("chmod destination: %w", err)
 	}
-	return f, dst, nil
+	return f, nil
 }

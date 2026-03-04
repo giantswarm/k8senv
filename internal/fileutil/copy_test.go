@@ -27,56 +27,31 @@ func readDst(t *testing.T, path string) string {
 	return string(got)
 }
 
-func TestCopyFile_EmptySourcePath(t *testing.T) {
+func TestCopyFile_EmptyPaths(t *testing.T) {
 	t.Parallel()
-	dstDir := t.TempDir()
-	dst := filepath.Join(dstDir, "dest.txt")
-
-	err := CopyFile("", dst, nil)
-	if err == nil {
-		t.Fatal("expected error for empty source path, got nil")
+	tests := []struct {
+		name        string
+		src, dst    string
+		wantContext string
+	}{
+		{"empty source", "", "/tmp/dst", "source path"},
+		{"empty destination", "/tmp/src", "", "destination path"},
+		{"both empty", "", "", "source path"}, // source validated first
 	}
-
-	if !errors.Is(err, ErrEmptyPath) {
-		t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
-	}
-	if !strings.Contains(err.Error(), "source path") {
-		t.Errorf("error = %q, want source-path context", err)
-	}
-}
-
-func TestCopyFile_EmptyDestinationPath(t *testing.T) {
-	t.Parallel()
-	srcDir := t.TempDir()
-	src := createTestFile(t, srcDir, "source.txt", "content")
-
-	err := CopyFile(src, "", nil)
-	if err == nil {
-		t.Fatal("expected error for empty destination path, got nil")
-	}
-
-	if !errors.Is(err, ErrEmptyPath) {
-		t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
-	}
-	if !strings.Contains(err.Error(), "destination path") {
-		t.Errorf("error = %q, want destination-path context", err)
-	}
-}
-
-func TestCopyFile_BothPathsEmpty(t *testing.T) {
-	t.Parallel()
-
-	err := CopyFile("", "", nil)
-	if err == nil {
-		t.Fatal("expected error for empty paths, got nil")
-	}
-
-	// Source is validated first, so its error takes precedence.
-	if !errors.Is(err, ErrEmptyPath) {
-		t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
-	}
-	if !strings.Contains(err.Error(), "source path") {
-		t.Errorf("error = %q, want source-path context", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := CopyFile(tt.src, tt.dst, nil)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !errors.Is(err, ErrEmptyPath) {
+				t.Errorf("error = %v, want wrapping ErrEmptyPath", err)
+			}
+			if !strings.Contains(err.Error(), tt.wantContext) {
+				t.Errorf("error = %q, want %q context", err, tt.wantContext)
+			}
+		})
 	}
 }
 
