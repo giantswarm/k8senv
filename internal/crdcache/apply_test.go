@@ -321,8 +321,8 @@ func TestApplyParseFileDocumentsFilename(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for i, doc := range docs {
-		if doc.file != "crds/my-crd.yaml" {
-			t.Errorf("docs[%d].file = %q, want %q", i, doc.file, "crds/my-crd.yaml")
+		if doc.relPath != "crds/my-crd.yaml" {
+			t.Errorf("docs[%d].relPath = %q, want %q", i, doc.relPath, "crds/my-crd.yaml")
 		}
 	}
 }

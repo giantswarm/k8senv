@@ -88,8 +88,8 @@ const (
 
 // parsedDoc holds a decoded YAML document ready for API server creation.
 type parsedDoc struct {
-	obj  *unstructured.Unstructured
-	file string // relative file path for error messages
+	obj     *unstructured.Unstructured
+	relPath string // relative file path for error messages
 }
 
 // discoveryMapper caches a RESTMapper built from live API server discovery,
@@ -282,7 +282,7 @@ func classifyDocuments(
 // documents.
 func parseFileDocuments(content []byte, file string) ([]parsedDoc, error) {
 	reader := yamlutil.NewYAMLReader(bufio.NewReader(bytes.NewReader(content)))
-	var docs []parsedDoc
+	docs := make([]parsedDoc, 0, 1) // most files contain a single document
 
 	docNum := 0
 	for {
@@ -310,7 +310,7 @@ func parseFileDocuments(content []byte, file string) ([]parsedDoc, error) {
 			return nil, fmt.Errorf("doc %d: %w", docNum, ErrMissingKind)
 		}
 
-		docs = append(docs, parsedDoc{obj: obj, file: file})
+		docs = append(docs, parsedDoc{obj: obj, relPath: file})
 	}
 	return docs, nil
 }
@@ -336,7 +336,7 @@ func applyParsedDocument(
 
 	mapping, err := discoverRESTMapping(ctx, logger, dm, gvk)
 	if err != nil {
-		return fmt.Errorf("%s: %w", doc.file, err)
+		return fmt.Errorf("%s: %w", doc.relPath, err)
 	}
 
 	var dr dynamic.ResourceInterface
@@ -350,7 +350,7 @@ func applyParsedDocument(
 		if ns == "" {
 			ns = metav1.NamespaceDefault
 			logger.Debug("namespace-scoped resource has no namespace; defaulting to 'default'",
-				"kind", gvk.Kind, "name", doc.obj.GetName(), "file", doc.file)
+				"kind", gvk.Kind, "name", doc.obj.GetName(), "file", doc.relPath)
 		}
 		dr = dynClient.Resource(mapping.Resource).Namespace(ns)
 	} else {
@@ -367,13 +367,13 @@ func applyParsedDocument(
 
 	data, err := json.Marshal(doc.obj)
 	if err != nil {
-		return fmt.Errorf("%s: marshal %s/%s: %w", doc.file, gvk.Kind, doc.obj.GetName(), err)
+		return fmt.Errorf("%s: marshal %s/%s: %w", doc.relPath, gvk.Kind, doc.obj.GetName(), err)
 	}
 
 	if _, err := dr.Patch(ctx, doc.obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
 		FieldManager: ssaFieldManager,
 	}); err != nil {
-		return fmt.Errorf("%s: apply %s/%s: %w", doc.file, gvk.Kind, doc.obj.GetName(), err)
+		return fmt.Errorf("%s: apply %s/%s: %w", doc.relPath, gvk.Kind, doc.obj.GetName(), err)
 	}
 
 	logger.Debug("applied resource", "kind", gvk.Kind, "name", doc.obj.GetName())

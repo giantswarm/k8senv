@@ -19,7 +19,7 @@ const ErrNoYAMLFiles = sentinel.Error("no YAML files found")
 // bytes instead of reading each file from disk a second time.
 type hashedFile struct {
 	relPath string // relative to the CRD directory, for logging and error messages
-	content []byte
+	content []byte // read-only after creation; shared across hash and apply paths
 }
 
 // computeDirHash computes a deterministic SHA256 hash of all YAML files in a directory.

@@ -205,6 +205,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 	// allocations. Per-process readiness timeouts use the overall cache
 	// timeout since processes start concurrently and the timeout context
 	// gates the total duration.
+	stopTimeout := cfg.stopTimeout()
 	stack, err := kubestack.StartWithRetry(procCtx, timeoutCtx, kubestack.Config{
 		DataDir:               tempDir,
 		SQLitePath:            sqlitePath,
@@ -213,7 +214,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 		APIServerBinary:       cfg.KubeAPIServerBinary,
 		KineReadyTimeout:      cfg.Timeout,
 		APIServerReadyTimeout: cfg.Timeout,
-		StopTimeout:           cfg.stopTimeout(),
+		StopTimeout:           stopTimeout,
 		PortRegistry:          cfg.PortRegistry,
 		Logger:                logger,
 	}, maxKubestackStartRetries)
@@ -231,7 +232,7 @@ func populateCache(ctx context.Context, cfg Config, tempDir, cachePath string, f
 	stopStack := func() error {
 		stopOnce.Do(func() {
 			logger.Debug("stopping kube stack")
-			if stopResult := stack.Stop(cfg.stopTimeout()); stopResult != nil {
+			if stopResult := stack.Stop(stopTimeout); stopResult != nil {
 				stopErr = fmt.Errorf("stop kube stack: %w", stopResult)
 			}
 		})
