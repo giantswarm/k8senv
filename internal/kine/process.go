@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"os/exec"
 	"time"
 
@@ -175,8 +174,7 @@ func (p *Process) Close() {
 // prepopulateDB copies a SQLite database file to the destination path.
 // This is used to prepopulate kine's SQLite database with existing state.
 func prepopulateDB(srcPath, dstPath string) error {
-	mode := os.FileMode(0o600)
-	if err := fileutil.CopyFile(srcPath, dstPath, &fileutil.CopyFileOptions{Mode: &mode}); err != nil {
+	if err := fileutil.CopyFile(srcPath, dstPath, &fileutil.CopyFileOptions{Mode: 0o600}); err != nil {
 		return fmt.Errorf("copy database from %s to %s: %w", srcPath, dstPath, err)
 	}
 	return nil

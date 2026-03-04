@@ -9,7 +9,7 @@ import (
 	"github.com/giantswarm/k8senv/internal/sentinel"
 )
 
-// defaultFileMode is the permission used when CopyFileOptions.Mode is nil.
+// defaultFileMode is the permission used when CopyFileOptions.Mode is zero.
 const defaultFileMode = os.FileMode(0o644)
 
 // ErrEmptySrc is returned when a source path is empty.
@@ -20,9 +20,9 @@ const ErrEmptyDst = sentinel.Error("destination path must not be empty")
 
 // CopyFileOptions configures file copy behavior.
 type CopyFileOptions struct {
-	Mode   *os.FileMode // Optional: set specific permissions after copy (ignored on Windows)
-	Sync   bool         // If true, call Sync() before closing dst
-	Atomic bool         // If true, write to a temp file then rename to dst (implies Sync for durability)
+	Mode   os.FileMode // Optional: 0 means use default 0644
+	Sync   bool        // If true, call Sync() before closing dst
+	Atomic bool        // If true, write to a temp file then rename to dst (implies Sync for durability)
 }
 
 // CopyFile copies a file from src to dst, creating parent directories as needed.
@@ -59,10 +59,11 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 
 	// Guard against copying a file onto itself. On the non-atomic path,
 	// opening dst with O_TRUNC would truncate src before reading it.
-	// Stat on the open fd is race-free (immune to rename/unlink of src path).
-	if same, err := isSameFile(srcFile, dst); err != nil {
+	same, err := isSameFile(srcFile, dst)
+	if err != nil {
 		return err
-	} else if same {
+	}
+	if same {
 		return nil
 	}
 
@@ -82,7 +83,10 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return err
 	}
 	defer func() {
+		// Cleanup temp file on error. openDstFile handles its own cleanup
+		// for errors during temp file setup; this covers errors after setup.
 		if retErr != nil && o.Atomic {
+			_ = dstFile.Close() // no-op if already closed
 			_ = os.Remove(writePath)
 		}
 	}()
@@ -92,12 +96,12 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		return fmt.Errorf("copy: %w", err)
 	}
 
-	return finalizeCopy(dstFile, writePath, dst, o.Sync || o.Atomic)
+	return finalizeCopy(dstFile, writePath, dst, o.Sync || o.Atomic, o.Atomic)
 }
 
 // finalizeCopy syncs (if requested), closes, and renames the destination file.
 // On sync failure, dstFile is closed before returning the error.
-func finalizeCopy(dstFile *os.File, writePath, dst string, doSync bool) error {
+func finalizeCopy(dstFile *os.File, writePath, dst string, doSync, atomic bool) error {
 	// Sync data to disk when explicitly requested or when performing an
 	// atomic write. For atomic writes, fsync before rename ensures data
 	// durability — without it, a crash could leave the renamed file with
@@ -115,7 +119,7 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, doSync bool) error {
 	}
 
 	// Atomic: rename temp file to final destination.
-	if writePath != dst {
+	if atomic {
 		if err := os.Rename(writePath, dst); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
@@ -124,23 +128,25 @@ func finalizeCopy(dstFile *os.File, writePath, dst string, doSync bool) error {
 	return nil
 }
 
-// resolveFileMode returns the given mode, defaulting to 0o644 when nil.
-func resolveFileMode(mode *os.FileMode) os.FileMode {
-	if mode != nil {
-		return *mode
+// resolveFileMode returns the given mode, defaulting to 0o644 when zero.
+func resolveFileMode(mode os.FileMode) os.FileMode {
+	if mode != 0 {
+		return mode
 	}
 	return defaultFileMode
 }
 
-// isSameFile reports whether the open file src refers to the same file as dst.
-// Using Stat on the open fd is immune to rename/unlink of the source path.
+// isSameFile reports whether the open file srcFile refers to the same file as dstPath.
+// Stat on the open fd is race-free for src (immune to rename/unlink of the source
+// path). The dst check uses os.Stat by path, which is subject to TOCTOU — acceptable
+// because callers operate on controlled (non-adversarial) paths.
 // Returns false when dst does not exist (the common case for a new copy).
-func isSameFile(src *os.File, dst string) (bool, error) {
-	srcInfo, err := src.Stat()
+func isSameFile(srcFile *os.File, dstPath string) (bool, error) {
+	srcInfo, err := srcFile.Stat()
 	if err != nil {
 		return false, fmt.Errorf("stat source: %w", err)
 	}
-	dstInfo, err := os.Stat(dst)
+	dstInfo, err := os.Stat(dstPath)
 	if err != nil {
 		return false, nil //nolint:nilerr // dst not existing means files differ
 	}

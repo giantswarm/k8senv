@@ -114,8 +114,7 @@ func TestCopyFile_CustomMode(t *testing.T) {
 	src := createTestFile(t, srcDir, "source.txt", "mode test")
 	dst := filepath.Join(dstDir, "dest.txt")
 
-	mode := os.FileMode(0o600)
-	if err := CopyFile(src, dst, &CopyFileOptions{Mode: &mode}); err != nil {
+	if err := CopyFile(src, dst, &CopyFileOptions{Mode: 0o600}); err != nil {
 		t.Fatalf("CopyFile() error: %v", err)
 	}
 
@@ -123,8 +122,8 @@ func TestCopyFile_CustomMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat destination: %v", err)
 	}
-	if got := info.Mode().Perm(); got != mode {
-		t.Errorf("file mode = %o, want %o", got, mode)
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("file mode = %o, want %o", got, 0o600)
 	}
 }
 
@@ -173,9 +172,8 @@ func TestCopyFile_AllOptions(t *testing.T) {
 	src := createTestFile(t, srcDir, "source.txt", content)
 	dst := filepath.Join(dstDir, "dest.txt")
 
-	mode := os.FileMode(0o600)
 	if err := CopyFile(src, dst, &CopyFileOptions{
-		Mode:   &mode,
+		Mode:   0o600,
 		Sync:   true,
 		Atomic: true,
 	}); err != nil {
@@ -190,8 +188,8 @@ func TestCopyFile_AllOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat destination: %v", err)
 	}
-	if got := info.Mode().Perm(); got != mode {
-		t.Errorf("file mode = %o, want %o", got, mode)
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("file mode = %o, want %o", got, 0o600)
 	}
 }
 
