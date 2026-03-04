@@ -72,10 +72,7 @@ type Stack struct {
 // stopTimeout returns the configured StopTimeout, falling back to
 // process.DefaultStopTimeout when unset.
 func (c Config) stopTimeout() time.Duration {
-	if c.StopTimeout > 0 {
-		return c.StopTimeout
-	}
-	return process.DefaultStopTimeout
+	return process.ResolveStopTimeout(c.StopTimeout)
 }
 
 // validate checks that all required Config fields are set and returns an error
@@ -333,7 +330,7 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	}
 
 	startTime := time.Now()
-	s.log.Debug("starting kube stack")
+	s.log.Debug("starting kubestack")
 
 	if err := fileutil.EnsureDirForFile(s.config.SQLitePath); err != nil {
 		return fmt.Errorf("create db dir: %w", err)
@@ -363,7 +360,7 @@ func (s *Stack) Start(processCtx, readyCtx context.Context) (retErr error) {
 	}
 
 	s.started = true
-	s.log.Debug("kube stack started", "elapsed", time.Since(startTime))
+	s.log.Debug("kubestack started", "elapsed", time.Since(startTime))
 	return nil
 }
 

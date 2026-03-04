@@ -73,6 +73,14 @@ func newLogFiles(dataDir, processName string) (*logFiles, error) {
 // when no explicit stop timeout is configured.
 const DefaultStopTimeout = 10 * time.Second
 
+// ResolveStopTimeout returns timeout if positive, otherwise DefaultStopTimeout.
+func ResolveStopTimeout(timeout time.Duration) time.Duration {
+	if timeout > 0 {
+		return timeout
+	}
+	return DefaultStopTimeout
+}
+
 // termGracePeriod is the maximum time to wait for a process to exit after
 // SIGTERM before escalating to SIGKILL. The actual grace period is capped
 // at the overall timeout.

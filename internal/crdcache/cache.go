@@ -45,10 +45,7 @@ func (c Config) logger() *slog.Logger {
 
 // stopTimeout returns the configured stop timeout or the default.
 func (c Config) stopTimeout() time.Duration {
-	if c.StopTimeout > 0 {
-		return c.StopTimeout
-	}
-	return process.DefaultStopTimeout
+	return process.ResolveStopTimeout(c.StopTimeout)
 }
 
 // validate checks that all required Config fields are set and returns an error
