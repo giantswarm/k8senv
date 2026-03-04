@@ -71,11 +71,10 @@ func (r *PortRegistry) tryAllocate() (port int, ok bool, err error) {
 		return 0, false, fmt.Errorf("listen on tcp address: %w", err)
 	}
 
-	addr := l.Addr()
-	tcpAddr, isTCP := addr.(*net.TCPAddr)
-	if !isTCP {
+	tcpAddr, ok := l.Addr().(*net.TCPAddr)
+	if !ok {
 		_ = l.Close()
-		return 0, false, fmt.Errorf("unexpected address type: %T", addr)
+		return 0, false, fmt.Errorf("unexpected address type from ListenTCP: %T", l.Addr())
 	}
 
 	p := tcpAddr.Port
