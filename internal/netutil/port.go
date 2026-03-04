@@ -62,29 +62,35 @@ func (r *PortRegistry) Release(port int) {
 }
 
 // tryAllocate opens a listener to obtain an ephemeral port, reserves it in
-// the registry, and closes the listener. It returns the port on success, 0
-// when the port is already registered (caller should retry), or an error.
-func (r *PortRegistry) tryAllocate() (int, error) {
+// the registry, and closes the listener. It returns ok=true with the port on
+// success, ok=false when the port is already registered (caller should retry),
+// or an error.
+func (r *PortRegistry) tryAllocate() (port int, ok bool, err error) {
 	l, err := net.ListenTCP("tcp", loopbackAddr)
 	if err != nil {
-		return 0, fmt.Errorf("listen on tcp address: %w", err)
+		return 0, false, fmt.Errorf("listen on tcp address: %w", err)
 	}
-	defer func() { _ = l.Close() }()
 
 	addr := l.Addr()
-	tcpAddr, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return 0, fmt.Errorf("unexpected address type: %T", addr)
+	tcpAddr, isTCP := addr.(*net.TCPAddr)
+	if !isTCP {
+		_ = l.Close()
+		return 0, false, fmt.Errorf("unexpected address type: %T", addr)
 	}
 
-	port := tcpAddr.Port
-	if r.reserve(port) {
-		return port, nil
+	p := tcpAddr.Port
+	if !r.reserve(p) {
+		_ = l.Close()
+		slog.Default().Debug("port already in registry, retrying", "port", p)
+		return 0, false, nil
 	}
 
-	slog.Default().Debug("port already in registry, retrying", "port", port)
+	if err := l.Close(); err != nil {
+		r.Release(p)
+		return 0, false, fmt.Errorf("close listener for port %d: %w", p, err)
+	}
 
-	return 0, nil
+	return p, true, nil
 }
 
 // allocatePort asks the kernel for a free port, skipping any ports already
@@ -93,11 +99,11 @@ func (r *PortRegistry) tryAllocate() (int, error) {
 // [PortRegistry.Release] to free it.
 func (r *PortRegistry) allocatePort() (int, error) {
 	for range maxPortRetries {
-		port, err := r.tryAllocate()
+		port, ok, err := r.tryAllocate()
 		if err != nil {
 			return 0, err
 		}
-		if port != 0 {
+		if ok {
 			return port, nil
 		}
 	}
