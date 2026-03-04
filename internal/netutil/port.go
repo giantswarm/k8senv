@@ -21,18 +21,12 @@ const maxPortRetries = 20
 type PortRegistry struct {
 	mu    sync.Mutex
 	ports map[int]struct{}
-	log   *slog.Logger
 }
 
 // NewPortRegistry creates a new PortRegistry ready for use.
-// If logger is nil, slog.Default() is used as a fallback.
-func NewPortRegistry(logger *slog.Logger) *PortRegistry {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func NewPortRegistry() *PortRegistry {
 	return &PortRegistry{
 		ports: make(map[int]struct{}),
-		log:   logger,
 	}
 }
 
@@ -54,7 +48,7 @@ func (r *PortRegistry) Release(port int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.ports[port]; !ok {
-		r.log.Warn("releasing port that was not reserved", "port", port)
+		slog.Default().Warn("releasing port that was not reserved", "port", port)
 		return
 	}
 	delete(r.ports, port)
@@ -82,7 +76,7 @@ func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
 			return l, tcpAddr.Port, nil
 		}
 		// Port already in registry, close and retry to get a different one.
-		r.log.Debug("port already in registry, retrying", "port", tcpAddr.Port)
+		slog.Default().Debug("port already in registry, retrying", "port", tcpAddr.Port)
 		_ = l.Close()
 	}
 	r.mu.Lock()
@@ -96,42 +90,30 @@ func (r *PortRegistry) getFreePortFromKernel() (*net.TCPListener, int, error) {
 
 // AllocatePortPair allocates two distinct free ports.
 //
-// Both listeners are held open simultaneously before either is closed,
-// guaranteeing the kernel assigns different ports. Ports are registered in the
-// registry to prevent duplicate allocation across concurrent callers. Callers
+// Ports are registered in the registry to prevent duplicate allocation across
+// concurrent callers. Each listener is closed as soon as the port is registered,
+// since the registry entry (not the open listener) is the TOCTOU guard. Callers
 // must call Release for each port when no longer needed.
 func (r *PortRegistry) AllocatePortPair() (port1, port2 int, err error) {
 	l1, p1, err := r.getFreePortFromKernel()
 	if err != nil {
 		return 0, 0, fmt.Errorf("allocate first port: %w", err)
 	}
+	closeListener(l1, p1)
 
 	l2, p2, err := r.getFreePortFromKernel()
 	if err != nil {
-		// Close the listener BEFORE releasing the port from the registry.
-		// This prevents a TOCTOU race where another goroutine receives the
-		// same port from the kernel after the listener is closed but before
-		// the registry entry is removed.
-		if closeErr := l1.Close(); closeErr != nil {
-			r.log.Warn("close listener after port allocation", "port", p1, "error", closeErr)
-		}
 		r.Release(p1)
 		return 0, 0, fmt.Errorf("allocate second port: %w", err)
 	}
-
-	// Success path: close both listeners. Order does not matter here since
-	// both ports remain registered and protected from reallocation.
-	closeListener := func(l *net.TCPListener, port int) {
-		if closeErr := l.Close(); closeErr != nil {
-			r.log.Warn(
-				"close listener after port allocation; port may remain bound until kernel timeout",
-				"port", port,
-				"error", closeErr,
-			)
-		}
-	}
-	closeListener(l1, p1)
 	closeListener(l2, p2)
 
 	return p1, p2, nil
+}
+
+// closeListener closes a TCP listener and logs a warning on failure.
+func closeListener(l *net.TCPListener, port int) {
+	if err := l.Close(); err != nil {
+		slog.Default().Warn("close listener after port allocation", "port", port, "error", err)
+	}
 }

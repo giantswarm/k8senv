@@ -19,7 +19,7 @@ func TestConfig_validate(t *testing.T) {
 			KineBinary:          "kine",
 			KubeAPIServerBinary: "kube-apiserver",
 			Timeout:             5 * time.Minute,
-			PortRegistry:        netutil.NewPortRegistry(nil),
+			PortRegistry:        netutil.NewPortRegistry(),
 		}
 	}
 

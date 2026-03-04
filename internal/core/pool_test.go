@@ -20,7 +20,7 @@ var errFromFactory = errors.New("factory failure")
 func noopFactory(t *testing.T) InstanceFactory {
 	t.Helper()
 	return func(_ int) (*Instance, error) {
-		ports := netutil.NewPortRegistry(nil)
+		ports := netutil.NewPortRegistry()
 		return NewInstance(NewInstanceParams{
 			ID:       "noop-inst",
 			DataDir:  t.TempDir(),

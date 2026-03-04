@@ -35,7 +35,7 @@ func (f *fakeReleaser) ReleaseFailed(_ *Instance, _ uint64)      {}
 // newTestInstance creates an Instance with valid construction params.
 func newTestInstance(t *testing.T) *Instance {
 	t.Helper()
-	ports := netutil.NewPortRegistry(nil)
+	ports := netutil.NewPortRegistry()
 	return NewInstance(NewInstanceParams{
 		ID:       "test-inst",
 		DataDir:  t.TempDir(),
@@ -73,7 +73,7 @@ func requirePanicContains(t *testing.T, fn func(), wantSubstr string) {
 func TestNewInstancePanics(t *testing.T) {
 	t.Parallel()
 
-	ports := netutil.NewPortRegistry(nil)
+	ports := netutil.NewPortRegistry()
 	cfg := validInstanceConfig()
 
 	tests := map[string]struct {
@@ -154,7 +154,7 @@ func TestNewInstancePanics(t *testing.T) {
 func TestInstanceID(t *testing.T) {
 	t.Parallel()
 
-	ports := netutil.NewPortRegistry(nil)
+	ports := netutil.NewPortRegistry()
 	inst := NewInstance(NewInstanceParams{
 		ID:       "my-unique-id",
 		DataDir:  t.TempDir(),

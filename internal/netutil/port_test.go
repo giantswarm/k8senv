@@ -8,18 +8,15 @@ import (
 func TestNewPortRegistry(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil logger uses default", func(t *testing.T) {
-		t.Parallel()
-		r := NewPortRegistry(nil)
-		if r == nil {
-			t.Fatal("expected non-nil registry")
-		}
-		// Verify the registry is functional by reserving and releasing a port.
-		if !r.reserve(8080) {
-			t.Fatal("expected reserve to succeed on new registry")
-		}
-		r.Release(8080)
-	})
+	r := NewPortRegistry()
+	if r == nil {
+		t.Fatal("expected non-nil registry")
+	}
+	// Verify the registry is functional by reserving and releasing a port.
+	if !r.reserve(8080) {
+		t.Fatal("expected reserve to succeed on new registry")
+	}
+	r.Release(8080)
 }
 
 func TestPortRegistry_reserve(t *testing.T) {
@@ -55,7 +52,7 @@ func TestPortRegistry_reserve(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			r := NewPortRegistry(nil)
+			r := NewPortRegistry()
 			tc.setup(r)
 
 			got := r.reserve(tc.port)
@@ -108,7 +105,7 @@ func TestPortRegistry_Release(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			r := NewPortRegistry(nil)
+			r := NewPortRegistry()
 			tc.setup(r)
 
 			r.Release(tc.port)
@@ -134,7 +131,7 @@ func TestPortRegistry_Release(t *testing.T) {
 func TestPortRegistry_reserveReleaseCycle(t *testing.T) {
 	t.Parallel()
 
-	r := NewPortRegistry(nil)
+	r := NewPortRegistry()
 
 	if !r.reserve(8080) {
 		t.Fatal("first reserve should succeed")
@@ -153,7 +150,7 @@ func TestPortRegistry_reserveReleaseCycle(t *testing.T) {
 func TestPortRegistry_ConcurrentReserve(t *testing.T) {
 	t.Parallel()
 
-	r := NewPortRegistry(nil)
+	r := NewPortRegistry()
 	const goroutines = 50
 
 	var wg sync.WaitGroup
@@ -183,7 +180,7 @@ func TestPortRegistry_ConcurrentReserve(t *testing.T) {
 func TestPortRegistry_ConcurrentRelease(t *testing.T) {
 	t.Parallel()
 
-	r := NewPortRegistry(nil)
+	r := NewPortRegistry()
 	const goroutines = 50
 
 	// Pre-populate ports using the public reserve method.
@@ -214,7 +211,7 @@ func TestPortRegistry_ConcurrentRelease(t *testing.T) {
 func TestPortRegistry_ConcurrentDuplicateReserve(t *testing.T) {
 	t.Parallel()
 
-	r := NewPortRegistry(nil)
+	r := NewPortRegistry()
 	const goroutines = 100
 	const targetPort = 12345
 
@@ -244,7 +241,7 @@ func TestPortRegistry_ConcurrentDuplicateReserve(t *testing.T) {
 func TestPortRegistry_AllocatePortPair(t *testing.T) {
 	t.Parallel()
 
-	r := NewPortRegistry(nil)
+	r := NewPortRegistry()
 
 	p1, p2, err := r.AllocatePortPair()
 	if err != nil {
@@ -288,7 +285,7 @@ func TestPortRegistry_AllocatePortPair(t *testing.T) {
 func TestPortRegistry_AllocateMultiplePairs(t *testing.T) {
 	t.Parallel()
 
-	r := NewPortRegistry(nil)
+	r := NewPortRegistry()
 
 	seen := make(map[int]bool)
 	const pairs = 5

@@ -114,7 +114,7 @@ func NewManagerWithConfig(cfg ManagerConfig) *Manager {
 	return &Manager{
 		cfg:          cfg,
 		cachedDBPath: cfg.PrepopulateDBPath,
-		ports:        netutil.NewPortRegistry(nil),
+		ports:        netutil.NewPortRegistry(),
 		inflightDone: make(chan struct{}),
 	}
 }
