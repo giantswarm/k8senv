@@ -11,13 +11,16 @@ import (
 // ErrEmptyPath is returned when a path argument is empty.
 const ErrEmptyPath = sentinel.Error("path must not be empty")
 
+// defaultDirMode is the permission used when creating directories.
+const defaultDirMode = os.FileMode(0o755)
+
 // EnsureDir creates a directory and all parent directories if they don't exist.
 // Uses mode 0755. Returns nil if directory already exists.
 func EnsureDir(path string) error {
 	if path == "" {
-		return ErrEmptyPath
+		return fmt.Errorf("ensure directory: %w", ErrEmptyPath)
 	}
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, defaultDirMode); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
 	return nil
@@ -29,7 +32,7 @@ func EnsureDirForFile(filePath string) error {
 	// Guard empty path explicitly: filepath.Dir("") returns "." which
 	// would cause EnsureDir to silently succeed on the current directory.
 	if filePath == "" {
-		return ErrEmptyPath
+		return fmt.Errorf("ensure directory for file: %w", ErrEmptyPath)
 	}
 	return EnsureDir(filepath.Dir(filePath))
 }
