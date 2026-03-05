@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING**: Removed `ErrNotStarted` from public API.
+- **BREAKING**: Removed `ErrPoolClosed` from public API.
+- **BREAKING**: Removed CRD sentinel errors from public API: `ErrNoYAMLFiles`, `ErrMissingKind`, `ErrCRDEstablishTimeout`.
+- **BREAKING**: Removed `SystemNamespaceNames()` function.
+- **BREAKING**: Unexported `DefaultBaseDataDirName` constant.
+
+### Changed
+
+- Bumped kube-apiserver dependency to v1.35.2.
+- `ConfigSnapshot` is now a type alias for the internal config, eliminating field-by-field copying.
+
+### Fixed
+
+- Fixed panic in `configDiffs` when comparing uncomparable option fields.
+- Fixed double-close and destructive non-atomic cleanup in file copy utilities.
+- Reduced TOCTOU window in port allocation by reserving ports before closing listeners.
+
+### Refactored
+
+- ~55 internal refactoring commits across `crdcache`, `fileutil`, `netutil`, `process`, `kubestack`, and `core` packages — no public API changes beyond the removals above.
+- CI now runs integration tests with kine and kube-apiserver.
+
 ## [0.2.0] - 2026-03-03
 
 ### Removed
