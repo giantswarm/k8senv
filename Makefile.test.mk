@@ -47,5 +47,3 @@ coverage-html: coverage ## Generate and open coverage report in browser
 .PHONY: clean
 clean::
 	rm -f $(COVERAGE_FILE)
-	rm -rf /tmp/k8senv* 2>/dev/null || true
-	rm -rf /tmp/nix-shell-*/k8senv 2>/dev/null || true
