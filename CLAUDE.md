@@ -92,9 +92,6 @@ make install-tools
 # Serve documentation locally
 make docs
 
-# Run integration tests in a loop to find flaky tests
-make find-flaky
-
 # Download and tidy dependencies
 make deps
 ```
