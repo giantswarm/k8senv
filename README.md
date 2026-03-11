@@ -1,6 +1,7 @@
 # k8senv
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/giantswarm/k8senv.svg)](https://pkg.go.dev/github.com/giantswarm/k8senv)
+[![Go Report Card](https://goreportcard.com/badge/github.com/giantswarm/k8senv)](https://goreportcard.com/report/github.com/giantswarm/k8senv)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)
 
