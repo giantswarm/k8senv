@@ -5,10 +5,10 @@ go 1.25.4
 require (
 	github.com/gofrs/flock v0.13.0
 	golang.org/x/sync v0.20.0
-	k8s.io/api v0.35.3
-	k8s.io/apiextensions-apiserver v0.35.3
-	k8s.io/apimachinery v0.35.3
-	k8s.io/client-go v0.35.3
+	k8s.io/api v0.35.4
+	k8s.io/apiextensions-apiserver v0.35.4
+	k8s.io/apimachinery v0.35.4
+	k8s.io/client-go v0.35.4
 	modernc.org/sqlite v1.48.2
 )
 
