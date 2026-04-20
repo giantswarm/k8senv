@@ -26,7 +26,3 @@ lint-fix: ## Run golangci-lint with auto-fix
 deps: ## Download and tidy dependencies
 	go mod download
 	go mod tidy
-
-.PHONY: clean
-clean::
-	go clean
