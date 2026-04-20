@@ -39,3 +39,8 @@ download-capi-crds: ## Download CAPI core CRDs
 .PHONY: clean-crds
 clean-crds: ## Remove downloaded CRDs
 	rm -f crds/*.yaml
+
+.PHONY: clean
+clean: ## Remove build artifacts and temp directories
+	go clean
+	rm -f $(COVERAGE_FILE)
