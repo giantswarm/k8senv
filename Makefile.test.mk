@@ -42,8 +42,3 @@ coverage: ## Generate test coverage report (requires kine and kube-apiserver)
 .PHONY: coverage-html
 coverage-html: coverage ## Generate and open coverage report in browser
 	go tool cover -html=$(COVERAGE_FILE)
-
-
-.PHONY: clean
-clean::
-	rm -f $(COVERAGE_FILE)

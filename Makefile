@@ -5,9 +5,6 @@ include Makefile.*.mk
 # default goal 001
 .DEFAULT_GOAL := help
 
-.PHONY: clean
-clean:: ## Remove build artifacts and temp directories
-
 .PHONY: help
 help: ## Show this help message
 	@awk '/^##@/ { printf "\n\033[0;32m%s\033[0m\n", substr($$0, 5) } \
