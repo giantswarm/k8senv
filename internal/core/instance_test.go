@@ -13,6 +13,14 @@ import (
 // Compile-time check: fakeReleaser must satisfy InstanceReleaser.
 var _ InstanceReleaser = (*fakeReleaser)(nil)
 
+// Placeholder identity and path used by the NewInstance validation cases below.
+// NewInstance panics before touching the filesystem, so the directory only has to
+// be non-empty.
+const (
+	testInstanceID      = "inst-1"
+	testInstanceDataDir = "/tmp/test"
+)
+
 // validInstanceConfig returns a minimal InstanceConfig that passes Validate.
 func validInstanceConfig() InstanceConfig {
 	return InstanceConfig{
@@ -20,8 +28,8 @@ func validInstanceConfig() InstanceConfig {
 		StopTimeout:         10 * time.Second,
 		CleanupTimeout:      30 * time.Second,
 		MaxStartRetries:     defaultMaxStartRetries,
-		KineBinary:          "kine",
-		KubeAPIServerBinary: "kube-apiserver",
+		KineBinary:          testKineBinary,
+		KubeAPIServerBinary: testKubeAPIServerBinary,
 	}
 }
 
@@ -84,7 +92,7 @@ func TestNewInstancePanics(t *testing.T) {
 			fn: func() {
 				NewInstance(NewInstanceParams{
 					ID:       "",
-					DataDir:  "/tmp/test",
+					DataDir:  testInstanceDataDir,
 					Releaser: &fakeReleaser{},
 					Ports:    ports,
 					Config:   cfg,
@@ -95,7 +103,7 @@ func TestNewInstancePanics(t *testing.T) {
 		"empty DataDir": {
 			fn: func() {
 				NewInstance(NewInstanceParams{
-					ID:       "inst-1",
+					ID:       testInstanceID,
 					DataDir:  "",
 					Releaser: &fakeReleaser{},
 					Ports:    ports,
@@ -107,8 +115,8 @@ func TestNewInstancePanics(t *testing.T) {
 		"nil Releaser": {
 			fn: func() {
 				NewInstance(NewInstanceParams{
-					ID:       "inst-1",
-					DataDir:  "/tmp/test",
+					ID:       testInstanceID,
+					DataDir:  testInstanceDataDir,
 					Releaser: nil,
 					Ports:    ports,
 					Config:   cfg,
@@ -119,8 +127,8 @@ func TestNewInstancePanics(t *testing.T) {
 		"nil Ports": {
 			fn: func() {
 				NewInstance(NewInstanceParams{
-					ID:       "inst-1",
-					DataDir:  "/tmp/test",
+					ID:       testInstanceID,
+					DataDir:  testInstanceDataDir,
 					Releaser: &fakeReleaser{},
 					Ports:    nil,
 					Config:   cfg,
@@ -131,8 +139,8 @@ func TestNewInstancePanics(t *testing.T) {
 		"invalid config": {
 			fn: func() {
 				NewInstance(NewInstanceParams{
-					ID:       "inst-1",
-					DataDir:  "/tmp/test",
+					ID:       testInstanceID,
+					DataDir:  testInstanceDataDir,
 					Releaser: &fakeReleaser{},
 					Ports:    ports,
 					Config:   InstanceConfig{}, // zero value fails Validate

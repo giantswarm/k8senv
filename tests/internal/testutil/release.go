@@ -135,7 +135,7 @@ func ReleaseRemovesNamespacedResources(t *testing.T, ctx context.Context, mgr k8
 	// Create resources in the namespace.
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: nsName},
-		Data:       map[string]string{"key": "value"},
+		Data:       map[string]string{configMapDataKey: "value"},
 	}
 	if _, err := client.CoreV1().ConfigMaps(nsName).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("create ConfigMap: %v", err)
@@ -216,7 +216,7 @@ func ReleaseRemovesResourcesWithFinalizers(t *testing.T, ctx context.Context, mg
 			Namespace:  nsName,
 			Finalizers: []string{"test.example.com/block-deletion"},
 		},
-		Data: map[string]string{"key": "value"},
+		Data: map[string]string{configMapDataKey: "value"},
 	}
 	if _, err := client.CoreV1().ConfigMaps(nsName).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("create ConfigMap with finalizer: %v", err)
@@ -271,7 +271,7 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 	cmName := UniqueName("sys-cm")
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: "kube-system"},
-		Data:       map[string]string{"key": "preserved"},
+		Data:       map[string]string{configMapDataKey: "preserved"},
 	}
 	if _, err := client.CoreV1().ConfigMaps("kube-system").Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("create ConfigMap in kube-system: %v", err)
@@ -321,7 +321,7 @@ func ReleasePreservesSystemNamespaceResources(t *testing.T, ctx context.Context,
 	if err != nil {
 		t.Fatalf("configMap in kube-system should survive %s: %v", label, err)
 	}
-	if got.Data["key"] != "preserved" {
+	if got.Data[configMapDataKey] != "preserved" {
 		t.Errorf("configMap data mismatch: got %v", got.Data)
 	}
 }

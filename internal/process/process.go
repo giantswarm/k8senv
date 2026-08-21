@@ -232,8 +232,7 @@ func expectSignalExit(err error, name string) error {
 	if err == nil {
 		return nil
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 			sig := status.Signal()
 			if sig == syscall.SIGTERM || sig == syscall.SIGKILL {

@@ -26,6 +26,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// configMapDataKey is the data key these helpers write into the ConfigMaps they
+// create. The tests only care that the entry survives (or does not survive) a
+// release, so a single shared key keeps writer and reader in agreement.
+const configMapDataKey = "key"
+
 // SystemNamespaces returns a set of namespace names created by kube-apiserver
 // that must survive cleanup. Each call returns a fresh map that callers may
 // modify freely.

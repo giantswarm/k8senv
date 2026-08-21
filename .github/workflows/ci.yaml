@@ -21,15 +21,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26'  # Match the version used in auto-release
-          # Resolve the newest 1.26.x instead of reusing whatever patch the
+          go-version: '1.27'  # Match the version used in auto-release
+          # Resolve the newest 1.27.x instead of reusing whatever patch the
           # runner image happens to have cached. Without this, govulncheck
           # fails on stdlib advisories already fixed in a newer Go patch.
           check-latest: true
           cache: true  # Cache Go modules and build cache
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.1
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
 
       - name: Install kine
         run: go install github.com/k3s-io/kine@v0.14.12

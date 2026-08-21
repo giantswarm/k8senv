@@ -84,7 +84,7 @@ func CopyFile(src, dst string, opts *CopyFileOptions) (retErr error) {
 		// O_TRUNC already destroyed the original content — removing
 		// the partial file would lose any data that was written.
 		if retErr != nil && o.Atomic {
-			_ = os.Remove(dstFile.Name()) //nolint:gosec // path is from os.CreateTemp, not user input
+			_ = os.Remove(dstFile.Name())
 		}
 	}()
 
@@ -112,10 +112,7 @@ func finalizeCopy(dstFile *os.File, dst string, opts CopyFileOptions) error {
 	}
 
 	if opts.Atomic {
-		if err := os.Rename( //nolint:gosec // path is from os.CreateTemp, not user input
-			dstFile.Name(),
-			dst,
-		); err != nil {
+		if err := os.Rename(dstFile.Name(), dst); err != nil {
 			return fmt.Errorf("rename temp file to destination: %w", err)
 		}
 	}
@@ -173,7 +170,7 @@ func openDstFile(dst string, opts CopyFileOptions) (*os.File, error) {
 	if err := f.Chmod(opts.Mode); err != nil {
 		_ = f.Close()
 		if opts.Atomic {
-			_ = os.Remove(f.Name()) //nolint:gosec // path is from os.CreateTemp, not user input
+			_ = os.Remove(f.Name())
 		}
 		return nil, fmt.Errorf("chmod destination: %w", err)
 	}

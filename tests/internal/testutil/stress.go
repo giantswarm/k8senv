@@ -39,6 +39,11 @@ const (
 	stressCanaryNS  = "stress-canary"
 	stressCanaryCM  = "canary-cm"
 	stressCanaryPod = "canary-pod"
+
+	// stressCanaryLabel marks the canary ConfigMap data entry and names the canary
+	// Pod's container and image. The value is never read back — only the presence
+	// of the resources matters — so one marker serves all three.
+	stressCanaryLabel = "canary"
 )
 
 var (
@@ -186,7 +191,7 @@ func stressCreateWithRetry[T named](
 func StressCreateConfigMap(ctx context.Context, t *testing.T, client kubernetes.Interface, ns string, idx int) {
 	t.Helper()
 
-	data := map[string]string{"key": fmt.Sprintf("value-%d", idx)}
+	data := map[string]string{configMapDataKey: fmt.Sprintf("value-%d", idx)}
 
 	stressCreateWithRetry(t, "ConfigMap", ns, "stress-cm", idx, func(name string) (*v1.ConfigMap, error) {
 		return client.CoreV1().ConfigMaps(ns).Create(ctx, &v1.ConfigMap{
@@ -299,7 +304,7 @@ func StressCreateCanary(ctx context.Context, t *testing.T, client kubernetes.Int
 	err := retry.OnError(retry.DefaultBackoff, isRetryable, func() error {
 		_, createErr := client.CoreV1().ConfigMaps(stressCanaryNS).Create(ctx, &v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: stressCanaryCM, Namespace: stressCanaryNS},
-			Data:       map[string]string{"canary": "true"},
+			Data:       map[string]string{stressCanaryLabel: "true"},
 		}, metav1.CreateOptions{})
 		if createErr != nil {
 			return fmt.Errorf("create canary configmap: %w", createErr)
@@ -315,7 +320,7 @@ func StressCreateCanary(ctx context.Context, t *testing.T, client kubernetes.Int
 			ObjectMeta: metav1.ObjectMeta{Name: stressCanaryPod, Namespace: stressCanaryNS},
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
-					{Name: "canary", Image: "canary"},
+					{Name: stressCanaryLabel, Image: stressCanaryLabel},
 				},
 			},
 		}, metav1.CreateOptions{})
