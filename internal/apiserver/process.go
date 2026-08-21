@@ -49,6 +49,11 @@ type Config struct {
 // network-accessible environments.
 const testAuthToken = "test-token"
 
+// kubeconfigEntryName is the shared name used for the cluster, context and
+// auth-info entries in the generated kubeconfig. A single name keeps the three
+// maps and CurrentContext in sync — they must all agree for the config to load.
+const kubeconfigEntryName = "default"
+
 // healthCheckTimeout is the per-request timeout for the HTTP client used
 // to poll the kube-apiserver /livez endpoint during readiness checks.
 const healthCheckTimeout = 5 * time.Second
@@ -323,7 +328,7 @@ func (p *Process) WaitReady(ctx context.Context, timeout time.Duration) error {
 		if err != nil {
 			return false, fmt.Errorf("create health check request: %w", err)
 		}
-		resp, err := httpClient.Do(req) //nolint:gosec // G107: URL is from config, not user input.
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			if log.Enabled(checkCtx, slog.LevelDebug) {
 				log.Debug("waitForAPIServer attempt", "port", p.config.Port, "attempt", attempt, "error", err)
@@ -356,7 +361,7 @@ func (p *Process) WriteKubeconfig() error {
 
 	config := clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
-			"default": {
+			kubeconfigEntryName: {
 				Server: apiServerURL,
 				// InsecureSkipTLSVerify is safe here because:
 				// 1. This is a testing framework - not production code
@@ -367,14 +372,14 @@ func (p *Process) WriteKubeconfig() error {
 			},
 		},
 		Contexts: map[string]*clientcmdapi.Context{
-			"default": {
-				Cluster:  "default",
-				AuthInfo: "default",
+			kubeconfigEntryName: {
+				Cluster:  kubeconfigEntryName,
+				AuthInfo: kubeconfigEntryName,
 			},
 		},
-		CurrentContext: "default",
+		CurrentContext: kubeconfigEntryName,
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			"default": {
+			kubeconfigEntryName: {
 				Token: testAuthToken,
 			},
 		},

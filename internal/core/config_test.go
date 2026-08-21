@@ -7,12 +7,32 @@ import (
 	"time"
 )
 
+// Binary names used by the config fixtures below. They mirror the defaults in
+// the public API (k8senv.DefaultKineBinary and friends), which this package
+// cannot import without creating an import cycle.
+const (
+	testKineBinary          = "kine"
+	testKubeAPIServerBinary = "kube-apiserver"
+)
+
+// Fragments of the messages produced by the Validate methods. The table-driven
+// cases and the joined-error assertions must agree on these, so each fragment is
+// named once here rather than repeated as a literal at every assertion.
+const (
+	errFragKineBinary          = "kine binary"
+	errFragKubeAPIServerBinary = "kube-apiserver binary"
+	errFragAcquireTimeout      = "acquire timeout"
+	errFragCleanupTimeout      = "cleanup timeout"
+	errFragStartTimeout        = "start timeout"
+	errFragMaxStartRetries     = "max start retries"
+)
+
 func TestManagerConfigValidate(t *testing.T) {
 	t.Parallel()
 	validConfig := func() ManagerConfig {
 		return ManagerConfig{
-			KineBinary:           "kine",
-			KubeAPIServerBinary:  "kube-apiserver",
+			KineBinary:           testKineBinary,
+			KubeAPIServerBinary:  testKubeAPIServerBinary,
 			AcquireTimeout:       30 * time.Second,
 			BaseDataDir:          "/tmp/k8senv",
 			InstanceStartTimeout: 5 * time.Minute,
@@ -37,19 +57,19 @@ func TestManagerConfigValidate(t *testing.T) {
 	}{
 		"empty kine binary": {
 			modify:       func(c *ManagerConfig) { c.KineBinary = "" },
-			wantContains: "kine binary",
+			wantContains: errFragKineBinary,
 		},
 		"empty kube-apiserver binary": {
 			modify:       func(c *ManagerConfig) { c.KubeAPIServerBinary = "" },
-			wantContains: "kube-apiserver binary",
+			wantContains: errFragKubeAPIServerBinary,
 		},
 		"zero acquire timeout": {
 			modify:       func(c *ManagerConfig) { c.AcquireTimeout = 0 },
-			wantContains: "acquire timeout",
+			wantContains: errFragAcquireTimeout,
 		},
 		"negative acquire timeout": {
 			modify:       func(c *ManagerConfig) { c.AcquireTimeout = -1 },
-			wantContains: "acquire timeout",
+			wantContains: errFragAcquireTimeout,
 		},
 		"empty base data dir": {
 			modify:       func(c *ManagerConfig) { c.BaseDataDir = "" },
@@ -65,7 +85,7 @@ func TestManagerConfigValidate(t *testing.T) {
 		},
 		"zero cleanup timeout": {
 			modify:       func(c *ManagerConfig) { c.CleanupTimeout = 0 },
-			wantContains: "cleanup timeout",
+			wantContains: errFragCleanupTimeout,
 		},
 		"zero CRD cache timeout": {
 			modify:       func(c *ManagerConfig) { c.CRDCacheTimeout = 0 },
@@ -109,13 +129,13 @@ func TestManagerConfigValidate(t *testing.T) {
 		errMsg := err.Error()
 		// Should contain errors for all invalid fields
 		expectedParts := []string{
-			"kine binary",
-			"kube-apiserver binary",
-			"acquire timeout",
+			errFragKineBinary,
+			errFragKubeAPIServerBinary,
+			errFragAcquireTimeout,
 			"base data directory",
 			"instance start timeout",
 			"instance stop timeout",
-			"cleanup timeout",
+			errFragCleanupTimeout,
 			"CRD cache timeout",
 			"shutdown drain timeout",
 			"pool size",
@@ -137,8 +157,8 @@ func TestInstanceConfig_Validate(t *testing.T) {
 			StopTimeout:         10 * time.Second,
 			CleanupTimeout:      30 * time.Second,
 			MaxStartRetries:     3,
-			KineBinary:          "kine",
-			KubeAPIServerBinary: "kube-apiserver",
+			KineBinary:          testKineBinary,
+			KubeAPIServerBinary: testKubeAPIServerBinary,
 		}
 	}
 
@@ -156,11 +176,11 @@ func TestInstanceConfig_Validate(t *testing.T) {
 	}{
 		"zero start timeout": {
 			modify:       func(c *InstanceConfig) { c.StartTimeout = 0 },
-			wantContains: "start timeout",
+			wantContains: errFragStartTimeout,
 		},
 		"negative start timeout": {
 			modify:       func(c *InstanceConfig) { c.StartTimeout = -1 },
-			wantContains: "start timeout",
+			wantContains: errFragStartTimeout,
 		},
 		"zero stop timeout": {
 			modify:       func(c *InstanceConfig) { c.StopTimeout = 0 },
@@ -168,23 +188,23 @@ func TestInstanceConfig_Validate(t *testing.T) {
 		},
 		"zero cleanup timeout": {
 			modify:       func(c *InstanceConfig) { c.CleanupTimeout = 0 },
-			wantContains: "cleanup timeout",
+			wantContains: errFragCleanupTimeout,
 		},
 		"zero max start retries": {
 			modify:       func(c *InstanceConfig) { c.MaxStartRetries = 0 },
-			wantContains: "max start retries",
+			wantContains: errFragMaxStartRetries,
 		},
 		"negative max start retries": {
 			modify:       func(c *InstanceConfig) { c.MaxStartRetries = -1 },
-			wantContains: "max start retries",
+			wantContains: errFragMaxStartRetries,
 		},
 		"empty kine binary": {
 			modify:       func(c *InstanceConfig) { c.KineBinary = "" },
-			wantContains: "kine binary",
+			wantContains: errFragKineBinary,
 		},
 		"empty kube-apiserver binary": {
 			modify:       func(c *InstanceConfig) { c.KubeAPIServerBinary = "" },
-			wantContains: "kube-apiserver binary",
+			wantContains: errFragKubeAPIServerBinary,
 		},
 	}
 
@@ -215,12 +235,12 @@ func TestInstanceConfig_Validate(t *testing.T) {
 
 		errMsg := err.Error()
 		expectedParts := []string{
-			"start timeout",
+			errFragStartTimeout,
 			"stop timeout",
-			"cleanup timeout",
-			"max start retries",
-			"kine binary",
-			"kube-apiserver binary",
+			errFragCleanupTimeout,
+			errFragMaxStartRetries,
+			errFragKineBinary,
+			errFragKubeAPIServerBinary,
 		}
 
 		for _, part := range expectedParts {

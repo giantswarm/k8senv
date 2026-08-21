@@ -10,6 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// testKindConfigMap is the Kind of the non-CRD fixture used throughout these
+// tests as a stand-in for "any ordinary resource".
+const testKindConfigMap = "ConfigMap"
+
 // TestApplyMissingKindErrSubstring verifies that the upstream
 // runtime.missingKindErr error message still contains the substring
 // used by isMissingKindDecodeError for its string-based fallback.
@@ -184,17 +188,17 @@ func TestApplyParseFileDocuments(t *testing.T) {
 		"single ConfigMap": {
 			content:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-cm",
 			wantDocs: 1,
-			wantKind: "ConfigMap",
+			wantKind: testKindConfigMap,
 		},
 		"single CRD": {
 			content:  "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: foos.example.com",
 			wantDocs: 1,
-			wantKind: "CustomResourceDefinition",
+			wantKind: crdKind,
 		},
 		"multi-document YAML": {
 			content:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: s1",
 			wantDocs: 2,
-			wantKind: "ConfigMap",
+			wantKind: testKindConfigMap,
 		},
 		"three documents": {
 			content:  "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ns1\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: dep1",
@@ -219,22 +223,22 @@ func TestApplyParseFileDocuments(t *testing.T) {
 		"valid docs with blank docs between separators": {
 			content:  "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n---\n\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: s1\n---",
 			wantDocs: 2,
-			wantKind: "ConfigMap",
+			wantKind: testKindConfigMap,
 		},
 		"leading separator before document": {
 			content:  "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1",
 			wantDocs: 1,
-			wantKind: "ConfigMap",
+			wantKind: testKindConfigMap,
 		},
 		"document with all metadata fields": {
 			content:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\n  namespace: kube-system\n  labels:\n    app: test\ndata:\n  key: value",
 			wantDocs: 1,
-			wantKind: "ConfigMap",
+			wantKind: testKindConfigMap,
 		},
 		"JSON document": {
 			content:  `{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"json-cm"}}`,
 			wantDocs: 1,
-			wantKind: "ConfigMap",
+			wantKind: testKindConfigMap,
 		},
 		"missing kind field returns error": {
 			content: "apiVersion: v1\nmetadata:\n  name: no-kind",
@@ -339,17 +343,17 @@ func TestApplyIsCRDDocument(t *testing.T) {
 	}{
 		"CRD v1": {
 			apiVersion: "apiextensions.k8s.io/v1",
-			kind:       "CustomResourceDefinition",
+			kind:       crdKind,
 			want:       true,
 		},
 		"CRD v1beta1": {
 			apiVersion: "apiextensions.k8s.io/v1beta1",
-			kind:       "CustomResourceDefinition",
+			kind:       crdKind,
 			want:       true,
 		},
 		"ConfigMap is not CRD": {
 			apiVersion: "v1",
-			kind:       "ConfigMap",
+			kind:       testKindConfigMap,
 			want:       false,
 		},
 		"Deployment is not CRD": {
@@ -364,7 +368,7 @@ func TestApplyIsCRDDocument(t *testing.T) {
 		},
 		"correct kind wrong group": {
 			apiVersion: "example.com/v1",
-			kind:       "CustomResourceDefinition",
+			kind:       crdKind,
 			want:       false,
 		},
 		"empty apiVersion and kind": {

@@ -10,6 +10,15 @@ import (
 	"github.com/giantswarm/k8senv"
 )
 
+// Shared subtest names for the option-validation tables. Every option follows the
+// same shape — reject the zero and negative values, accept a sensible one — so the
+// case names are fixed rather than repeated per option.
+const (
+	caseZero     = "zero"
+	caseNegative = "negative"
+	caseValid    = "valid"
+)
+
 // panicTestCase defines a test case for option validation panic tests.
 type panicTestCase struct {
 	name     string
@@ -52,18 +61,18 @@ func TestWithAcquireTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "zero",
+			name:     caseZero,
 			panics:   true,
 			panicMsg: "k8senv: acquire timeout must be greater than 0, got 0s",
 			fn:       func() { k8senv.WithAcquireTimeout(0) },
 		},
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: acquire timeout must be greater than 0, got -1s",
 			fn:       func() { k8senv.WithAcquireTimeout(-1 * time.Second) },
 		},
-		{name: "valid", fn: func() { k8senv.WithAcquireTimeout(1 * time.Second) }},
+		{name: caseValid, fn: func() { k8senv.WithAcquireTimeout(1 * time.Second) }},
 	})
 }
 
@@ -76,7 +85,7 @@ func TestWithKineBinaryPanicsOnEmpty(t *testing.T) {
 			panicMsg: "k8senv: kine binary path must not be empty",
 			fn:       func() { k8senv.WithKineBinary("") },
 		},
-		{name: "valid", fn: func() { k8senv.WithKineBinary("/usr/local/bin/kine") }},
+		{name: caseValid, fn: func() { k8senv.WithKineBinary("/usr/local/bin/kine") }},
 	})
 }
 
@@ -84,13 +93,13 @@ func TestWithPoolSizePanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: pool size must not be negative, got -1",
 			fn:       func() { k8senv.WithPoolSize(-1) },
 		},
 		{name: "zero_unlimited", fn: func() { k8senv.WithPoolSize(0) }},
-		{name: "valid", fn: func() { k8senv.WithPoolSize(5) }},
+		{name: caseValid, fn: func() { k8senv.WithPoolSize(5) }},
 	})
 }
 
@@ -103,7 +112,7 @@ func TestWithKubeAPIServerBinaryPanicsOnEmpty(t *testing.T) {
 			panicMsg: "k8senv: kube-apiserver binary path must not be empty",
 			fn:       func() { k8senv.WithKubeAPIServerBinary("") },
 		},
-		{name: "valid", fn: func() { k8senv.WithKubeAPIServerBinary("/usr/local/bin/kube-apiserver") }},
+		{name: caseValid, fn: func() { k8senv.WithKubeAPIServerBinary("/usr/local/bin/kube-apiserver") }},
 	})
 }
 
@@ -111,18 +120,18 @@ func TestWithCleanupTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "zero",
+			name:     caseZero,
 			panics:   true,
 			panicMsg: "k8senv: cleanup timeout must be greater than 0, got 0s",
 			fn:       func() { k8senv.WithCleanupTimeout(0) },
 		},
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: cleanup timeout must be greater than 0, got -1s",
 			fn:       func() { k8senv.WithCleanupTimeout(-1 * time.Second) },
 		},
-		{name: "valid", fn: func() { k8senv.WithCleanupTimeout(30 * time.Second) }},
+		{name: caseValid, fn: func() { k8senv.WithCleanupTimeout(30 * time.Second) }},
 	})
 }
 
@@ -130,18 +139,18 @@ func TestWithShutdownDrainTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "zero",
+			name:     caseZero,
 			panics:   true,
 			panicMsg: "k8senv: shutdown drain timeout must be greater than 0, got 0s",
 			fn:       func() { k8senv.WithShutdownDrainTimeout(0) },
 		},
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: shutdown drain timeout must be greater than 0, got -1s",
 			fn:       func() { k8senv.WithShutdownDrainTimeout(-1 * time.Second) },
 		},
-		{name: "valid", fn: func() { k8senv.WithShutdownDrainTimeout(1 * time.Minute) }},
+		{name: caseValid, fn: func() { k8senv.WithShutdownDrainTimeout(1 * time.Minute) }},
 	})
 }
 
@@ -149,18 +158,18 @@ func TestWithInstanceStartTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "zero",
+			name:     caseZero,
 			panics:   true,
 			panicMsg: "k8senv: instance start timeout must be greater than 0, got 0s",
 			fn:       func() { k8senv.WithInstanceStartTimeout(0) },
 		},
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: instance start timeout must be greater than 0, got -1s",
 			fn:       func() { k8senv.WithInstanceStartTimeout(-1 * time.Second) },
 		},
-		{name: "valid", fn: func() { k8senv.WithInstanceStartTimeout(5 * time.Minute) }},
+		{name: caseValid, fn: func() { k8senv.WithInstanceStartTimeout(5 * time.Minute) }},
 	})
 }
 
@@ -168,18 +177,18 @@ func TestWithInstanceStopTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "zero",
+			name:     caseZero,
 			panics:   true,
 			panicMsg: "k8senv: instance stop timeout must be greater than 0, got 0s",
 			fn:       func() { k8senv.WithInstanceStopTimeout(0) },
 		},
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: instance stop timeout must be greater than 0, got -1s",
 			fn:       func() { k8senv.WithInstanceStopTimeout(-1 * time.Second) },
 		},
-		{name: "valid", fn: func() { k8senv.WithInstanceStopTimeout(10 * time.Second) }},
+		{name: caseValid, fn: func() { k8senv.WithInstanceStopTimeout(10 * time.Second) }},
 	})
 }
 
@@ -187,18 +196,18 @@ func TestWithCRDCacheTimeoutPanicsOnInvalid(t *testing.T) {
 	t.Parallel()
 	runPanicTests(t, []panicTestCase{
 		{
-			name:     "zero",
+			name:     caseZero,
 			panics:   true,
 			panicMsg: "k8senv: CRD cache timeout must be greater than 0, got 0s",
 			fn:       func() { k8senv.WithCRDCacheTimeout(0) },
 		},
 		{
-			name:     "negative",
+			name:     caseNegative,
 			panics:   true,
 			panicMsg: "k8senv: CRD cache timeout must be greater than 0, got -1s",
 			fn:       func() { k8senv.WithCRDCacheTimeout(-1 * time.Second) },
 		},
-		{name: "valid", fn: func() { k8senv.WithCRDCacheTimeout(10 * time.Minute) }},
+		{name: caseValid, fn: func() { k8senv.WithCRDCacheTimeout(10 * time.Minute) }},
 	})
 }
 

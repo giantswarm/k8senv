@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+// testProcName is the process name given to WaitReady in these tests. Expected
+// error messages are still spelled out in full, so that a change to the message
+// format is caught rather than silently tracked by the constant.
+const testProcName = "test-proc"
+
 func TestWaitReady_EmptyName(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +39,7 @@ func TestWaitReady_NilCheckFunction(t *testing.T) {
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 100 * time.Millisecond,
 		Timeout:  5 * time.Second,
-		Name:     "test-proc",
+		Name:     testProcName,
 		Port:     12345,
 	}, nil)
 	if err == nil {
@@ -56,7 +61,7 @@ func TestWaitReady_ContextCancelDuringPolling(t *testing.T) {
 	err := WaitReady(ctx, WaitReadyConfig{
 		Interval: 10 * time.Millisecond,
 		Timeout:  10 * time.Second,
-		Name:     "test-proc",
+		Name:     testProcName,
 		Port:     12345,
 	}, func(_ context.Context, _ int) (bool, error) {
 		called++
@@ -89,7 +94,7 @@ func TestWaitReady_MultiAttemptSuccess(t *testing.T) {
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 10 * time.Millisecond,
 		Timeout:  5 * time.Second,
-		Name:     "test-proc",
+		Name:     testProcName,
 		Port:     12345,
 	}, func(_ context.Context, attempt int) (bool, error) {
 		called++
@@ -122,7 +127,7 @@ func TestWaitReady_InvalidInterval(t *testing.T) {
 			err := WaitReady(context.Background(), WaitReadyConfig{
 				Interval: tc.interval,
 				Timeout:  5 * time.Second,
-				Name:     "test-proc",
+				Name:     testProcName,
 				Port:     12345,
 			}, func(_ context.Context, _ int) (bool, error) {
 				t.Fatal("check should not be called with invalid interval")
@@ -153,7 +158,7 @@ func TestWaitReady_InvalidTimeout(t *testing.T) {
 			err := WaitReady(context.Background(), WaitReadyConfig{
 				Interval: 100 * time.Millisecond,
 				Timeout:  tc.timeout,
-				Name:     "test-proc",
+				Name:     testProcName,
 				Port:     12345,
 			}, func(_ context.Context, _ int) (bool, error) {
 				t.Fatal("check should not be called with invalid timeout")
@@ -180,7 +185,7 @@ func TestWaitReady_ProcessExited(t *testing.T) {
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval:      100 * time.Millisecond,
 		Timeout:       10 * time.Second,
-		Name:          "test-proc",
+		Name:          testProcName,
 		Port:          12345,
 		ProcessExited: exited,
 	}, func(_ context.Context, _ int) (bool, error) {
@@ -214,7 +219,7 @@ func TestWaitReady_FatalCheckError(t *testing.T) {
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 100 * time.Millisecond,
 		Timeout:  10 * time.Second,
-		Name:     "test-proc",
+		Name:     testProcName,
 		Port:     12345,
 	}, func(_ context.Context, attempt int) (bool, error) {
 		if attempt > 1 {
@@ -244,7 +249,7 @@ func TestWaitReady_Timeout(t *testing.T) {
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 50 * time.Millisecond,
 		Timeout:  200 * time.Millisecond,
-		Name:     "test-proc",
+		Name:     testProcName,
 		Port:     12345,
 	}, func(_ context.Context, _ int) (bool, error) {
 		called++
@@ -275,7 +280,7 @@ func TestWaitReady_NilProcessExited(t *testing.T) {
 	err := WaitReady(context.Background(), WaitReadyConfig{
 		Interval: 10 * time.Millisecond,
 		Timeout:  5 * time.Second,
-		Name:     "test-proc",
+		Name:     testProcName,
 		Port:     12345,
 	}, func(_ context.Context, _ int) (bool, error) {
 		// Succeed on first attempt.

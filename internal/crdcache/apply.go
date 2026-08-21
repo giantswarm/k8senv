@@ -315,11 +315,14 @@ func parseFileDocuments(content []byte, relPath string) ([]parsedDoc, error) {
 	return docs, nil
 }
 
+// crdKind is the Kind of the apiextensions CustomResourceDefinition resource.
+const crdKind = "CustomResourceDefinition"
+
 // isCRDDocument reports whether the given unstructured object is a
 // CustomResourceDefinition from the apiextensions.k8s.io group.
 func isCRDDocument(obj *unstructured.Unstructured) bool {
 	gvk := obj.GroupVersionKind()
-	return gvk.Group == apiextensionsv1.GroupName && gvk.Kind == "CustomResourceDefinition"
+	return gvk.Group == apiextensionsv1.GroupName && gvk.Kind == crdKind
 }
 
 // applyParsedDocument resolves the REST mapping for a pre-parsed document and
