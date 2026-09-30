@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update modernc.org/sqlite to v1.60.1 (giantswarm/k8senv#65)
+
 ### Security
 
 - Bumped `golang.org/x/text` from v0.37.0 to v0.41.0 to patch CVE-2026-56852 / GO-2026-5970,
