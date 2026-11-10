@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update modernc.org/sqlite to v1.60.1 (giantswarm/k8senv#65)
+- Update golangci-lint in CI to v2.15.0; v2.13.1 cannot type-check code built with Go 1.27.
 
 ### Security
 
